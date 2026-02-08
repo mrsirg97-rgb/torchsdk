@@ -79,7 +79,6 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 | `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve |
 | `buildCreateTokenTransaction(connection, params)` | Launch a new token with bonding curve + treasury |
 | `buildStarTransaction(connection, params)` | Star a token (sybil-resistant support signal) |
-| `buildMessageTransaction(connection, params)` | Post a trade-bundled on-chain message |
 | `buildBorrowTransaction(connection, params)` | Borrow SOL against token collateral |
 | `buildRepayTransaction(connection, params)` | Repay a loan |
 | `buildLiquidateTransaction(connection, params)` | Liquidate an underwater position |
@@ -108,9 +107,6 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 
 // Star
 { mint: string, user: string }
-
-// Message
-{ mint: string, sender: string, message: string }
 
 // Borrow
 { mint: string, borrower: string, collateral_amount: number, sol_to_borrow: number }
