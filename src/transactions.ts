@@ -1,7 +1,7 @@
 /**
  * Transaction builders
  *
- * Build unsigned transactions for buy, sell, create, vote, star, and message.
+ * Build unsigned transactions for buy, sell, create, star, and message.
  * Agents sign these locally and submit to the network.
  */
 
@@ -30,7 +30,6 @@ import {
   getGlobalConfigPda,
   getProtocolTreasuryPda,
   getStarRecordPda,
-  getVoteRecordPda,
   getLoanPositionPda,
   getCollateralVaultPda,
   getRaydiumMigrationAccounts,
@@ -44,7 +43,6 @@ import {
   BuyParams,
   SellParams,
   CreateTokenParams,
-  VoteParams,
   StarParams,
   MessageParams,
   BorrowParams,
@@ -355,66 +353,6 @@ export const buildCreateTokenTransaction = async (
     mint: mint.publicKey,
     mintKeypair: mint,
     message: `Create token "${name}" ($${symbol})`,
-  }
-}
-
-// ============================================================================
-// Vote
-// ============================================================================
-
-/**
- * Build an unsigned vote transaction.
- *
- * @param connection - Solana RPC connection
- * @param params - Vote parameters (mint, voter, vote: "burn" | "return")
- * @returns Unsigned transaction and descriptive message
- */
-export const buildVoteTransaction = async (
-  connection: Connection,
-  params: VoteParams,
-): Promise<TransactionResult> => {
-  const { mint: mintStr, voter: voterStr, vote } = params
-
-  const mint = new PublicKey(mintStr)
-  const voter = new PublicKey(voterStr)
-
-  const tokenData = await fetchTokenRaw(connection, mint)
-  if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
-
-  const { bondingCurve } = tokenData
-  if (!bondingCurve.bonding_complete) throw new Error('Voting not open yet')
-  if (bondingCurve.vote_finalized) throw new Error('Voting has ended')
-
-  // Derive PDAs
-  const [bondingCurvePda] = getBondingCurvePda(mint)
-  const [treasuryPda] = getTokenTreasuryPda(mint)
-  const [userPositionPda] = getUserPositionPda(bondingCurvePda, voter)
-  const [voteRecordPda] = getVoteRecordPda(bondingCurvePda, voter)
-
-  const tx = new Transaction()
-
-  const provider = makeDummyProvider(connection, voter)
-  const program = new Program(idl as unknown, provider)
-
-  const voteIx = await program.methods
-    .vote(vote === 'return')
-    .accounts({
-      user: voter,
-      mint,
-      bondingCurve: bondingCurvePda,
-      treasury: treasuryPda,
-      userPosition: userPositionPda,
-      voteRecord: voteRecordPda,
-      systemProgram: SystemProgram.programId,
-    })
-    .instruction()
-
-  tx.add(voteIx)
-  await finalizeTransaction(connection, tx, voter)
-
-  return {
-    transaction: tx,
-    message: `Vote to ${vote} treasury tokens`,
   }
 }
 

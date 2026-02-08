@@ -77,7 +77,6 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 | `buildBuyTransaction(connection, params)` | Buy tokens on the bonding curve |
 | `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve |
 | `buildCreateTokenTransaction(connection, params)` | Launch a new token with bonding curve + treasury |
-| `buildVoteTransaction(connection, params)` | Vote burn or return on treasury tokens |
 | `buildStarTransaction(connection, params)` | Star a token (sybil-resistant support signal) |
 | `buildMessageTransaction(connection, params)` | Post a trade-bundled on-chain message |
 | `buildBorrowTransaction(connection, params)` | Borrow SOL against token collateral |

@@ -147,12 +147,6 @@ export interface CreateTokenParams {
   metadata_uri: string
 }
 
-export interface VoteParams {
-  mint: string
-  voter: string
-  vote: 'burn' | 'return'
-}
-
 export interface StarParams {
   mint: string
   user: string
