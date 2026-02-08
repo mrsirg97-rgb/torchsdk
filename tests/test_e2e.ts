@@ -25,7 +25,6 @@ import {
   buildSellTransaction,
   buildCreateTokenTransaction,
   buildStarTransaction,
-  buildMessageTransaction,
   buildBorrowTransaction,
   buildRepayTransaction,
   confirmTransaction,
@@ -209,22 +208,6 @@ const main = async () => {
     ok('buildStarTransaction', `sig=${sig.slice(0, 8)}...`)
   } catch (e: any) {
     fail('buildStarTransaction', e)
-  }
-
-  // ------------------------------------------------------------------
-  // 7. Post Message
-  // ------------------------------------------------------------------
-  log('\n[7] Post Message')
-  try {
-    const result = await buildMessageTransaction(connection, {
-      mint,
-      sender: walletAddr,
-      message: 'Hello from SDK e2e test!',
-    })
-    const sig = await signAndSend(connection, wallet, result.transaction)
-    ok('buildMessageTransaction', `sig=${sig.slice(0, 8)}...`)
-  } catch (e: any) {
-    fail('buildMessageTransaction', e)
   }
 
   // ------------------------------------------------------------------

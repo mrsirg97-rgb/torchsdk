@@ -154,12 +154,6 @@ export interface StarParams {
   user: string
 }
 
-export interface MessageParams {
-  mint: string
-  sender: string
-  message: string
-}
-
 // ============================================================================
 // Transaction Results
 // ============================================================================

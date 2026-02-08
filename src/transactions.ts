@@ -44,7 +44,6 @@ import {
   SellParams,
   CreateTokenParams,
   StarParams,
-  MessageParams,
   BorrowParams,
   RepayParams,
   LiquidateParams,
@@ -454,51 +453,6 @@ export const buildStarTransaction = async (
 // ============================================================================
 
 const MAX_MESSAGE_LENGTH = 500
-
-/**
- * Build an unsigned message transaction (SPL Memo).
- *
- * @param connection - Solana RPC connection
- * @param params - Message parameters (mint, sender, message text)
- * @returns Unsigned transaction and descriptive message
- */
-export const buildMessageTransaction = async (
-  connection: Connection,
-  params: MessageParams,
-): Promise<TransactionResult> => {
-  const { mint: mintStr, sender: senderStr, message } = params
-
-  if (message.length > MAX_MESSAGE_LENGTH) {
-    throw new Error(`Message must be ${MAX_MESSAGE_LENGTH} characters or less`)
-  }
-  if (message.trim().length === 0) {
-    throw new Error('Message cannot be empty')
-  }
-
-  const mint = new PublicKey(mintStr)
-  const sender = new PublicKey(senderStr)
-
-  const tokenData = await fetchTokenRaw(connection, mint)
-  if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
-
-  const tx = new Transaction()
-
-  // Prefix memo with mint address for indexing
-  const prefixedMessage = `[${mintStr}] ${message}`
-  const memoIx = new TransactionInstruction({
-    programId: MEMO_PROGRAM_ID,
-    keys: [{ pubkey: sender, isSigner: true, isWritable: false }],
-    data: Buffer.from(prefixedMessage, 'utf-8'),
-  })
-
-  tx.add(memoIx)
-  await finalizeTransaction(connection, tx, sender)
-
-  return {
-    transaction: tx,
-    message: `Post message on token page`,
-  }
-}
 
 // ============================================================================
 // Borrow (V2.4)
