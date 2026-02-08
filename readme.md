@@ -32,13 +32,14 @@ const { tokens } = await getTokens(connection, { status: "bonding", sort: "volum
 // Get full token details
 const token = await getToken(connection, "So11111111111111111111111111111111111111112");
 
-// Buy tokens on a bonding curve
+// Buy tokens on a bonding curve (with optional on-chain message)
 const { transaction, message } = await buildBuyTransaction(connection, {
   mint: "TOKEN_MINT_ADDRESS",
   buyer: "YOUR_WALLET_ADDRESS",
   amount_sol: 100_000_000, // 0.1 SOL (in lamports)
   slippage_bps: 500,       // 5% slippage
   vote: "burn",            // vote to burn treasury tokens on migration
+  message: "gm",           // optional — bundled as SPL Memo in the same tx
 });
 
 // Sign and send the transaction with your wallet...
@@ -94,10 +95,10 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 
 ```typescript
 // Buy
-{ mint: string, buyer: string, amount_sol: number, slippage_bps?: number, vote?: "burn" | "return" }
+{ mint: string, buyer: string, amount_sol: number, slippage_bps?: number, vote?: "burn" | "return", message?: string }
 
 // Sell
-{ mint: string, seller: string, amount_tokens: number, slippage_bps?: number }
+{ mint: string, seller: string, amount_tokens: number, slippage_bps?: number, message?: string }
 
 // Create Token
 { creator: string, name: string, symbol: string, metadata_uri: string }

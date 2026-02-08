@@ -131,6 +131,7 @@ export interface BuyParams {
   amount_sol: number
   slippage_bps?: number
   vote?: 'burn' | 'return'
+  message?: string
 }
 
 export interface SellParams {
@@ -138,6 +139,7 @@ export interface SellParams {
   seller: string
   amount_tokens: number
   slippage_bps?: number
+  message?: string
 }
 
 export interface CreateTokenParams {

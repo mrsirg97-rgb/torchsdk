@@ -91,7 +91,7 @@ export const buildBuyTransaction = async (
   connection: Connection,
   params: BuyParams,
 ): Promise<TransactionResult> => {
-  const { mint: mintStr, buyer: buyerStr, amount_sol, slippage_bps = 100, vote } = params
+  const { mint: mintStr, buyer: buyerStr, amount_sol, slippage_bps = 100, vote, message } = params
 
   const mint = new PublicKey(mintStr)
   const buyer = new PublicKey(buyerStr)
@@ -180,6 +180,20 @@ export const buildBuyTransaction = async (
     .instruction()
 
   tx.add(buyIx)
+
+  // Bundle optional message as SPL Memo instruction
+  if (message && message.trim().length > 0) {
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      throw new Error(`Message must be ${MAX_MESSAGE_LENGTH} characters or less`)
+    }
+    const memoIx = new TransactionInstruction({
+      programId: MEMO_PROGRAM_ID,
+      keys: [{ pubkey: buyer, isSigner: true, isWritable: false }],
+      data: Buffer.from(message.trim(), 'utf-8'),
+    })
+    tx.add(memoIx)
+  }
+
   await finalizeTransaction(connection, tx, buyer)
 
   return {
@@ -203,7 +217,7 @@ export const buildSellTransaction = async (
   connection: Connection,
   params: SellParams,
 ): Promise<TransactionResult> => {
-  const { mint: mintStr, seller: sellerStr, amount_tokens, slippage_bps = 100 } = params
+  const { mint: mintStr, seller: sellerStr, amount_tokens, slippage_bps = 100, message } = params
 
   const mint = new PublicKey(mintStr)
   const seller = new PublicKey(sellerStr)
@@ -264,6 +278,20 @@ export const buildSellTransaction = async (
     .instruction()
 
   tx.add(sellIx)
+
+  // Bundle optional message as SPL Memo instruction
+  if (message && message.trim().length > 0) {
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      throw new Error(`Message must be ${MAX_MESSAGE_LENGTH} characters or less`)
+    }
+    const memoIx = new TransactionInstruction({
+      programId: MEMO_PROGRAM_ID,
+      keys: [{ pubkey: seller, isSigner: true, isWritable: false }],
+      data: Buffer.from(message.trim(), 'utf-8'),
+    })
+    tx.add(memoIx)
+  }
+
   await finalizeTransaction(connection, tx, seller)
 
   return {
