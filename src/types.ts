@@ -18,7 +18,7 @@ export interface TokenSummary {
   price_sol: number
   market_cap_sol: number
   progress_percent: number
-  holders: number
+  holders: number | null
   created_at: number
 }
 
@@ -48,7 +48,7 @@ export interface TokenDetail {
   votes_return: number
   votes_burn: number
   creator: string
-  holders: number
+  holders: number | null
   stars: number
   created_at: number
   last_activity_at: number
@@ -59,6 +59,7 @@ export interface TokenDetail {
   creator_trust_tier?: 'high' | 'medium' | 'low' | null
   creator_said_name?: string
   creator_badge_url?: string
+  warnings?: string[]
 }
 
 // ============================================================================
@@ -200,9 +201,10 @@ export interface LendingInfo {
   max_ltv_bps: number
   liquidation_threshold_bps: number
   liquidation_bonus_bps: number
-  total_sol_lent: number
-  active_loans: number
+  total_sol_lent: number | null
+  active_loans: number | null
   treasury_sol_available: number
+  warnings?: string[]
 }
 
 export interface LoanPositionInfo {
@@ -210,9 +212,10 @@ export interface LoanPositionInfo {
   borrowed_amount: number
   accrued_interest: number
   total_owed: number
-  collateral_value_sol: number
-  current_ltv_bps: number
+  collateral_value_sol: number | null
+  current_ltv_bps: number | null
   health: 'healthy' | 'at_risk' | 'liquidatable' | 'none'
+  warnings?: string[]
 }
 
 // ============================================================================

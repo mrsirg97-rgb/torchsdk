@@ -114,7 +114,7 @@ const toTokenSummary = (raw: RawToken): TokenSummary => {
     price_sol: priceInSol,
     market_cap_sol: marketCapSol,
     progress_percent: calculateBondingProgress(realSol),
-    holders: 0,
+    holders: null,
     created_at: 0,
   }
 }
@@ -161,9 +161,10 @@ const buildTokenDetail = (
     telegram?: string
     website?: string
   },
-  holdersCount?: number,
+  holdersCount?: number | null,
   solPriceUsd?: number,
   saidVerification?: SaidVerification | null,
+  warnings?: string[],
 ): TokenDetail => {
   const virtualSol = BigInt(bc.virtual_sol_reserves.toString())
   const virtualTokens = BigInt(bc.virtual_token_reserves.toString())
@@ -209,7 +210,7 @@ const buildTokenDetail = (
     votes_return: Number(bc.votes_return.toString()),
     votes_burn: Number(bc.votes_burn.toString()),
     creator: bc.creator.toString(),
-    holders: holdersCount || 0,
+    holders: holdersCount ?? null,
     stars,
     created_at: 0,
     last_activity_at: Number(bc.last_activity_slot.toString()),
@@ -222,6 +223,7 @@ const buildTokenDetail = (
     creator_badge_url: saidVerification?.verified
       ? `https://api.saidprotocol.com/api/badge/${bc.creator.toString()}.svg`
       : undefined,
+    ...(warnings && warnings.length > 0 ? { warnings } : {}),
   }
 }
 
@@ -290,6 +292,7 @@ export const getToken = async (connection: Connection, mintStr: string): Promise
   }
 
   const { bondingCurve, treasury } = tokenData
+  const warnings: string[] = []
 
   // Fetch metadata from URI
   let metadata:
@@ -313,18 +316,18 @@ export const getToken = async (connection: Connection, mintStr: string): Promise
         telegram: data.telegram,
         website: data.website,
       }
-    } catch {
-      // Metadata fetch failed
+    } catch (e) {
+      warnings.push(`Metadata fetch failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   // Fetch holders count
-  let holdersCount = 0
+  let holdersCount: number | null = null
   try {
     const holders = await connection.getTokenLargestAccounts(mint, 'confirmed')
     holdersCount = holders.value.filter((a) => a.uiAmount && a.uiAmount > 0).length
-  } catch {
-    // Holders fetch failed
+  } catch (e) {
+    warnings.push(`Holders fetch failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   // Fetch SOL price
@@ -335,11 +338,11 @@ export const getToken = async (connection: Connection, mintStr: string): Promise
     )
     const data = (await res.json()) as { solana?: { usd?: number } }
     solPriceUsd = data?.solana?.usd
-  } catch {
-    // Price fetch failed
+  } catch (e) {
+    warnings.push(`SOL price fetch failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  return buildTokenDetail(mintStr, bondingCurve, treasury, metadata, holdersCount, solPriceUsd)
+  return buildTokenDetail(mintStr, bondingCurve, treasury, metadata, holdersCount, solPriceUsd, undefined, warnings)
 }
 
 /**
@@ -508,7 +511,6 @@ export const getLendingInfo = async (
   mintStr: string,
 ): Promise<LendingInfo> => {
   const mint = new PublicKey(mintStr)
-  const coder = new BorshCoder(idl as unknown as Idl)
 
   const tokenData = await fetchTokenRaw(connection, mint)
   if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
@@ -523,8 +525,9 @@ export const getLendingInfo = async (
   const vaultInfo = await connection.getAccountInfo(collateralVaultPda)
 
   // Count active loans by scanning LoanPosition accounts
-  let activeLoans = 0
-  let totalSolLent = 0
+  let activeLoans: number | null = 0
+  let totalSolLent: number | null = 0
+  const warnings: string[] = []
 
   try {
     const loanDiscriminator = Buffer.from([45, 172, 28, 194, 82, 206, 243, 190])
@@ -541,15 +544,17 @@ export const getLendingInfo = async (
         // Read borrowed_amount (u64 at offset 8 within the slice)
         const borrowed = acc.account.data.readBigUInt64LE(8)
         if (borrowed > BigInt(0)) {
-          activeLoans++
-          totalSolLent += Number(borrowed)
+          activeLoans = (activeLoans ?? 0) + 1
+          totalSolLent = (totalSolLent ?? 0) + Number(borrowed)
         }
       } catch {
         // Skip malformed accounts
       }
     }
-  } catch {
-    // Fallback: can't enumerate loans
+  } catch (e) {
+    activeLoans = null
+    totalSolLent = null
+    warnings.push(`Loan enumeration failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   return {
@@ -560,6 +565,7 @@ export const getLendingInfo = async (
     total_sol_lent: totalSolLent,
     active_loans: activeLoans,
     treasury_sol_available: treasurySol,
+    ...(warnings.length > 0 ? { warnings } : {}),
   }
 }
 
@@ -601,7 +607,8 @@ export const getLoanPosition = async (
   const totalOwed = borrowed + interest
 
   // Get collateral value from Raydium pool price
-  let collateralValueSol = 0
+  let collateralValueSol: number | null = 0
+  const warnings: string[] = []
   try {
     const raydium = getRaydiumMigrationAccounts(mint)
     const [vault0Info, vault1Info] = await Promise.all([
@@ -628,20 +635,25 @@ export const getLoanPosition = async (
         collateralValueSol = (collateral * solReserves) / tokenReserves
       }
     }
-  } catch {
-    // Can't determine price
+  } catch (e) {
+    collateralValueSol = null
+    warnings.push(`Collateral valuation failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  const currentLtvBps =
-    collateralValueSol > 0
-      ? Math.floor((totalOwed / collateralValueSol) * 10000)
-      : totalOwed > 0
-        ? 10000
-        : 0
+  let currentLtvBps: number | null
+  if (collateralValueSol === null) {
+    currentLtvBps = null
+  } else if (collateralValueSol > 0) {
+    currentLtvBps = Math.floor((totalOwed / collateralValueSol) * 10000)
+  } else {
+    currentLtvBps = totalOwed > 0 ? 10000 : 0
+  }
 
   let health: LoanPositionInfo['health']
   if (borrowed === 0 && interest === 0) {
     health = 'none'
+  } else if (currentLtvBps === null) {
+    health = 'healthy'
   } else if (currentLtvBps >= LIQUIDATION_THRESHOLD_BPS) {
     health = 'liquidatable'
   } else if (currentLtvBps >= MAX_LTV_BPS) {
@@ -658,6 +670,7 @@ export const getLoanPosition = async (
     collateral_value_sol: collateralValueSol,
     current_ltv_bps: currentLtvBps,
     health,
+    ...(warnings.length > 0 ? { warnings } : {}),
   }
 }
 

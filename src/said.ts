@@ -4,7 +4,7 @@
  * Verify wallet reputation and confirm transactions for SAID feedback.
  */
 
-import { Connection, PublicKey } from '@solana/web3.js'
+import { Connection } from '@solana/web3.js'
 import { PROGRAM_ID } from './constants'
 import { SaidVerification, ConfirmResult } from './types'
 

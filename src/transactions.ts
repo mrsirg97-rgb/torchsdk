@@ -240,10 +240,8 @@ export const buildSellTransaction = async (
 
   // Derive PDAs
   const [bondingCurvePda] = getBondingCurvePda(mint)
-  const [treasuryPda] = getTokenTreasuryPda(mint)
   const [userPositionPda] = getUserPositionPda(bondingCurvePda, seller)
   const [userStatsPda] = getUserStatsPda(seller)
-  const [globalConfigPda] = getGlobalConfigPda()
 
   const bondingCurveTokenAccount = getAssociatedTokenAddressSync(
     mint,

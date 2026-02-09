@@ -7,7 +7,6 @@ import {
   TREASURY_SEED,
   USER_POSITION_SEED,
   VOTE_SEED,
-  PLATFORM_TREASURY_SEED,
   PROTOCOL_TREASURY_SEED,
   USER_STATS_SEED,
   STAR_RECORD_SEED,
@@ -69,18 +68,6 @@ export interface GlobalConfig {
   bump: number
 }
 
-export interface UserPosition {
-  user: PublicKey
-  bonding_curve: PublicKey
-  total_purchased: BN
-  tokens_received: BN
-  tokens_burned: BN
-  total_sol_spent: BN
-  has_voted: boolean
-  vote_return: boolean
-  bump: number
-}
-
 export interface Treasury {
   bonding_curve: PublicKey
   mint: PublicKey
@@ -103,56 +90,6 @@ export interface Treasury {
   total_stars: BN
   star_sol_balance: BN
   creator_paid_out: boolean
-  bump: number
-}
-
-// V4: Platform-wide treasury for failed token reclaims and rewards
-export interface PlatformTreasury {
-  authority: PublicKey
-  total_reclaimed: BN
-  current_balance: BN
-  total_distributed: BN
-  current_epoch: BN
-  last_epoch_ts: BN
-  total_volume_current_epoch: BN
-  total_volume_previous_epoch: BN
-  previous_epoch_rewards: BN
-  tokens_reclaimed_count: BN
-  bump: number
-}
-
-// V11: Protocol-level treasury for fee distribution to active traders
-export interface ProtocolTreasury {
-  authority: PublicKey
-  current_balance: BN
-  reserve_floor: BN
-  total_fees_received: BN
-  total_distributed: BN
-  current_epoch: BN
-  last_epoch_ts: BN
-  total_volume_current_epoch: BN
-  total_volume_previous_epoch: BN
-  distributable_amount: BN
-  bump: number
-}
-
-// V4: Per-user stats for platform-wide volume tracking and rewards
-export interface UserStats {
-  user: PublicKey
-  total_volume: BN
-  volume_current_epoch: BN
-  volume_previous_epoch: BN
-  last_volume_epoch: BN // V8: for lazy epoch transition
-  last_epoch_claimed: BN
-  total_rewards_claimed: BN
-  bump: number
-}
-
-// V10: Star record - prevents double-starring (per user-token, not user-creator)
-export interface StarRecord {
-  user: PublicKey
-  mint: PublicKey // V10: Stars are per-token, not per-creator
-  starred_at_slot: BN
   bump: number
 }
 
@@ -216,11 +153,6 @@ export const getVoteRecordPda = (
 
 export const getTokenTreasuryPda = (mint: PublicKey): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync([Buffer.from(TREASURY_SEED), mint.toBuffer()], PROGRAM_ID)
-}
-
-// V4: Platform treasury PDA
-export const getPlatformTreasuryPda = (): [PublicKey, number] => {
-  return PublicKey.findProgramAddressSync([Buffer.from(PLATFORM_TREASURY_SEED)], PROGRAM_ID)
 }
 
 // V11: Protocol treasury PDA
