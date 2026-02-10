@@ -1,6 +1,6 @@
 {
   "name": "torchsdk",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Torch Market SDK — AI agent toolkit for Solana fair-launch tokens",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -29,7 +29,7 @@
   "peerDependencies": {
     "@solana/web3.js": "^1.98.0"
   },
-    "repository": {
+  "repository": {
     "type": "git",
     "url": "https://github.com/mrsirg97-rgb/torchsdk"
   },
