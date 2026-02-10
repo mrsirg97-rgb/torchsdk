@@ -194,8 +194,17 @@ export interface BuyParams {
   slippage_bps?: number
   vote?: 'burn' | 'return'
   message?: string
-  /** Vault creator pubkey. When provided, vault pays for the buy. */
-  vault?: string
+  /** Vault creator pubkey. Vault pays for the buy. */
+  vault: string
+}
+
+export interface DirectBuyParams {
+  mint: string
+  buyer: string
+  amount_sol: number
+  slippage_bps?: number
+  vote?: 'burn' | 'return'
+  message?: string
 }
 
 export interface SellParams {

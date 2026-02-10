@@ -25,6 +25,7 @@ import {
   getVaultForWallet,
   getVaultWalletLink,
   buildBuyTransaction,
+  buildDirectBuyTransaction,
   buildSellTransaction,
   buildCreateTokenTransaction,
   buildStarTransaction,
@@ -212,12 +213,12 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 7. Buy Token (direct — no vault, backward compat)
+  // 7. Buy Token (direct — no vault, human use)
   // ------------------------------------------------------------------
   log('\n[7] Buy Token (direct)')
   let buySig: string | undefined
   try {
-    const result = await buildBuyTransaction(connection, {
+    const result = await buildDirectBuyTransaction(connection, {
       mint,
       buyer: walletAddr,
       amount_sol: 100_000_000, // 0.1 SOL
@@ -225,9 +226,9 @@ const main = async () => {
       vote: 'burn',
     })
     buySig = await signAndSend(connection, wallet, result.transaction)
-    ok('buildBuyTransaction (direct)', `${result.message} sig=${buySig.slice(0, 8)}...`)
+    ok('buildDirectBuyTransaction', `${result.message} sig=${buySig.slice(0, 8)}...`)
   } catch (e: any) {
-    fail('buildBuyTransaction (direct)', e)
+    fail('buildDirectBuyTransaction', e)
   }
 
   // ------------------------------------------------------------------
@@ -437,7 +438,7 @@ const main = async () => {
   for (const buyer of buyers) {
     if (bondingComplete) break
     try {
-      const result = await buildBuyTransaction(connection, {
+      const result = await buildDirectBuyTransaction(connection, {
         mint,
         buyer: buyer.publicKey.toBase58(),
         amount_sol: BUY_AMOUNT,

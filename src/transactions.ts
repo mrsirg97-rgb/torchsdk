@@ -43,6 +43,7 @@ import { PROGRAM_ID, MEMO_PROGRAM_ID } from './constants'
 import { fetchTokenRaw } from './tokens'
 import {
   BuyParams,
+  DirectBuyParams,
   SellParams,
   CreateTokenParams,
   StarParams,
@@ -87,21 +88,17 @@ const finalizeTransaction = async (
 // Buy
 // ============================================================================
 
-/**
- * Build an unsigned buy transaction.
- *
- * When `params.vault` is provided, the vault pays for the buy (vault creator pubkey).
- * When omitted, the buyer pays from their own wallet (backward compatible).
- *
- * @param connection - Solana RPC connection
- * @param params - Buy parameters (mint, buyer, amount_sol in lamports, optional vault, slippage_bps, vote)
- * @returns Unsigned transaction and descriptive message
- */
-export const buildBuyTransaction = async (
+// Internal buy builder shared by both vault and direct variants
+const buildBuyTransactionInternal = async (
   connection: Connection,
-  params: BuyParams,
+  mintStr: string,
+  buyerStr: string,
+  amount_sol: number,
+  slippage_bps: number,
+  vote: 'burn' | 'return' | undefined,
+  message: string | undefined,
+  vaultCreatorStr: string | undefined,
 ): Promise<TransactionResult> => {
-  const { mint: mintStr, buyer: buyerStr, amount_sol, slippage_bps = 100, vote, message, vault: vaultCreatorStr } = params
 
   const mint = new PublicKey(mintStr)
   const buyer = new PublicKey(buyerStr)
@@ -221,6 +218,41 @@ export const buildBuyTransaction = async (
     transaction: tx,
     message: `Buy ${Number(result.tokensToUser) / 1e6} tokens for ${Number(solAmount) / 1e9} SOL${vaultLabel}`,
   }
+}
+
+/**
+ * Build an unsigned vault-funded buy transaction.
+ *
+ * The vault pays for the buy. This is the recommended path for AI agents.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Buy parameters with required vault creator pubkey
+ * @returns Unsigned transaction and descriptive message
+ */
+export const buildBuyTransaction = async (
+  connection: Connection,
+  params: BuyParams,
+): Promise<TransactionResult> => {
+  const { mint, buyer, amount_sol, slippage_bps = 100, vote, message, vault } = params
+  return buildBuyTransactionInternal(connection, mint, buyer, amount_sol, slippage_bps, vote, message, vault)
+}
+
+/**
+ * Build an unsigned direct buy transaction (no vault).
+ *
+ * The buyer pays from their own wallet. Use this for human-operated wallets only.
+ * For AI agents, use buildBuyTransaction with a vault instead.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Buy parameters (no vault)
+ * @returns Unsigned transaction and descriptive message
+ */
+export const buildDirectBuyTransaction = async (
+  connection: Connection,
+  params: DirectBuyParams,
+): Promise<TransactionResult> => {
+  const { mint, buyer, amount_sol, slippage_bps = 100, vote, message } = params
+  return buildBuyTransactionInternal(connection, mint, buyer, amount_sol, slippage_bps, vote, message, undefined)
 }
 
 // ============================================================================

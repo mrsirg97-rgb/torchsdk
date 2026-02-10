@@ -29,6 +29,7 @@ export { getBuyQuote, getSellQuote } from './quotes'
 // Transaction builders
 export {
   buildBuyTransaction,
+  buildDirectBuyTransaction,
   buildSellTransaction,
   buildCreateTokenTransaction,
   buildStarTransaction,
@@ -60,6 +61,7 @@ export type {
   BuyQuoteResult,
   SellQuoteResult,
   BuyParams,
+  DirectBuyParams,
   SellParams,
   CreateTokenParams,
   StarParams,

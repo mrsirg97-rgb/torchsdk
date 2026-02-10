@@ -8,6 +8,10 @@ Read on-chain state, build transactions, and interact with bonding curves, vault
 
 for in depth sdk design, refer to [design.md](./design.md).
 
+## Audit
+
+for sdk audit, refer to [audit.md](./audit.md).
+
 ## What's New in v2.0.0
 
 **Torch Vault** — an on-chain SOL escrow for safe AI agent interaction.
@@ -67,7 +71,8 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 
 | Function | Description |
 |----------|-------------|
-| `buildBuyTransaction(connection, params)` | Buy tokens (direct or vault-funded) |
+| `buildBuyTransaction(connection, params)` | Buy tokens (vault-funded, requires vault) |
+| `buildDirectBuyTransaction(connection, params)` | Buy tokens (buyer pays directly, no vault) |
 | `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve |
 | `buildCreateTokenTransaction(connection, params)` | Launch a new token |
 | `buildStarTransaction(connection, params)` | Star a token (0.05 SOL) |
@@ -114,6 +119,7 @@ import {
   getTokens,
   getToken,
   buildBuyTransaction,
+  buildDirectBuyTransaction,
   buildSellTransaction,
   buildCreateVaultTransaction,
   buildDepositVaultTransaction,
@@ -170,11 +176,11 @@ const vault = await getVault(connection, userWallet);
 console.log(`Vault: ${vault.sol_balance} SOL, ${vault.linked_wallets} wallets`);
 ```
 
-### Trade Without Vault (Backward Compatible - Recommended Human Use Only)
+### Direct Buy (No Vault — Human Use Only)
 
 ```typescript
-// Omit `vault` param — buyer pays directly from their wallet
-const { transaction } = await buildBuyTransaction(connection, {
+// Buyer pays directly from their wallet — no vault safety
+const { transaction } = await buildDirectBuyTransaction(connection, {
   mint: "TOKEN_MINT_ADDRESS",
   buyer: walletAddress,
   amount_sol: 100_000_000,
@@ -186,7 +192,7 @@ const { transaction } = await buildBuyTransaction(connection, {
 ## Transaction Params
 
 ```typescript
-// Buy
+// Buy (vault-funded — recommended for agents)
 {
   mint: string,
   buyer: string,
@@ -194,7 +200,17 @@ const { transaction } = await buildBuyTransaction(connection, {
   slippage_bps?: number,       // default 100 (1%)
   vote?: "burn" | "return",    // required on first buy
   message?: string,            // optional SPL Memo (max 500 chars)
-  vault?: string,              // vault creator pubkey (omit for direct buy)
+  vault: string,               // vault creator pubkey (required)
+}
+
+// Direct Buy (no vault — human use only)
+{
+  mint: string,
+  buyer: string,
+  amount_sol: number,          // lamports
+  slippage_bps?: number,       // default 100 (1%)
+  vote?: "burn" | "return",    // required on first buy
+  message?: string,            // optional SPL Memo (max 500 chars)
 }
 
 // Sell
