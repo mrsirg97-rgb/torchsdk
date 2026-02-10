@@ -10,12 +10,16 @@ import { getAssociatedTokenAddressSync } from '@solana/spl-token'
 import {
   BondingCurve,
   Treasury,
+  TorchVault,
+  VaultWalletLink,
   LoanPosition,
   decodeString,
   getBondingCurvePda,
   getTokenTreasuryPda,
   getLoanPositionPda,
   getCollateralVaultPda,
+  getTorchVaultPda,
+  getVaultWalletLinkPda,
   getRaydiumMigrationAccounts,
   calculateBondingProgress,
   calculatePrice,
@@ -45,6 +49,8 @@ import {
   SaidVerification,
   LendingInfo,
   LoanPositionInfo,
+  VaultInfo,
+  VaultWalletLinkInfo,
 } from './types'
 
 // ============================================================================
@@ -671,6 +677,109 @@ export const getLoanPosition = async (
     current_ltv_bps: currentLtvBps,
     health,
     ...(warnings.length > 0 ? { warnings } : {}),
+  }
+}
+
+// ============================================================================
+// Vault Queries (V2.0)
+// ============================================================================
+
+/**
+ * Get vault state by the vault creator's public key.
+ *
+ * Returns vault balance, authority, linked wallet count, etc.
+ * Returns null if no vault exists for this creator.
+ */
+export const getVault = async (
+  connection: Connection,
+  creatorStr: string,
+): Promise<VaultInfo | null> => {
+  const creator = new PublicKey(creatorStr)
+  const coder = new BorshCoder(idl as unknown as Idl)
+
+  const [vaultPda] = getTorchVaultPda(creator)
+  const accountInfo = await connection.getAccountInfo(vaultPda)
+
+  if (!accountInfo) return null
+
+  const vault = coder.accounts.decode('TorchVault', accountInfo.data) as unknown as TorchVault
+
+  return {
+    address: vaultPda.toString(),
+    creator: vault.creator.toString(),
+    authority: vault.authority.toString(),
+    sol_balance: Number(vault.sol_balance.toString()) / LAMPORTS_PER_SOL,
+    total_deposited: Number(vault.total_deposited.toString()) / LAMPORTS_PER_SOL,
+    total_withdrawn: Number(vault.total_withdrawn.toString()) / LAMPORTS_PER_SOL,
+    total_spent: Number(vault.total_spent.toString()) / LAMPORTS_PER_SOL,
+    linked_wallets: vault.linked_wallets,
+    created_at: Number(vault.created_at.toString()),
+  }
+}
+
+/**
+ * Get vault state by looking up a linked wallet's VaultWalletLink.
+ *
+ * Useful when you have an agent wallet and need to find its vault.
+ * Returns null if the wallet is not linked to any vault.
+ */
+export const getVaultForWallet = async (
+  connection: Connection,
+  walletStr: string,
+): Promise<VaultInfo | null> => {
+  const wallet = new PublicKey(walletStr)
+  const coder = new BorshCoder(idl as unknown as Idl)
+
+  const [walletLinkPda] = getVaultWalletLinkPda(wallet)
+  const linkInfo = await connection.getAccountInfo(walletLinkPda)
+
+  if (!linkInfo) return null
+
+  const link = coder.accounts.decode('VaultWalletLink', linkInfo.data) as unknown as VaultWalletLink
+
+  // Now fetch the vault using the vault PDA stored in the link
+  const vaultInfo = await connection.getAccountInfo(link.vault)
+  if (!vaultInfo) return null
+
+  const vault = coder.accounts.decode('TorchVault', vaultInfo.data) as unknown as TorchVault
+
+  return {
+    address: link.vault.toString(),
+    creator: vault.creator.toString(),
+    authority: vault.authority.toString(),
+    sol_balance: Number(vault.sol_balance.toString()) / LAMPORTS_PER_SOL,
+    total_deposited: Number(vault.total_deposited.toString()) / LAMPORTS_PER_SOL,
+    total_withdrawn: Number(vault.total_withdrawn.toString()) / LAMPORTS_PER_SOL,
+    total_spent: Number(vault.total_spent.toString()) / LAMPORTS_PER_SOL,
+    linked_wallets: vault.linked_wallets,
+    created_at: Number(vault.created_at.toString()),
+  }
+}
+
+/**
+ * Get wallet link state for a specific wallet.
+ *
+ * Returns the link info (which vault it's linked to, when) or null if not linked.
+ */
+export const getVaultWalletLink = async (
+  connection: Connection,
+  walletStr: string,
+): Promise<VaultWalletLinkInfo | null> => {
+  const wallet = new PublicKey(walletStr)
+  const coder = new BorshCoder(idl as unknown as Idl)
+
+  const [walletLinkPda] = getVaultWalletLinkPda(wallet)
+  const accountInfo = await connection.getAccountInfo(walletLinkPda)
+
+  if (!accountInfo) return null
+
+  const link = coder.accounts.decode('VaultWalletLink', accountInfo.data) as unknown as VaultWalletLink
+
+  return {
+    address: walletLinkPda.toString(),
+    vault: link.vault.toString(),
+    wallet: link.wallet.toString(),
+    linked_at: Number(link.linked_at.toString()),
   }
 }
 

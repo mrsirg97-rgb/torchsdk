@@ -123,6 +123,67 @@ export interface SellQuoteResult {
 }
 
 // ============================================================================
+// Vault Types (V2.0)
+// ============================================================================
+
+export interface VaultInfo {
+  address: string
+  creator: string
+  authority: string
+  sol_balance: number
+  total_deposited: number
+  total_withdrawn: number
+  total_spent: number
+  linked_wallets: number
+  created_at: number
+}
+
+export interface VaultWalletLinkInfo {
+  address: string
+  vault: string
+  wallet: string
+  linked_at: number
+}
+
+// ============================================================================
+// Vault Params (V2.0)
+// ============================================================================
+
+export interface CreateVaultParams {
+  creator: string
+}
+
+export interface DepositVaultParams {
+  depositor: string
+  vault_creator: string
+  amount_sol: number
+}
+
+export interface WithdrawVaultParams {
+  authority: string
+  vault_creator: string
+  amount_sol: number
+}
+
+export interface LinkWalletParams {
+  authority: string
+  vault_creator: string
+  wallet_to_link: string
+}
+
+export interface UnlinkWalletParams {
+  authority: string
+  vault_creator: string
+  wallet_to_unlink: string
+}
+
+export interface TransferAuthorityParams {
+  authority: string
+  vault_creator: string
+  new_authority: string
+}
+
+// ============================================================================
 // Transaction Params
 // ============================================================================
 
@@ -133,6 +194,8 @@ export interface BuyParams {
   slippage_bps?: number
   vote?: 'burn' | 'return'
   message?: string
+  /** Vault creator pubkey. When provided, vault pays for the buy. */
+  vault?: string
 }
 
 export interface SellParams {

@@ -1,8 +1,102 @@
 # Torch SDK
 
-TypeScript SDK for building on [Torch Market](https://torch.market) — the fair-launch DAO launchpad on Solana.
+TypeScript SDK for [Torch Market](https://torch.market) — the fair-launch token protocol on Solana.
 
-Read on-chain state, build transactions, and interact with bonding curves, community treasuries, governance, lending, and the SAID Protocol — all directly via Solana RPC. No API middleman.
+Read on-chain state, build transactions, and interact with bonding curves, vaults, governance, lending, and the SAID Protocol — all directly via Solana RPC. No API middleman.
+
+## Design
+
+for in depth sdk design, refer to [design.md](./design.md).
+
+## What's New in v2.0.0
+
+**Torch Vault** — an on-chain SOL escrow for safe AI agent interaction.
+
+The vault is a spending cap. You deposit SOL, link an agent wallet, and the agent buys tokens using the vault's funds. The agent can't withdraw, can't transfer SOL arbitrarily — it can only spend through the `buy` instruction. You (the authority) retain full control: withdraw anytime, unlink wallets, transfer authority.
+
+```
+User (hardware wallet)
+  ├── createVault()          → vault created, user auto-linked
+  ├── depositVault(5 SOL)    → vault funded
+  ├── linkWallet(agent)      → agent can use vault for buys
+  │
+Agent (hot wallet, ~0.01 SOL for fees)
+  ├── buy(vault=user)        → vault pays, agent receives tokens
+  ├── sell()                 → agent sells tokens, keeps SOL
+  │
+User
+  ├── withdrawVault()        → pull remaining SOL
+  └── unlinkWallet(agent)    → revoke agent access
+```
+
+Multiple wallets can share one vault. Deposit from a hardware wallet, trade from a hot wallet and an agent — all backed by the same SOL pool.
+
+## API Reference
+
+### Token Data
+
+| Function | Description |
+|----------|-------------|
+| `getTokens(connection, params?)` | List tokens with filtering and sorting |
+| `getToken(connection, mint)` | Get full token details (metadata, treasury, votes, stars) |
+| `getHolders(connection, mint)` | Get token holder list (excludes pools/vaults) |
+| `getMessages(connection, mint, limit?)` | Get trade-bundled memos for a token |
+| `getLendingInfo(connection, mint)` | Get lending parameters for a migrated token |
+| `getLoanPosition(connection, mint, wallet)` | Get a wallet's loan position |
+
+### Vault Queries
+
+| Function | Description |
+|----------|-------------|
+| `getVault(connection, creator)` | Get vault state by creator pubkey |
+| `getVaultForWallet(connection, wallet)` | Find vault by any linked wallet (reverse lookup) |
+| `getVaultWalletLink(connection, wallet)` | Get link state (which vault, when linked) |
+
+### Quotes
+
+| Function | Description |
+|----------|-------------|
+| `getBuyQuote(connection, mint, solAmount)` | Simulate a buy — expected tokens, fees, price impact |
+| `getSellQuote(connection, mint, tokenAmount)` | Simulate a sell — expected SOL, price impact |
+
+### Transaction Builders
+
+All builders return `{ transaction: Transaction, message: string }`. You sign and send.
+
+#### Trading
+
+| Function | Description |
+|----------|-------------|
+| `buildBuyTransaction(connection, params)` | Buy tokens (direct or vault-funded) |
+| `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve |
+| `buildCreateTokenTransaction(connection, params)` | Launch a new token |
+| `buildStarTransaction(connection, params)` | Star a token (0.05 SOL) |
+
+#### Vault Management
+
+| Function | Signer | Description |
+|----------|--------|-------------|
+| `buildCreateVaultTransaction` | creator | Create vault + auto-link creator |
+| `buildDepositVaultTransaction` | depositor | Deposit SOL (permissionless) |
+| `buildWithdrawVaultTransaction` | authority | Withdraw SOL |
+| `buildLinkWalletTransaction` | authority | Link a wallet to the vault |
+| `buildUnlinkWalletTransaction` | authority | Unlink a wallet |
+| `buildTransferAuthorityTransaction` | authority | Transfer admin control |
+
+#### Lending (Post-Migration)
+
+| Function | Description |
+|----------|-------------|
+| `buildBorrowTransaction(connection, params)` | Borrow SOL against token collateral |
+| `buildRepayTransaction(connection, params)` | Repay SOL debt |
+| `buildLiquidateTransaction(connection, params)` | Liquidate underwater position |
+
+### SAID Protocol
+
+| Function | Description |
+|----------|-------------|
+| `verifySaid(wallet)` | Check SAID verification status and trust tier |
+| `confirmTransaction(connection, signature, wallet)` | Confirm tx on-chain for reputation tracking |
 
 ## Install
 
@@ -21,117 +115,146 @@ import {
   getToken,
   buildBuyTransaction,
   buildSellTransaction,
+  buildCreateVaultTransaction,
+  buildDepositVaultTransaction,
+  buildLinkWalletTransaction,
+  getVault,
   confirmTransaction,
 } from "torchsdk";
 
 const connection = new Connection("https://api.mainnet-beta.solana.com");
-
-// List tokens on bonding curves
-const { tokens } = await getTokens(connection, { status: "bonding", sort: "volume" });
-
-// Get full token details
-const token = await getToken(connection, "So11111111111111111111111111111111111111112");
-
-// Buy tokens on a bonding curve (with optional on-chain message)
-const { transaction, message } = await buildBuyTransaction(connection, {
-  mint: "TOKEN_MINT_ADDRESS",
-  buyer: "YOUR_WALLET_ADDRESS",
-  amount_sol: 100_000_000, // 0.1 SOL (in lamports)
-  slippage_bps: 500,       // 5% slippage
-  vote: "burn",            // vote to burn treasury tokens on migration
-  message: "gm",           // optional — bundled as SPL Memo in the same tx
-});
-
-// Sign and send the transaction with your wallet...
-
-// Confirm for SAID Protocol reputation
-const result = await confirmTransaction(connection, signature, walletAddress);
-// result.event_type: "trade_complete" | "token_launch" | "governance_vote"
 ```
 
-## API Reference
+### Set Up a Vault
 
-### Token Data
+```typescript
+// 1. Create vault (user wallet)
+const { transaction: createTx } = await buildCreateVaultTransaction(connection, {
+  creator: userWallet,
+});
+// sign and send createTx...
 
-| Function | Description |
-|----------|-------------|
-| `getTokens(connection, params?)` | List tokens with filtering and sorting |
-| `getToken(connection, mint)` | Get full token details |
-| `getHolders(connection, mint)` | Get token holder list |
-| `getMessages(connection, mint, limit?)` | Get trade-bundled messages for a token |
-| `getLendingInfo(connection, mint)` | Get lending parameters for a migrated token |
-| `getLoanPosition(connection, mint, wallet)` | Get a wallet's loan position |
+// 2. Deposit SOL
+const { transaction: depositTx } = await buildDepositVaultTransaction(connection, {
+  depositor: userWallet,
+  vault_creator: userWallet,
+  amount_sol: 5_000_000_000, // 5 SOL
+});
+// sign and send depositTx...
 
-### Quotes
+// 3. Link an agent wallet
+const { transaction: linkTx } = await buildLinkWalletTransaction(connection, {
+  authority: userWallet,
+  vault_creator: userWallet,
+  wallet_to_link: agentWallet,
+});
+// sign and send linkTx...
+```
 
-| Function | Description |
-|----------|-------------|
-| `getBuyQuote(connection, mint, solAmount)` | Simulate a buy and get expected output |
-| `getSellQuote(connection, mint, tokenAmount)` | Simulate a sell and get expected output |
+### Trade with Vault
 
-### Transaction Builders
+```typescript
+// Agent buys tokens — vault pays
+const { transaction, message } = await buildBuyTransaction(connection, {
+  mint: "TOKEN_MINT_ADDRESS",
+  buyer: agentWallet,
+  amount_sol: 100_000_000,     // 0.1 SOL (in lamports)
+  slippage_bps: 500,           // 5% slippage
+  vote: "burn",                // governance vote on first buy
+  vault: userWallet,           // vault creator key → vault pays
+});
+// agent signs and sends...
 
-All builders return `{ transaction: Transaction, message: string }`. You sign and send.
+// Check vault balance
+const vault = await getVault(connection, userWallet);
+console.log(`Vault: ${vault.sol_balance} SOL, ${vault.linked_wallets} wallets`);
+```
 
-| Function | Description |
-|----------|-------------|
-| `buildBuyTransaction(connection, params)` | Buy tokens on the bonding curve |
-| `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve |
-| `buildCreateTokenTransaction(connection, params)` | Launch a new token with bonding curve + treasury |
-| `buildStarTransaction(connection, params)` | Star a token (sybil-resistant support signal) |
-| `buildBorrowTransaction(connection, params)` | Borrow SOL against token collateral |
-| `buildRepayTransaction(connection, params)` | Repay a loan |
-| `buildLiquidateTransaction(connection, params)` | Liquidate an underwater position |
+### Trade Without Vault (Backward Compatible - Recommended Human Use Only)
 
-### SAID Protocol
-
-| Function | Description |
-|----------|-------------|
-| `verifySaid(wallet)` | Check SAID verification status and trust tier |
-| `confirmTransaction(connection, signature, wallet)` | Confirm a tx on-chain for reputation tracking |
+```typescript
+// Omit `vault` param — buyer pays directly from their wallet
+const { transaction } = await buildBuyTransaction(connection, {
+  mint: "TOKEN_MINT_ADDRESS",
+  buyer: walletAddress,
+  amount_sol: 100_000_000,
+  slippage_bps: 500,
+  vote: "burn",
+});
+```
 
 ## Transaction Params
 
 ```typescript
 // Buy
-{ mint: string, buyer: string, amount_sol: number, slippage_bps?: number, vote?: "burn" | "return", message?: string }
+{
+  mint: string,
+  buyer: string,
+  amount_sol: number,          // lamports
+  slippage_bps?: number,       // default 100 (1%)
+  vote?: "burn" | "return",    // required on first buy
+  message?: string,            // optional SPL Memo (max 500 chars)
+  vault?: string,              // vault creator pubkey (omit for direct buy)
+}
 
 // Sell
-{ mint: string, seller: string, amount_tokens: number, slippage_bps?: number, message?: string }
+{
+  mint: string,
+  seller: string,
+  amount_tokens: number,       // raw units (with decimals)
+  slippage_bps?: number,
+  message?: string,
+}
 
 // Create Token
 { creator: string, name: string, symbol: string, metadata_uri: string }
 
-// Vote
-{ mint: string, voter: string, vote: "burn" | "return" }
-
 // Star
 { mint: string, user: string }
 
-// Borrow
+// Vault
+{ creator: string }                                                    // create
+{ depositor: string, vault_creator: string, amount_sol: number }       // deposit
+{ authority: string, vault_creator: string, amount_sol: number }       // withdraw
+{ authority: string, vault_creator: string, wallet_to_link: string }   // link
+{ authority: string, vault_creator: string, wallet_to_unlink: string } // unlink
+{ authority: string, vault_creator: string, new_authority: string }    // transfer
+
+// Lending
 { mint: string, borrower: string, collateral_amount: number, sol_to_borrow: number }
-
-// Repay
 { mint: string, borrower: string, sol_amount: number }
-
-// Liquidate
 { mint: string, liquidator: string, borrower: string }
 ```
 
+## Vault Safety Model
+
+The Torch Vault provides protocol-level safety for AI agent interaction:
+
+| Property | Guarantee |
+|----------|-----------|
+| **Spending cap** | Vault balance is finite. Agent can't spend more than what's deposited. |
+| **Buy-only** | Vault SOL can only flow through the `buy` instruction. No arbitrary transfers. |
+| **Authority separation** | Creator (immutable PDA seed) vs Authority (transferable admin). Agent wallets get *usage* rights, not ownership. |
+| **One link per wallet** | A wallet can only belong to one vault. PDA uniqueness enforces this. |
+| **Permissionless deposits** | Anyone can top up any vault. Hardware wallet deposits, agent spends. |
+| **Instant revocation** | Authority can unlink a wallet at any time. |
+| **Token custody** | Tokens go to the buyer's wallet, not the vault. The agent holds its own tokens. |
+
 ## Running the E2E Test
 
-The test runs the full lifecycle against a [Surfpool](https://github.com/txtx/surfpool) mainnet fork: create, buy, sell, star, message, confirm, bond to completion, migrate to Raydium, borrow, and repay.
+The test runs the full lifecycle against a [Surfpool](https://github.com/txtx/surfpool) mainnet fork.
 
 ```bash
 # Start a local Solana fork
 surfpool start --network mainnet --no-tui
 
 # Run the test
-cd packages/sdk
 npx tsx tests/test_e2e.ts
 ```
 
-Expected output: `RESULTS: 13 passed, 0 failed`
+Expected output: `RESULTS: 22 passed, 0 failed`
+
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay.
 
 ## License
 

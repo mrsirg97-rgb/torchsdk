@@ -1,7 +1,7 @@
 /**
  * SDK E2E Test against Surfpool (mainnet fork)
  *
- * Tests: create → buy → sell → star → message → getToken → getMessages → listTokens
+ * Tests: create token → vault lifecycle → buy (direct + vault) → sell → star → messages
  * Then: bond to completion → migrate → borrow → repay
  *
  * Run:
@@ -21,12 +21,20 @@ import {
   getTokens,
   getToken,
   getMessages,
+  getVault,
+  getVaultForWallet,
+  getVaultWalletLink,
   buildBuyTransaction,
   buildSellTransaction,
   buildCreateTokenTransaction,
   buildStarTransaction,
   buildBorrowTransaction,
   buildRepayTransaction,
+  buildCreateVaultTransaction,
+  buildDepositVaultTransaction,
+  buildWithdrawVaultTransaction,
+  buildLinkWalletTransaction,
+  buildUnlinkWalletTransaction,
   confirmTransaction,
 } from '../src/index'
 import * as fs from 'fs'
@@ -115,9 +123,68 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 2. Get Token
+  // 2. Create Vault
   // ------------------------------------------------------------------
-  log('\n[2] Get Token')
+  log('\n[2] Create Vault')
+  try {
+    const result = await buildCreateVaultTransaction(connection, {
+      creator: walletAddr,
+    })
+    const sig = await signAndSend(connection, wallet, result.transaction)
+    ok('buildCreateVaultTransaction', `sig=${sig.slice(0, 8)}...`)
+  } catch (e: any) {
+    // Vault may already exist from a prior test run on forked state
+    if (e.message?.includes('already in use')) {
+      ok('buildCreateVaultTransaction', 'vault already exists (prior run)')
+    } else {
+      fail('buildCreateVaultTransaction', e)
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 3. Deposit into Vault
+  // ------------------------------------------------------------------
+  log('\n[3] Deposit into Vault')
+  try {
+    const result = await buildDepositVaultTransaction(connection, {
+      depositor: walletAddr,
+      vault_creator: walletAddr,
+      amount_sol: 5 * LAMPORTS_PER_SOL,
+    })
+    const sig = await signAndSend(connection, wallet, result.transaction)
+    ok('buildDepositVaultTransaction', `sig=${sig.slice(0, 8)}...`)
+  } catch (e: any) {
+    fail('buildDepositVaultTransaction', e)
+  }
+
+  // ------------------------------------------------------------------
+  // 4. Query Vault
+  // ------------------------------------------------------------------
+  log('\n[4] Query Vault')
+  try {
+    const vault = await getVault(connection, walletAddr)
+    if (!vault) throw new Error('Vault not found')
+    if (vault.sol_balance < 4.9) throw new Error(`Vault balance too low: ${vault.sol_balance}`)
+    if (vault.linked_wallets < 1) throw new Error(`No linked wallets: ${vault.linked_wallets}`)
+    ok('getVault', `balance=${vault.sol_balance.toFixed(2)} SOL linked_wallets=${vault.linked_wallets}`)
+
+    // Also test getVaultForWallet (creator is auto-linked)
+    const vaultByWallet = await getVaultForWallet(connection, walletAddr)
+    if (!vaultByWallet) throw new Error('getVaultForWallet returned null')
+    ok('getVaultForWallet', `address=${vaultByWallet.address.slice(0, 8)}...`)
+
+    // Also test getVaultWalletLink
+    const link = await getVaultWalletLink(connection, walletAddr)
+    if (!link) throw new Error('getVaultWalletLink returned null')
+    ok('getVaultWalletLink', `vault=${link.vault.slice(0, 8)}...`)
+  } catch (e: any) {
+    fail('query vault', e)
+  }
+
+  // ------------------------------------------------------------------
+  // 5. Get Token
+  // ------------------------------------------------------------------
+  log('\n[5] Get Token')
   try {
     const detail = await getToken(connection, mint)
     if (detail.name !== 'SDK Test Token') throw new Error(`Wrong name: ${detail.name}`)
@@ -132,9 +199,9 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 3. List Tokens
+  // 6. List Tokens
   // ------------------------------------------------------------------
-  log('\n[3] List Tokens')
+  log('\n[6] List Tokens')
   try {
     const result = await getTokens(connection, { status: 'bonding', limit: 10 })
     const found = result.tokens.some((t) => t.mint === mint)
@@ -145,9 +212,9 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 4. Buy Token
+  // 7. Buy Token (direct — no vault, backward compat)
   // ------------------------------------------------------------------
-  log('\n[4] Buy Token')
+  log('\n[7] Buy Token (direct)')
   let buySig: string | undefined
   try {
     const result = await buildBuyTransaction(connection, {
@@ -158,15 +225,108 @@ const main = async () => {
       vote: 'burn',
     })
     buySig = await signAndSend(connection, wallet, result.transaction)
-    ok('buildBuyTransaction', `${result.message} sig=${buySig.slice(0, 8)}...`)
+    ok('buildBuyTransaction (direct)', `${result.message} sig=${buySig.slice(0, 8)}...`)
   } catch (e: any) {
-    fail('buildBuyTransaction', e)
+    fail('buildBuyTransaction (direct)', e)
   }
 
   // ------------------------------------------------------------------
-  // 5. Sell Token
+  // 8. Buy Token (via vault)
   // ------------------------------------------------------------------
-  log('\n[5] Sell Token')
+  log('\n[8] Buy Token (via vault)')
+  try {
+    const vaultBefore = await getVault(connection, walletAddr)
+    const result = await buildBuyTransaction(connection, {
+      mint,
+      buyer: walletAddr,
+      amount_sol: 100_000_000, // 0.1 SOL
+      slippage_bps: 500,
+      // No vote — wallet already voted on direct buy above
+      vault: walletAddr,
+    })
+    const sig = await signAndSend(connection, wallet, result.transaction)
+    const vaultAfter = await getVault(connection, walletAddr)
+    const spent = (vaultBefore?.sol_balance || 0) - (vaultAfter?.sol_balance || 0)
+    ok('buildBuyTransaction (vault)', `${result.message} vault_spent=${spent.toFixed(4)} SOL sig=${sig.slice(0, 8)}...`)
+  } catch (e: any) {
+    fail('buildBuyTransaction (vault)', e)
+  }
+
+  // ------------------------------------------------------------------
+  // 9. Link Second Wallet + Buy via Vault
+  // ------------------------------------------------------------------
+  log('\n[9] Link Wallet + Vault Buy')
+  const agent = Keypair.generate()
+  try {
+    // Fund agent for tx fees
+    const fundTx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: agent.publicKey,
+        lamports: 0.05 * LAMPORTS_PER_SOL,
+      }),
+    )
+    const { blockhash: fBh } = await connection.getLatestBlockhash()
+    fundTx.recentBlockhash = fBh
+    fundTx.feePayer = wallet.publicKey
+    await signAndSend(connection, wallet, fundTx)
+
+    // Link agent wallet to vault
+    const linkResult = await buildLinkWalletTransaction(connection, {
+      authority: walletAddr,
+      vault_creator: walletAddr,
+      wallet_to_link: agent.publicKey.toBase58(),
+    })
+    const linkSig = await signAndSend(connection, wallet, linkResult.transaction)
+    ok('buildLinkWalletTransaction', `sig=${linkSig.slice(0, 8)}...`)
+
+    // Buy with agent wallet via vault (first buy requires a vote)
+    const buyResult = await buildBuyTransaction(connection, {
+      mint,
+      buyer: agent.publicKey.toBase58(),
+      amount_sol: 50_000_000, // 0.05 SOL
+      slippage_bps: 500,
+      vote: 'burn',
+      vault: walletAddr,
+    })
+    const buySig2 = await signAndSend(connection, agent, buyResult.transaction)
+    ok('vault buy (linked wallet)', `${buyResult.message} sig=${buySig2.slice(0, 8)}...`)
+
+    // Unlink agent wallet
+    const unlinkResult = await buildUnlinkWalletTransaction(connection, {
+      authority: walletAddr,
+      vault_creator: walletAddr,
+      wallet_to_unlink: agent.publicKey.toBase58(),
+    })
+    const unlinkSig = await signAndSend(connection, wallet, unlinkResult.transaction)
+    ok('buildUnlinkWalletTransaction', `sig=${unlinkSig.slice(0, 8)}...`)
+  } catch (e: any) {
+    fail('link/vault-buy/unlink', e)
+  }
+
+  // ------------------------------------------------------------------
+  // 10. Withdraw from Vault
+  // ------------------------------------------------------------------
+  log('\n[10] Withdraw from Vault')
+  try {
+    const vaultBefore = await getVault(connection, walletAddr)
+    const withdrawAmount = Math.floor((vaultBefore?.sol_balance || 0) * LAMPORTS_PER_SOL * 0.5)
+    const result = await buildWithdrawVaultTransaction(connection, {
+      authority: walletAddr,
+      vault_creator: walletAddr,
+      amount_sol: withdrawAmount,
+    })
+    const sig = await signAndSend(connection, wallet, result.transaction)
+    const vaultAfter = await getVault(connection, walletAddr)
+    ok('buildWithdrawVaultTransaction', `withdrew=${(withdrawAmount / LAMPORTS_PER_SOL).toFixed(2)} SOL remaining=${vaultAfter?.sol_balance.toFixed(2)} SOL sig=${sig.slice(0, 8)}...`)
+  } catch (e: any) {
+    fail('buildWithdrawVaultTransaction', e)
+  }
+
+  // ------------------------------------------------------------------
+  // 11. Sell Token
+  // ------------------------------------------------------------------
+  log('\n[11] Sell Token')
   try {
     // Sell a small amount (1000 tokens = 1000 * 1e6 base units)
     const result = await buildSellTransaction(connection, {
@@ -182,9 +342,9 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 6. Star Token (need a different wallet — can't star your own)
+  // 12. Star Token (need a different wallet — can't star your own)
   // ------------------------------------------------------------------
-  log('\n[6] Star Token')
+  log('\n[12] Star Token')
   const starrer = Keypair.generate()
   try {
     // Fund starrer
@@ -211,9 +371,9 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 8. Get Messages
+  // 13. Get Messages
   // ------------------------------------------------------------------
-  log('\n[8] Get Messages')
+  log('\n[13] Get Messages')
   try {
     // Wait a moment for the tx to be indexed
     await new Promise((r) => setTimeout(r, 1000))
@@ -224,9 +384,9 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 9. Confirm Transaction (SAID)
+  // 14. Confirm Transaction (SAID)
   // ------------------------------------------------------------------
-  log('\n[9] Confirm Transaction')
+  log('\n[14] Confirm Transaction')
   if (buySig) {
     try {
       const result = await confirmTransaction(connection, buySig, walletAddr)
@@ -240,9 +400,9 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 10. Bond to Completion + Migrate + Borrow + Repay
+  // 15. Bond to Completion + Migrate + Borrow + Repay
   // ------------------------------------------------------------------
-  log('\n[10] Full Lifecycle: Bond → Migrate → Borrow → Repay')
+  log('\n[15] Full Lifecycle: Bond → Migrate → Borrow → Repay')
   log('  Bonding to 200 SOL using multiple wallets (2% wallet cap)...')
 
   // Generate buyer wallets and fund them

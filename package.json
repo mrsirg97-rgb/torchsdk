@@ -1,6 +1,6 @@
 {
   "name": "torchsdk",
-  "version": "1.0.7",
+  "version": "2.0.0",
   "description": "Torch Market SDK — AI agent toolkit for Solana fair-launch tokens",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,8 +12,7 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "deploy:ipfs": "npm run build && ipfs add -r dist",
-    "format": "prettier --write src/",
-    "format:test": "prettier --write tests/"
+    "format": "prettier --write src/ tests/"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

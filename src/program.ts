@@ -12,6 +12,8 @@ import {
   STAR_RECORD_SEED,
   LOAN_SEED,
   COLLATERAL_VAULT_SEED,
+  TORCH_VAULT_SEED,
+  VAULT_WALLET_LINK_SEED,
   RAYDIUM_CPMM_PROGRAM,
   WSOL_MINT,
   RAYDIUM_AMM_CONFIG,
@@ -90,6 +92,27 @@ export interface Treasury {
   total_stars: BN
   star_sol_balance: BN
   creator_paid_out: boolean
+  bump: number
+}
+
+// V2.0: Torch Vault (on-chain state)
+export interface TorchVault {
+  creator: PublicKey
+  authority: PublicKey
+  sol_balance: BN
+  total_deposited: BN
+  total_withdrawn: BN
+  total_spent: BN
+  linked_wallets: number
+  created_at: BN
+  bump: number
+}
+
+// V2.0: Vault wallet link (on-chain state)
+export interface VaultWalletLink {
+  vault: PublicKey
+  wallet: PublicKey
+  linked_at: BN
   bump: number
 }
 
@@ -191,6 +214,22 @@ export const getLoanPositionPda = (mint: PublicKey, borrower: PublicKey): [Publi
 export const getCollateralVaultPda = (mint: PublicKey): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(COLLATERAL_VAULT_SEED), mint.toBuffer()],
+    PROGRAM_ID,
+  )
+}
+
+// V2.0: Torch Vault PDA (per creator)
+export const getTorchVaultPda = (creator: PublicKey): [PublicKey, number] => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(TORCH_VAULT_SEED), creator.toBuffer()],
+    PROGRAM_ID,
+  )
+}
+
+// V2.0: Vault Wallet Link PDA (per wallet)
+export const getVaultWalletLinkPda = (wallet: PublicKey): [PublicKey, number] => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(VAULT_WALLET_LINK_SEED), wallet.toBuffer()],
     PROGRAM_ID,
   )
 }

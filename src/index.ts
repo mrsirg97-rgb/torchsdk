@@ -18,6 +18,9 @@ export {
   getMessages,
   getLendingInfo,
   getLoanPosition,
+  getVault,
+  getVaultForWallet,
+  getVaultWalletLink,
 } from './tokens'
 
 // Quotes
@@ -32,6 +35,12 @@ export {
   buildBorrowTransaction,
   buildRepayTransaction,
   buildLiquidateTransaction,
+  buildCreateVaultTransaction,
+  buildDepositVaultTransaction,
+  buildWithdrawVaultTransaction,
+  buildLinkWalletTransaction,
+  buildUnlinkWalletTransaction,
+  buildTransferAuthorityTransaction,
 } from './transactions'
 
 // SAID Protocol
@@ -65,6 +74,14 @@ export type {
   MessagesResult,
   SaidVerification,
   ConfirmResult,
+  VaultInfo,
+  VaultWalletLinkInfo,
+  CreateVaultParams,
+  DepositVaultParams,
+  WithdrawVaultParams,
+  LinkWalletParams,
+  UnlinkWalletParams,
+  TransferAuthorityParams,
 } from './types'
 
 // Constants (for advanced usage)

@@ -32,6 +32,8 @@ export const USER_STATS_SEED = 'user_stats'
 export const STAR_RECORD_SEED = 'star_record'
 export const LOAN_SEED = 'loan'
 export const COLLATERAL_VAULT_SEED = 'collateral_vault'
+export const TORCH_VAULT_SEED = 'torch_vault' // V2.0: Vault PDA
+export const VAULT_WALLET_LINK_SEED = 'vault_wallet' // V2.0: Wallet link PDA
 
 // Token constants (must match the Rust program)
 export const TOTAL_SUPPLY = BigInt('1000000000000000') // 1B with 6 decimals

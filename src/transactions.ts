@@ -1,7 +1,7 @@
 /**
  * Transaction builders
  *
- * Build unsigned transactions for buy, sell, create, star, and message.
+ * Build unsigned transactions for buy, sell, create, star, vault, and lending.
  * Agents sign these locally and submit to the network.
  */
 
@@ -32,6 +32,8 @@ import {
   getStarRecordPda,
   getLoanPositionPda,
   getCollateralVaultPda,
+  getTorchVaultPda,
+  getVaultWalletLinkPda,
   getRaydiumMigrationAccounts,
   calculateTokensOut,
   calculateSolOut,
@@ -47,6 +49,12 @@ import {
   BorrowParams,
   RepayParams,
   LiquidateParams,
+  CreateVaultParams,
+  DepositVaultParams,
+  WithdrawVaultParams,
+  LinkWalletParams,
+  UnlinkWalletParams,
+  TransferAuthorityParams,
   TransactionResult,
   CreateTokenResult,
 } from './types'
@@ -82,15 +90,18 @@ const finalizeTransaction = async (
 /**
  * Build an unsigned buy transaction.
  *
+ * When `params.vault` is provided, the vault pays for the buy (vault creator pubkey).
+ * When omitted, the buyer pays from their own wallet (backward compatible).
+ *
  * @param connection - Solana RPC connection
- * @param params - Buy parameters (mint, buyer, amount_sol in lamports, optional slippage_bps and vote)
+ * @param params - Buy parameters (mint, buyer, amount_sol in lamports, optional vault, slippage_bps, vote)
  * @returns Unsigned transaction and descriptive message
  */
 export const buildBuyTransaction = async (
   connection: Connection,
   params: BuyParams,
 ): Promise<TransactionResult> => {
-  const { mint: mintStr, buyer: buyerStr, amount_sol, slippage_bps = 100, vote, message } = params
+  const { mint: mintStr, buyer: buyerStr, amount_sol, slippage_bps = 100, vote, message, vault: vaultCreatorStr } = params
 
   const mint = new PublicKey(mintStr)
   const buyer = new PublicKey(buyerStr)
@@ -128,15 +139,15 @@ export const buildBuyTransaction = async (
     TOKEN_2022_PROGRAM_ID,
   )
   const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
-  const userTokenAccount = getAssociatedTokenAddressSync(mint, buyer, false, TOKEN_2022_PROGRAM_ID)
+  const buyerTokenAccount = getAssociatedTokenAddressSync(mint, buyer, false, TOKEN_2022_PROGRAM_ID)
 
   const tx = new Transaction()
 
-  // Create user ATA if needed
+  // Create buyer ATA if needed
   tx.add(
     createAssociatedTokenAccountIdempotentInstruction(
       buyer,
-      userTokenAccount,
+      buyerTokenAccount,
       buyer,
       mint,
       TOKEN_2022_PROGRAM_ID,
@@ -152,6 +163,15 @@ export const buildBuyTransaction = async (
     globalConfigPda,
   )) as GlobalConfig
 
+  // Vault accounts (optional — pass null when not using vault)
+  let torchVaultAccount: PublicKey | null = null
+  let vaultWalletLinkAccount: PublicKey | null = null
+  if (vaultCreatorStr) {
+    const vaultCreator = new PublicKey(vaultCreatorStr)
+    ;[torchVaultAccount] = getTorchVaultPda(vaultCreator)
+    ;[vaultWalletLinkAccount] = getVaultWalletLinkPda(buyer)
+  }
+
   const buyIx = await program.methods
     .buy({
       solAmount: new BN(amount_sol.toString()),
@@ -166,16 +186,17 @@ export const buildBuyTransaction = async (
       mint,
       bondingCurve: bondingCurvePda,
       tokenVault: bondingCurveTokenAccount,
-      treasury: treasuryPda,
+      tokenTreasury: treasuryPda,
       treasuryTokenAccount,
-      userTokenAccount,
+      buyerTokenAccount,
       userPosition: userPositionPda,
       userStats: userStatsPda,
+      torchVault: torchVaultAccount,
+      vaultWalletLink: vaultWalletLinkAccount,
       tokenProgram: TOKEN_2022_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-    })
+    } as any)
     .instruction()
 
   tx.add(buyIx)
@@ -195,9 +216,10 @@ export const buildBuyTransaction = async (
 
   await finalizeTransaction(connection, tx, buyer)
 
+  const vaultLabel = vaultCreatorStr ? ' (via vault)' : ''
   return {
     transaction: tx,
-    message: `Buy ${Number(result.tokensToUser) / 1e6} tokens for ${Number(solAmount) / 1e9} SOL`,
+    message: `Buy ${Number(result.tokensToUser) / 1e6} tokens for ${Number(solAmount) / 1e9} SOL${vaultLabel}`,
   }
 }
 
@@ -240,6 +262,7 @@ export const buildSellTransaction = async (
 
   // Derive PDAs
   const [bondingCurvePda] = getBondingCurvePda(mint)
+  const [treasuryPda] = getTokenTreasuryPda(mint)
   const [userPositionPda] = getUserPositionPda(bondingCurvePda, seller)
   const [userStatsPda] = getUserStatsPda(seller)
 
@@ -249,7 +272,7 @@ export const buildSellTransaction = async (
     true,
     TOKEN_2022_PROGRAM_ID,
   )
-  const userTokenAccount = getAssociatedTokenAddressSync(mint, seller, false, TOKEN_2022_PROGRAM_ID)
+  const sellerTokenAccount = getAssociatedTokenAddressSync(mint, seller, false, TOKEN_2022_PROGRAM_ID)
 
   const tx = new Transaction()
 
@@ -266,8 +289,9 @@ export const buildSellTransaction = async (
       mint,
       bondingCurve: bondingCurvePda,
       tokenVault: bondingCurveTokenAccount,
-      sellerTokenAccount: userTokenAccount,
+      sellerTokenAccount,
       userPosition: userPositionPda,
+      tokenTreasury: treasuryPda,
       userStats: userStatsPda,
       tokenProgram: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
@@ -430,7 +454,7 @@ export const buildStarTransaction = async (
       user,
       mint,
       bondingCurve: bondingCurvePda,
-      treasury: treasuryPda,
+      tokenTreasury: treasuryPda,
       creator: bondingCurve.creator,
       starRecord: starRecordPda,
       systemProgram: SystemProgram.programId,
@@ -451,6 +475,248 @@ export const buildStarTransaction = async (
 // ============================================================================
 
 const MAX_MESSAGE_LENGTH = 500
+
+// ============================================================================
+// Vault (V2.0)
+// ============================================================================
+
+/**
+ * Build an unsigned create vault transaction.
+ *
+ * Creates a TorchVault PDA and auto-links the creator's wallet.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Creator public key
+ * @returns Unsigned transaction
+ */
+export const buildCreateVaultTransaction = async (
+  connection: Connection,
+  params: CreateVaultParams,
+): Promise<TransactionResult> => {
+  const creator = new PublicKey(params.creator)
+  const [vaultPda] = getTorchVaultPda(creator)
+  const [walletLinkPda] = getVaultWalletLinkPda(creator)
+
+  const provider = makeDummyProvider(connection, creator)
+  const program = new Program(idl as unknown, provider)
+
+  const ix = await program.methods
+    .createVault()
+    .accounts({
+      creator,
+      vault: vaultPda,
+      walletLink: walletLinkPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction()
+
+  const tx = new Transaction().add(ix)
+  await finalizeTransaction(connection, tx, creator)
+
+  return {
+    transaction: tx,
+    message: `Create vault for ${params.creator.slice(0, 8)}...`,
+  }
+}
+
+/**
+ * Build an unsigned deposit vault transaction.
+ *
+ * Anyone can deposit SOL into any vault.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Depositor, vault creator, amount in lamports
+ * @returns Unsigned transaction
+ */
+export const buildDepositVaultTransaction = async (
+  connection: Connection,
+  params: DepositVaultParams,
+): Promise<TransactionResult> => {
+  const depositor = new PublicKey(params.depositor)
+  const vaultCreator = new PublicKey(params.vault_creator)
+  const [vaultPda] = getTorchVaultPda(vaultCreator)
+
+  const provider = makeDummyProvider(connection, depositor)
+  const program = new Program(idl as unknown, provider)
+
+  const ix = await program.methods
+    .depositVault(new BN(params.amount_sol.toString()))
+    .accounts({
+      depositor,
+      vault: vaultPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction()
+
+  const tx = new Transaction().add(ix)
+  await finalizeTransaction(connection, tx, depositor)
+
+  return {
+    transaction: tx,
+    message: `Deposit ${params.amount_sol / 1e9} SOL into vault`,
+  }
+}
+
+/**
+ * Build an unsigned withdraw vault transaction.
+ *
+ * Only the vault authority can withdraw.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Authority, vault creator, amount in lamports
+ * @returns Unsigned transaction
+ */
+export const buildWithdrawVaultTransaction = async (
+  connection: Connection,
+  params: WithdrawVaultParams,
+): Promise<TransactionResult> => {
+  const authority = new PublicKey(params.authority)
+  const vaultCreator = new PublicKey(params.vault_creator)
+  const [vaultPda] = getTorchVaultPda(vaultCreator)
+
+  const provider = makeDummyProvider(connection, authority)
+  const program = new Program(idl as unknown, provider)
+
+  const ix = await program.methods
+    .withdrawVault(new BN(params.amount_sol.toString()))
+    .accounts({
+      authority,
+      vault: vaultPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction()
+
+  const tx = new Transaction().add(ix)
+  await finalizeTransaction(connection, tx, authority)
+
+  return {
+    transaction: tx,
+    message: `Withdraw ${params.amount_sol / 1e9} SOL from vault`,
+  }
+}
+
+/**
+ * Build an unsigned link wallet transaction.
+ *
+ * Only the vault authority can link wallets.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Authority, vault creator, wallet to link
+ * @returns Unsigned transaction
+ */
+export const buildLinkWalletTransaction = async (
+  connection: Connection,
+  params: LinkWalletParams,
+): Promise<TransactionResult> => {
+  const authority = new PublicKey(params.authority)
+  const vaultCreator = new PublicKey(params.vault_creator)
+  const walletToLink = new PublicKey(params.wallet_to_link)
+  const [vaultPda] = getTorchVaultPda(vaultCreator)
+  const [walletLinkPda] = getVaultWalletLinkPda(walletToLink)
+
+  const provider = makeDummyProvider(connection, authority)
+  const program = new Program(idl as unknown, provider)
+
+  const ix = await program.methods
+    .linkWallet()
+    .accounts({
+      authority,
+      vault: vaultPda,
+      walletToLink,
+      walletLink: walletLinkPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction()
+
+  const tx = new Transaction().add(ix)
+  await finalizeTransaction(connection, tx, authority)
+
+  return {
+    transaction: tx,
+    message: `Link wallet ${params.wallet_to_link.slice(0, 8)}... to vault`,
+  }
+}
+
+/**
+ * Build an unsigned unlink wallet transaction.
+ *
+ * Only the vault authority can unlink wallets. Rent returns to authority.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Authority, vault creator, wallet to unlink
+ * @returns Unsigned transaction
+ */
+export const buildUnlinkWalletTransaction = async (
+  connection: Connection,
+  params: UnlinkWalletParams,
+): Promise<TransactionResult> => {
+  const authority = new PublicKey(params.authority)
+  const vaultCreator = new PublicKey(params.vault_creator)
+  const walletToUnlink = new PublicKey(params.wallet_to_unlink)
+  const [vaultPda] = getTorchVaultPda(vaultCreator)
+  const [walletLinkPda] = getVaultWalletLinkPda(walletToUnlink)
+
+  const provider = makeDummyProvider(connection, authority)
+  const program = new Program(idl as unknown, provider)
+
+  const ix = await program.methods
+    .unlinkWallet()
+    .accounts({
+      authority,
+      vault: vaultPda,
+      walletToUnlink,
+      walletLink: walletLinkPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction()
+
+  const tx = new Transaction().add(ix)
+  await finalizeTransaction(connection, tx, authority)
+
+  return {
+    transaction: tx,
+    message: `Unlink wallet ${params.wallet_to_unlink.slice(0, 8)}... from vault`,
+  }
+}
+
+/**
+ * Build an unsigned transfer authority transaction.
+ *
+ * Transfers vault admin control to a new wallet.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Current authority, vault creator, new authority
+ * @returns Unsigned transaction
+ */
+export const buildTransferAuthorityTransaction = async (
+  connection: Connection,
+  params: TransferAuthorityParams,
+): Promise<TransactionResult> => {
+  const authority = new PublicKey(params.authority)
+  const vaultCreator = new PublicKey(params.vault_creator)
+  const newAuthority = new PublicKey(params.new_authority)
+  const [vaultPda] = getTorchVaultPda(vaultCreator)
+
+  const provider = makeDummyProvider(connection, authority)
+  const program = new Program(idl as unknown, provider)
+
+  const ix = await program.methods
+    .transferAuthority()
+    .accounts({
+      authority,
+      vault: vaultPda,
+      newAuthority,
+    })
+    .instruction()
+
+  const tx = new Transaction().add(ix)
+  await finalizeTransaction(connection, tx, authority)
+
+  return {
+    transaction: tx,
+    message: `Transfer vault authority to ${params.new_authority.slice(0, 8)}...`,
+  }
+}
 
 // ============================================================================
 // Borrow (V2.4)
