@@ -712,6 +712,7 @@ export const getVault = async (
     total_deposited: Number(vault.total_deposited.toString()) / LAMPORTS_PER_SOL,
     total_withdrawn: Number(vault.total_withdrawn.toString()) / LAMPORTS_PER_SOL,
     total_spent: Number(vault.total_spent.toString()) / LAMPORTS_PER_SOL,
+    total_received: Number(vault.total_received.toString()) / LAMPORTS_PER_SOL,
     linked_wallets: vault.linked_wallets,
     created_at: Number(vault.created_at.toString()),
   }
@@ -751,6 +752,7 @@ export const getVaultForWallet = async (
     total_deposited: Number(vault.total_deposited.toString()) / LAMPORTS_PER_SOL,
     total_withdrawn: Number(vault.total_withdrawn.toString()) / LAMPORTS_PER_SOL,
     total_spent: Number(vault.total_spent.toString()) / LAMPORTS_PER_SOL,
+    total_received: Number(vault.total_received.toString()) / LAMPORTS_PER_SOL,
     linked_wallets: vault.linked_wallets,
     created_at: Number(vault.created_at.toString()),
   }

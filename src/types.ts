@@ -134,6 +134,7 @@ export interface VaultInfo {
   total_deposited: number
   total_withdrawn: number
   total_spent: number
+  total_received: number
   linked_wallets: number
   created_at: number
 }
@@ -183,6 +184,14 @@ export interface TransferAuthorityParams {
   new_authority: string
 }
 
+export interface WithdrawTokensParams {
+  authority: string
+  vault_creator: string
+  mint: string
+  destination: string
+  amount: number
+}
+
 // ============================================================================
 // Transaction Params
 // ============================================================================
@@ -213,6 +222,8 @@ export interface SellParams {
   amount_tokens: number
   slippage_bps?: number
   message?: string
+  /** Vault creator pubkey. SOL goes to vault, tokens sold from vault ATA. */
+  vault?: string
 }
 
 export interface CreateTokenParams {
@@ -225,6 +236,27 @@ export interface CreateTokenParams {
 export interface StarParams {
   mint: string
   user: string
+  /** Vault creator pubkey. Vault pays the 0.05 SOL star cost. */
+  vault?: string
+}
+
+// ============================================================================
+// Vault Swap Params (V19)
+// ============================================================================
+
+export interface VaultSwapParams {
+  /** Token mint address */
+  mint: string
+  /** Controller wallet (linked to vault, signs the tx) */
+  signer: string
+  /** Vault creator pubkey (for PDA derivation) */
+  vault_creator: string
+  /** Input amount (lamports for buy, token base units for sell) */
+  amount_in: number
+  /** Minimum output for slippage protection */
+  minimum_amount_out: number
+  /** true = SOL→Token (buy), false = Token→SOL (sell) */
+  is_buy: boolean
 }
 
 // ============================================================================
@@ -250,12 +282,16 @@ export interface BorrowParams {
   borrower: string
   collateral_amount: number
   sol_to_borrow: number
+  /** Vault creator pubkey. Collateral from vault ATA, SOL to vault. */
+  vault?: string
 }
 
 export interface RepayParams {
   mint: string
   borrower: string
   sol_amount: number
+  /** Vault creator pubkey. SOL repaid from vault, collateral returns to vault ATA. */
+  vault?: string
 }
 
 export interface LiquidateParams {

@@ -42,7 +42,13 @@ export {
   buildLinkWalletTransaction,
   buildUnlinkWalletTransaction,
   buildTransferAuthorityTransaction,
+  buildWithdrawTokensTransaction,
+  buildVaultSwapTransaction,
 } from './transactions'
+
+// Ephemeral Agent
+export { createEphemeralAgent } from './ephemeral'
+export type { EphemeralAgent } from './ephemeral'
 
 // SAID Protocol
 export { verifySaid, confirmTransaction } from './said'
@@ -84,6 +90,8 @@ export type {
   LinkWalletParams,
   UnlinkWalletParams,
   TransferAuthorityParams,
+  WithdrawTokensParams,
+  VaultSwapParams,
 } from './types'
 
 // Constants (for advanced usage)

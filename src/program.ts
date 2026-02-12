@@ -103,6 +103,7 @@ export interface TorchVault {
   total_deposited: BN
   total_withdrawn: BN
   total_spent: BN
+  total_received: BN
   linked_wallets: number
   created_at: BN
   bump: number

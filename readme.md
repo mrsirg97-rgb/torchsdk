@@ -12,28 +12,32 @@ for in depth sdk design, refer to [design.md](./design.md).
 
 for sdk audit, refer to [audit.md](./audit.md).
 
-## What's New in v2.0.0
+## What's New in v2.1.0
 
-**Torch Vault** — an on-chain SOL escrow for safe AI agent interaction.
-
-The vault is a spending cap. You deposit SOL, link an agent wallet, and the agent buys tokens using the vault's funds. The agent can't withdraw, can't transfer SOL arbitrarily — it can only spend through the `buy` instruction. You (the authority) retain full control: withdraw anytime, unlink wallets, transfer authority.
+**Full Custody Vault + DEX Trading** — the vault now holds all assets (SOL and tokens). All operations route through the vault. The agent wallet is a disposable controller that holds nothing of value.
 
 ```
 User (hardware wallet)
-  ├── createVault()          → vault created, user auto-linked
-  ├── depositVault(5 SOL)    → vault funded
-  ├── linkWallet(agent)      → agent can use vault for buys
+  ├── createVault()              → vault created, user auto-linked
+  ├── depositVault(5 SOL)        → vault funded
+  ├── linkWallet(agent)          → agent authorized as controller
   │
-Agent (hot wallet, ~0.01 SOL for fees)
-  ├── buy(vault=user)        → vault pays, agent receives tokens
-  ├── sell()                 → agent sells tokens, keeps SOL
+Agent (disposable wallet, ~0.01 SOL for gas)
+  ├── buy(vault=user)            → vault SOL pays, tokens to vault ATA
+  ├── sell(vault=user)           → vault tokens sold, SOL returns to vault
+  ├── vaultSwap(buy)             → vault SOL → Raydium → tokens to vault ATA
+  ├── vaultSwap(sell)            → vault tokens → Raydium → SOL to vault
+  ├── borrow(vault=user)         → vault tokens locked, SOL to vault
+  ├── repay(vault=user)          → vault SOL repays, tokens returned to vault
+  ├── star(vault=user)           → vault SOL pays star fee
   │
 User
-  ├── withdrawVault()        → pull remaining SOL
-  └── unlinkWallet(agent)    → revoke agent access
+  ├── withdrawVault()            → pull SOL (authority only)
+  ├── withdrawTokens(mint)       → pull tokens (authority only)
+  └── unlinkWallet(agent)        → revoke agent access instantly
 ```
 
-Multiple wallets can share one vault. Deposit from a hardware wallet, trade from a hot wallet and an agent — all backed by the same SOL pool.
+Multiple wallets can share one vault. Deposit from a hardware wallet, trade from a hot wallet and an agent — all backed by the same SOL pool. All value stays in the vault.
 
 ## API Reference
 
@@ -71,11 +75,12 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 
 | Function | Description |
 |----------|-------------|
-| `buildBuyTransaction(connection, params)` | Buy tokens (vault-funded, requires vault) |
+| `buildBuyTransaction(connection, params)` | Buy tokens on bonding curve (vault-funded) |
 | `buildDirectBuyTransaction(connection, params)` | Buy tokens (buyer pays directly, no vault) |
-| `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve |
+| `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve (vault-routed) |
+| `buildVaultSwapTransaction(connection, params)` | Buy/sell migrated tokens on Raydium DEX (vault-routed) |
 | `buildCreateTokenTransaction(connection, params)` | Launch a new token |
-| `buildStarTransaction(connection, params)` | Star a token (0.05 SOL) |
+| `buildStarTransaction(connection, params)` | Star a token (0.05 SOL, vault-routed) |
 
 #### Vault Management
 
@@ -84,6 +89,7 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 | `buildCreateVaultTransaction` | creator | Create vault + auto-link creator |
 | `buildDepositVaultTransaction` | depositor | Deposit SOL (permissionless) |
 | `buildWithdrawVaultTransaction` | authority | Withdraw SOL |
+| `buildWithdrawTokensTransaction` | authority | Withdraw tokens from vault ATA |
 | `buildLinkWalletTransaction` | authority | Link a wallet to the vault |
 | `buildUnlinkWalletTransaction` | authority | Unlink a wallet |
 | `buildTransferAuthorityTransaction` | authority | Transfer admin control |
@@ -236,6 +242,9 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 { authority: string, vault_creator: string, wallet_to_unlink: string } // unlink
 { authority: string, vault_creator: string, new_authority: string }    // transfer
 
+// Vault Swap (DEX trading for migrated tokens)
+{ mint: string, signer: string, vault_creator: string, amount_in: number, minimum_amount_out: number, is_buy: boolean }
+
 // Lending
 { mint: string, borrower: string, collateral_amount: number, sol_to_borrow: number }
 { mint: string, borrower: string, sol_amount: number }
@@ -244,17 +253,17 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 
 ## Vault Safety Model
 
-The Torch Vault provides protocol-level safety for AI agent interaction:
+The Torch Vault provides protocol-level full custody for AI agent interaction:
 
 | Property | Guarantee |
 |----------|-----------|
-| **Spending cap** | Vault balance is finite. Agent can't spend more than what's deposited. |
-| **Buy-only** | Vault SOL can only flow through the `buy` instruction. No arbitrary transfers. |
+| **Full custody** | Vault holds all SOL and all tokens. Controller wallet holds nothing. |
+| **Closed loop** | All operations return value to the vault. No leakage to controller. |
 | **Authority separation** | Creator (immutable PDA seed) vs Authority (transferable admin). Agent wallets get *usage* rights, not ownership. |
 | **One link per wallet** | A wallet can only belong to one vault. PDA uniqueness enforces this. |
 | **Permissionless deposits** | Anyone can top up any vault. Hardware wallet deposits, agent spends. |
 | **Instant revocation** | Authority can unlink a wallet at any time. |
-| **Token custody** | Tokens go to the buyer's wallet, not the vault. The agent holds its own tokens. |
+| **Authority-only withdrawals** | Only the vault authority can withdraw SOL or tokens. Controllers cannot extract value. |
 
 ## Running the E2E Test
 
@@ -268,9 +277,9 @@ surfpool start --network mainnet --no-tui
 npx tsx tests/test_e2e.ts
 ```
 
-Expected output: `RESULTS: 22 passed, 0 failed`
+Expected output: `RESULTS: 25 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay.
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX).
 
 ## License
 

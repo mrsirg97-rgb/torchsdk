@@ -2,7 +2,7 @@
   "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
   "metadata": {
     "name": "torch_market",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "spec": "0.1.0",
     "description": "torch.market"
   },
@@ -340,6 +340,107 @@
           "docs": [
             "Pool token vault 1 (for reading reserves)"
           ]
+        },
+        {
+          "name": "torch_vault",
+          "docs": [
+            "[V18] Optional: Torch vault — collateral comes from vault ATA, SOL goes to vault"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault_wallet_link",
+          "docs": [
+            "[V18] Optional: Proves borrower is authorized to use the vault"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "[V18] Optional: Vault's token ATA — collateral taken from here"
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "torch_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "token_program"
@@ -822,6 +923,68 @@
                 "path": "buyer"
               }
             ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "[V18] Optional: Vault's token ATA — tokens go here instead of buyer's wallet",
+            "When present, torch_vault must also be present."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "torch_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
           }
         },
         {
@@ -1766,6 +1929,109 @@
       "args": [
         {
           "name": "minimum_amount_out",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "fund_vault_wsol",
+      "docs": [
+        "[V19] Fund vault WSOL ATA with lamports from vault PDA.",
+        "Must be called before vault_swap (buy) in the same transaction.",
+        "Isolates direct lamport manipulation from CPIs to avoid runtime balance errors."
+      ],
+      "discriminator": [
+        100,
+        184,
+        41,
+        110,
+        24,
+        100,
+        34,
+        246
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "Controller wallet (linked to vault)"
+          ],
+          "signer": true
+        },
+        {
+          "name": "torch_vault",
+          "docs": [
+            "Vault PDA (SOL source)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  114,
+                  99,
+                  104,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "torch_vault.creator",
+                "account": "TorchVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_wallet_link",
+          "docs": [
+            "Vault wallet link (proves signer is authorized)"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "signer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_wsol_account",
+          "docs": [
+            "Vault's WSOL ATA (lamport destination)"
+          ],
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
           "type": "u64"
         }
       ]
@@ -3075,6 +3341,107 @@
           }
         },
         {
+          "name": "torch_vault",
+          "docs": [
+            "[V18] Optional: Torch vault — SOL repaid from vault, collateral returned to vault ATA"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault_wallet_link",
+          "docs": [
+            "[V18] Optional: Proves borrower is authorized to use the vault"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "[V18] Optional: Vault's token ATA — returned collateral goes here"
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "torch_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
           "name": "token_program"
         },
         {
@@ -3423,6 +3790,107 @@
           }
         },
         {
+          "name": "torch_vault",
+          "docs": [
+            "[V18] Optional: Torch vault as SOL destination (agent safety)"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault_wallet_link",
+          "docs": [
+            "[V18] Optional: Proves seller is authorized to use the vault"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "[V18] Optional: Vault's token ATA — tokens sold from here instead of seller's wallet"
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "torch_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
           "name": "token_program"
         },
         {
@@ -3564,6 +4032,46 @@
               {
                 "kind": "account",
                 "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "torch_vault",
+          "docs": [
+            "[V18] Optional: Torch vault as SOL source (agent safety)"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "vault_wallet_link",
+          "docs": [
+            "[V18] Optional: Proves user is authorized to use the vault"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
               }
             ]
           }
@@ -3781,6 +4289,425 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "vault_swap",
+      "docs": [
+        "[V19] Vault-routed Raydium CPMM swap for migrated Torch tokens.",
+        "Controller wallet signs, vault PDA executes. Full custody preserved.",
+        "Handles both buy (SOL→Token) and sell (Token→SOL) via `is_buy` flag."
+      ],
+      "discriminator": [
+        143,
+        194,
+        154,
+        138,
+        230,
+        222,
+        237,
+        28
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "Controller wallet (linked to vault)"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "torch_vault",
+          "docs": [
+            "Vault (SOL source/destination)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  114,
+                  99,
+                  104,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "torch_vault.creator",
+                "account": "TorchVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_wallet_link",
+          "docs": [
+            "Vault wallet link (proves signer is authorized)"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "signer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Token mint (mutable for Token-2022 transfer fee bookkeeping)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "bonding_curve",
+          "docs": [
+            "Bonding curve (validates this is a Torch token + migrated)"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault's token ATA (Token-2022)",
+            "Token source (sell) or destination (buy)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "torch_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_2022_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "vault_wsol_account",
+          "docs": [
+            "Vault's WSOL ATA (SPL Token)",
+            "SOL source (buy) or destination (sell)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "raydium_program",
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+        },
+        {
+          "name": "raydium_authority"
+        },
+        {
+          "name": "amm_config",
+          "docs": [
+            "Raydium AMM config"
+          ]
+        },
+        {
+          "name": "pool_state",
+          "docs": [
+            "Raydium pool state"
+          ],
+          "writable": true
+        },
+        {
+          "name": "pool_token_vault_0",
+          "docs": [
+            "Pool token vault 0"
+          ],
+          "writable": true
+        },
+        {
+          "name": "pool_token_vault_1",
+          "docs": [
+            "Pool token vault 1"
+          ],
+          "writable": true
+        },
+        {
+          "name": "observation_state",
+          "docs": [
+            "Raydium observation state"
+          ],
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "docs": [
+            "WSOL mint"
+          ],
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "token_program",
+          "docs": [
+            "SPL Token program (for WSOL operations)"
+          ]
+        },
+        {
+          "name": "token_2022_program",
+          "docs": [
+            "Token-2022 program (for Torch token operations)"
+          ]
+        },
+        {
+          "name": "associated_token_program",
+          "docs": [
+            "Associated Token Program (for WSOL ATA creation)"
+          ],
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount_in",
+          "type": "u64"
+        },
+        {
+          "name": "minimum_amount_out",
+          "type": "u64"
+        },
+        {
+          "name": "is_buy",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_tokens",
+      "docs": [
+        "[V18] Withdraw tokens from vault ATA. Authority only.",
+        "Composability escape hatch for external DeFi usage."
+      ],
+      "discriminator": [
+        2,
+        4,
+        225,
+        61,
+        19,
+        182,
+        106,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  114,
+                  99,
+                  104,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.creator",
+                "account": "TorchVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault's token ATA (source)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "destination_token_account",
+          "docs": [
+            "Destination token account (any wallet's ATA)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "withdraw_vault",
@@ -4057,6 +4984,19 @@
         218,
         52,
         101
+      ]
+    },
+    {
+      "name": "VaultSwapExecuted",
+      "discriminator": [
+        76,
+        211,
+        61,
+        189,
+        247,
+        44,
+        198,
+        60
       ]
     }
   ],
@@ -4350,6 +5290,11 @@
       "code": 6057,
       "name": "VaultWalletLinkMismatch",
       "msg": "Wallet link does not point to the provided vault"
+    },
+    {
+      "code": 6058,
+      "name": "InvalidWsolAccount",
+      "msg": "Invalid WSOL account - must be vault's WSOL ATA"
     }
   ],
   "types": [
@@ -5197,6 +6142,13 @@
             "type": "u64"
           },
           {
+            "name": "total_received",
+            "docs": [
+              "[V18] Lifetime SOL received back (sells, borrow proceeds)"
+            ],
+            "type": "u64"
+          },
+          {
             "name": "linked_wallets",
             "docs": [
               "Number of wallets currently linked"
@@ -5588,6 +6540,38 @@
               "PDA bump"
             ],
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultSwapExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "signer",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_buy",
+            "type": "bool"
+          },
+          {
+            "name": "amount_in",
+            "type": "u64"
+          },
+          {
+            "name": "minimum_amount_out",
+            "type": "u64"
           }
         ]
       }

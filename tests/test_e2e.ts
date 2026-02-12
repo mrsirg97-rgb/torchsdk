@@ -2,7 +2,7 @@
  * SDK E2E Test against Surfpool (mainnet fork)
  *
  * Tests: create token → vault lifecycle → buy (direct + vault) → sell → star → messages
- * Then: bond to completion → migrate → borrow → repay
+ * Then: bond to completion → migrate → borrow → repay → vault swap (buy + sell)
  *
  * Run:
  *   surfpool start --network mainnet --no-tui
@@ -34,9 +34,12 @@ import {
   buildCreateVaultTransaction,
   buildDepositVaultTransaction,
   buildWithdrawVaultTransaction,
+  buildWithdrawTokensTransaction,
   buildLinkWalletTransaction,
   buildUnlinkWalletTransaction,
+  buildVaultSwapTransaction,
   confirmTransaction,
+  createEphemeralAgent,
 } from '../src/index'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -83,10 +86,33 @@ const main = async () => {
   console.log('='.repeat(60))
 
   const connection = new Connection(RPC_URL, 'confirmed')
-  const wallet = loadWallet()
+  const funder = loadWallet()
+
+  // Use a fresh wallet so vault is always created with the current layout
+  // (mainnet fork may have stale vaults from prior program versions)
+  const wallet = Keypair.generate()
   const walletAddr = wallet.publicKey.toBase58()
 
-  log(`Wallet: ${walletAddr}`)
+  log(`Funder: ${funder.publicKey.toBase58()}`)
+  log(`Test wallet: ${walletAddr} (fresh)`)
+  const funderBal = await connection.getBalance(funder.publicKey)
+  log(`Funder balance: ${funderBal / LAMPORTS_PER_SOL} SOL`)
+
+  // Fund the test wallet
+  const fundTx = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: funder.publicKey,
+      toPubkey: wallet.publicKey,
+      lamports: 800 * LAMPORTS_PER_SOL,
+    }),
+  )
+  const { blockhash: fundBh } = await connection.getLatestBlockhash()
+  fundTx.recentBlockhash = fundBh
+  fundTx.feePayer = funder.publicKey
+  fundTx.partialSign(funder)
+  const fundSig = await connection.sendRawTransaction(fundTx.serialize())
+  await connection.confirmTransaction(fundSig, 'confirmed')
+
   const balance = await connection.getBalance(wallet.publicKey)
   log(`Balance: ${balance / LAMPORTS_PER_SOL} SOL`)
 
@@ -134,12 +160,7 @@ const main = async () => {
     const sig = await signAndSend(connection, wallet, result.transaction)
     ok('buildCreateVaultTransaction', `sig=${sig.slice(0, 8)}...`)
   } catch (e: any) {
-    // Vault may already exist from a prior test run on forked state
-    if (e.message?.includes('already in use')) {
-      ok('buildCreateVaultTransaction', 'vault already exists (prior run)')
-    } else {
-      fail('buildCreateVaultTransaction', e)
-    }
+    fail('buildCreateVaultTransaction', e)
   }
 
   // ------------------------------------------------------------------
@@ -240,7 +261,7 @@ const main = async () => {
     const result = await buildBuyTransaction(connection, {
       mint,
       buyer: walletAddr,
-      amount_sol: 100_000_000, // 0.1 SOL
+      amount_sol: 2_000_000_000, // 2 SOL (enough tokens for later vault borrow test)
       slippage_bps: 500,
       // No vote — wallet already voted on direct buy above
       vault: walletAddr,
@@ -254,16 +275,17 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 9. Link Second Wallet + Buy via Vault
+  // 9. Ephemeral Agent — Link + Vault Buy + Unlink
   // ------------------------------------------------------------------
-  log('\n[9] Link Wallet + Vault Buy')
-  const agent = Keypair.generate()
+  log('\n[9] Ephemeral Agent (createEphemeralAgent)')
+  const agent = createEphemeralAgent()
+  log(`  Ephemeral key: ${agent.publicKey.slice(0, 12)}... (in-memory only)`)
   try {
-    // Fund agent for tx fees
+    // Fund agent for tx fees only (~0.01 SOL gas)
     const fundTx = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
-        toPubkey: agent.publicKey,
+        toPubkey: agent.keypair.publicKey,
         lamports: 0.05 * LAMPORTS_PER_SOL,
       }),
     )
@@ -272,37 +294,42 @@ const main = async () => {
     fundTx.feePayer = wallet.publicKey
     await signAndSend(connection, wallet, fundTx)
 
-    // Link agent wallet to vault
+    // Authority links ephemeral wallet to vault
     const linkResult = await buildLinkWalletTransaction(connection, {
       authority: walletAddr,
       vault_creator: walletAddr,
-      wallet_to_link: agent.publicKey.toBase58(),
+      wallet_to_link: agent.publicKey,
     })
     const linkSig = await signAndSend(connection, wallet, linkResult.transaction)
-    ok('buildLinkWalletTransaction', `sig=${linkSig.slice(0, 8)}...`)
+    ok('link ephemeral agent', `sig=${linkSig.slice(0, 8)}...`)
 
-    // Buy with agent wallet via vault (first buy requires a vote)
+    // Agent buys via vault — tokens go to vault ATA, SOL from vault
     const buyResult = await buildBuyTransaction(connection, {
       mint,
-      buyer: agent.publicKey.toBase58(),
+      buyer: agent.publicKey,
       amount_sol: 50_000_000, // 0.05 SOL
       slippage_bps: 500,
       vote: 'burn',
       vault: walletAddr,
     })
-    const buySig2 = await signAndSend(connection, agent, buyResult.transaction)
-    ok('vault buy (linked wallet)', `${buyResult.message} sig=${buySig2.slice(0, 8)}...`)
+    const signedBuyTx = agent.sign(buyResult.transaction)
+    const buySig2 = await connection.sendRawTransaction(signedBuyTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    })
+    await connection.confirmTransaction(buySig2, 'confirmed')
+    ok('ephemeral agent vault buy', `${buyResult.message} sig=${buySig2.slice(0, 8)}...`)
 
-    // Unlink agent wallet
+    // Authority unlinks ephemeral wallet — keys are now worthless
     const unlinkResult = await buildUnlinkWalletTransaction(connection, {
       authority: walletAddr,
       vault_creator: walletAddr,
-      wallet_to_unlink: agent.publicKey.toBase58(),
+      wallet_to_unlink: agent.publicKey,
     })
     const unlinkSig = await signAndSend(connection, wallet, unlinkResult.transaction)
-    ok('buildUnlinkWalletTransaction', `sig=${unlinkSig.slice(0, 8)}...`)
+    ok('unlink ephemeral agent', `sig=${unlinkSig.slice(0, 8)}...`)
   } catch (e: any) {
-    fail('link/vault-buy/unlink', e)
+    fail('ephemeral agent lifecycle', e)
   }
 
   // ------------------------------------------------------------------
@@ -325,35 +352,57 @@ const main = async () => {
   }
 
   // ------------------------------------------------------------------
-  // 11. Sell Token
+  // 11. Sell Token (via vault)
   // ------------------------------------------------------------------
-  log('\n[11] Sell Token')
+  log('\n[11] Sell Token (via vault — tokens from vault ATA, SOL to vault)')
   try {
+    const vaultBefore = await getVault(connection, walletAddr)
     // Sell a small amount (1000 tokens = 1000 * 1e6 base units)
     const result = await buildSellTransaction(connection, {
       mint,
       seller: walletAddr,
       amount_tokens: 1000_000_000, // 1000 tokens
       slippage_bps: 500,
+      vault: walletAddr,
     })
     const sig = await signAndSend(connection, wallet, result.transaction)
-    ok('buildSellTransaction', `${result.message} sig=${sig.slice(0, 8)}...`)
+    const vaultAfter = await getVault(connection, walletAddr)
+    const received = (vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)
+    ok('buildSellTransaction (vault)', `${result.message} vault_received=${received.toFixed(6)} SOL sig=${sig.slice(0, 8)}...`)
   } catch (e: any) {
-    fail('buildSellTransaction', e)
+    fail('buildSellTransaction (vault)', e)
   }
 
   // ------------------------------------------------------------------
-  // 12. Star Token (need a different wallet — can't star your own)
+  // 11b. Withdraw Tokens from Vault (escape hatch)
   // ------------------------------------------------------------------
-  log('\n[12] Star Token')
+  log('\n[11b] Withdraw Tokens from Vault')
+  try {
+    const result = await buildWithdrawTokensTransaction(connection, {
+      authority: walletAddr,
+      vault_creator: walletAddr,
+      mint,
+      destination: walletAddr,
+      amount: 500_000_000, // 500 tokens
+    })
+    const sig = await signAndSend(connection, wallet, result.transaction)
+    ok('buildWithdrawTokensTransaction', `${result.message} sig=${sig.slice(0, 8)}...`)
+  } catch (e: any) {
+    fail('buildWithdrawTokensTransaction', e)
+  }
+
+  // ------------------------------------------------------------------
+  // 12. Star Token (via vault — can't star your own, so link starrer to vault)
+  // ------------------------------------------------------------------
+  log('\n[12] Star Token (via vault)')
   const starrer = Keypair.generate()
   try {
-    // Fund starrer
+    // Fund starrer with gas only
     const fundTx = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
         toPubkey: starrer.publicKey,
-        lamports: 0.1 * LAMPORTS_PER_SOL,
+        lamports: 0.02 * LAMPORTS_PER_SOL,
       }),
     )
     const { blockhash } = await connection.getLatestBlockhash()
@@ -361,14 +410,31 @@ const main = async () => {
     fundTx.feePayer = wallet.publicKey
     await signAndSend(connection, wallet, fundTx)
 
+    // Link starrer to vault so vault pays the 0.05 SOL
+    const linkResult = await buildLinkWalletTransaction(connection, {
+      authority: walletAddr,
+      vault_creator: walletAddr,
+      wallet_to_link: starrer.publicKey.toBase58(),
+    })
+    await signAndSend(connection, wallet, linkResult.transaction)
+
     const result = await buildStarTransaction(connection, {
       mint,
       user: starrer.publicKey.toBase58(),
+      vault: walletAddr,
     })
     const sig = await signAndSend(connection, starrer, result.transaction)
-    ok('buildStarTransaction', `sig=${sig.slice(0, 8)}...`)
+    ok('buildStarTransaction (vault)', `sig=${sig.slice(0, 8)}...`)
+
+    // Unlink starrer
+    const unlinkResult = await buildUnlinkWalletTransaction(connection, {
+      authority: walletAddr,
+      vault_creator: walletAddr,
+      wallet_to_unlink: starrer.publicKey.toBase58(),
+    })
+    await signAndSend(connection, wallet, unlinkResult.transaction)
   } catch (e: any) {
-    fail('buildStarTransaction', e)
+    fail('buildStarTransaction (vault)', e)
   }
 
   // ------------------------------------------------------------------
@@ -665,64 +731,120 @@ const main = async () => {
       ok('migrate to DEX', 'Raydium pool created')
 
       // ------------------------------------------------------------------
-      // 10b. Borrow (use a buyer wallet that has ~5 SOL worth of tokens)
+      // 10b. Borrow via Vault (collateral from vault ATA, SOL to vault)
       // ------------------------------------------------------------------
-      log('\n  Testing borrow...')
-      // Pick first buyer that still has tokens
-      const borrowerWallet = buyers[0]
-      const borrowerAddr = borrowerWallet.publicKey.toBase58()
-
-      // Fund borrower with extra SOL for tx fees
-      const extraFundTx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: wallet.publicKey,
-          toPubkey: borrowerWallet.publicKey,
-          lamports: 1 * LAMPORTS_PER_SOL,
-        }),
-      )
-      const { blockhash: efBh } = await connection.getLatestBlockhash()
-      extraFundTx.recentBlockhash = efBh
-      extraFundTx.feePayer = wallet.publicKey
-      await signAndSend(connection, wallet, extraFundTx)
+      log('\n  Testing vault borrow...')
 
       try {
-        // Read borrower's token balance to calculate safe borrow amount
+        // Read vault's token balance for this mint
         const { getAssociatedTokenAddressSync: gata } = require('@solana/spl-token')
         const TOKEN_2022 = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
-        const borrowerAta = gata(new PublicKey(mint), borrowerWallet.publicKey, false, TOKEN_2022)
-        const tokenBal = await connection.getTokenAccountBalance(borrowerAta)
+        const { getTorchVaultPda: gvp } = require('../src/program')
+        const [vaultPda] = gvp(wallet.publicKey)
+        const vaultAta = gata(new PublicKey(mint), vaultPda, true, TOKEN_2022)
+        const tokenBal = await connection.getTokenAccountBalance(vaultAta)
         const totalTokens = Number(tokenBal.value.amount)
-        log(`  Borrower token balance: ${(totalTokens / 1e6).toFixed(0)} tokens`)
+        log(`  Vault token balance: ${(totalTokens / 1e6).toFixed(0)} tokens`)
 
-        // Use 60% of tokens as collateral, borrow 0.5 SOL
+        // Use 60% of vault tokens as collateral, borrow conservatively within 50% LTV
         const collateralAmount = Math.floor(totalTokens * 0.6)
 
+        const vaultBefore = await getVault(connection, walletAddr)
         const borrowResult = await buildBorrowTransaction(connection, {
           mint,
-          borrower: borrowerAddr,
+          borrower: walletAddr,
           collateral_amount: collateralAmount,
-          sol_to_borrow: 500_000_000, // 0.5 SOL
+          sol_to_borrow: 100_000_000, // 0.1 SOL (minimum)
+          vault: walletAddr,
         })
-        const borrowSig = await signAndSend(connection, borrowerWallet, borrowResult.transaction)
-        ok('buildBorrowTransaction', `${borrowResult.message} sig=${borrowSig.slice(0, 8)}...`)
+        const borrowSig = await signAndSend(connection, wallet, borrowResult.transaction)
+        const vaultAfter = await getVault(connection, walletAddr)
+        const solReceived = (vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)
+        ok('buildBorrowTransaction (vault)', `${borrowResult.message} vault_received=${solReceived.toFixed(4)} SOL sig=${borrowSig.slice(0, 8)}...`)
 
         // ------------------------------------------------------------------
-        // 10c. Repay
+        // 10c. Repay via Vault (SOL from vault, collateral returns to vault ATA)
         // ------------------------------------------------------------------
-        log('\n  Testing repay...')
+        log('\n  Testing vault repay...')
         try {
           const repayResult = await buildRepayTransaction(connection, {
             mint,
-            borrower: borrowerAddr,
-            sol_amount: 600_000_000, // 0.6 SOL (overpay to fully close)
+            borrower: walletAddr,
+            sol_amount: 200_000_000, // 0.2 SOL (overpay to fully close)
+            vault: walletAddr,
           })
-          const repaySig = await signAndSend(connection, borrowerWallet, repayResult.transaction)
-          ok('buildRepayTransaction', `${repayResult.message} sig=${repaySig.slice(0, 8)}...`)
+          const repaySig = await signAndSend(connection, wallet, repayResult.transaction)
+          ok('buildRepayTransaction (vault)', `${repayResult.message} sig=${repaySig.slice(0, 8)}...`)
         } catch (e: any) {
-          fail('buildRepayTransaction', e)
+          fail('buildRepayTransaction (vault)', e)
         }
       } catch (e: any) {
-        fail('buildBorrowTransaction', e)
+        fail('buildBorrowTransaction (vault)', e)
+      }
+
+      // ------------------------------------------------------------------
+      // 16. Vault Swap — Buy (SOL→Token) via Raydium
+      // ------------------------------------------------------------------
+      log('\n[16] Vault Swap Buy (SOL→Token via Raydium)')
+      try {
+        const vaultBefore = await getVault(connection, walletAddr)
+        const buySwapResult = await buildVaultSwapTransaction(connection, {
+          mint,
+          signer: walletAddr,
+          vault_creator: walletAddr,
+          amount_in: 100_000_000, // 0.1 SOL
+          minimum_amount_out: 1,  // minimal slippage protection for test
+          is_buy: true,
+        })
+        const { ComputeBudgetProgram } = require('@solana/web3.js')
+        buySwapResult.transaction.instructions.unshift(
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+        )
+        const buySig = await signAndSend(connection, wallet, buySwapResult.transaction)
+        const vaultAfter = await getVault(connection, walletAddr)
+        const spent = (vaultBefore?.sol_balance || 0) - (vaultAfter?.sol_balance || 0)
+        ok('buildVaultSwapTransaction (buy)', `vault_spent=${spent.toFixed(4)} SOL sig=${buySig.slice(0, 8)}...`)
+      } catch (e: any) {
+        fail('buildVaultSwapTransaction (buy)', e)
+        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+      }
+
+      // ------------------------------------------------------------------
+      // 17. Vault Swap — Sell (Token→SOL) via Raydium
+      // ------------------------------------------------------------------
+      log('\n[17] Vault Swap Sell (Token→SOL via Raydium)')
+      try {
+        // Read vault's token balance to sell a portion
+        const { getAssociatedTokenAddressSync: gata2 } = require('@solana/spl-token')
+        const TOKEN_2022 = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+        const { getTorchVaultPda: gvp2 } = require('../src/program')
+        const [vaultPda2] = gvp2(wallet.publicKey)
+        const vaultAta2 = gata2(new PublicKey(mint), vaultPda2, true, TOKEN_2022)
+        const tokenBal2 = await connection.getTokenAccountBalance(vaultAta2)
+        const totalTokens2 = Number(tokenBal2.value.amount)
+        const sellAmount = Math.floor(totalTokens2 * 0.1) // sell 10% of vault tokens
+        log(`  Vault token balance: ${(totalTokens2 / 1e6).toFixed(0)} tokens, selling ${(sellAmount / 1e6).toFixed(0)}`)
+
+        const vaultBefore = await getVault(connection, walletAddr)
+        const sellSwapResult = await buildVaultSwapTransaction(connection, {
+          mint,
+          signer: walletAddr,
+          vault_creator: walletAddr,
+          amount_in: sellAmount,
+          minimum_amount_out: 1,
+          is_buy: false,
+        })
+        const { ComputeBudgetProgram: CBP } = require('@solana/web3.js')
+        sellSwapResult.transaction.instructions.unshift(
+          CBP.setComputeUnitLimit({ units: 400_000 }),
+        )
+        const sellSig = await signAndSend(connection, wallet, sellSwapResult.transaction)
+        const vaultAfter = await getVault(connection, walletAddr)
+        const received = (vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)
+        ok('buildVaultSwapTransaction (sell)', `vault_received=${received.toFixed(6)} SOL sig=${sellSig.slice(0, 8)}...`)
+      } catch (e: any) {
+        fail('buildVaultSwapTransaction (sell)', e)
+        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
       }
     } catch (e: any) {
       fail('migrate/lending lifecycle', e)

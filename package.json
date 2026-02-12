@@ -1,7 +1,7 @@
 {
   "name": "torchsdk",
-  "version": "2.0.0",
-  "description": "Torch Market SDK — AI agent toolkit for Solana fair-launch tokens",
+  "version": "2.1.0",
+  "description": "Torch Market SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

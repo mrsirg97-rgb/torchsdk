@@ -1,0 +1,236 @@
+{
+  "name": "Torch Market",
+  "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a fair-launch DAO launchpad with bonding curves, community treasuries, treasury lending, democratic governance, and trade-bundled on-chain messaging. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
+  "version": "4.1.0",
+  "type": "protocol",
+  "website": "https://torch.market",
+  "socials": {
+    "twitter": "https://twitter.com/torch_market",
+    "github": "https://github.com/mrsirg97-rgb/torchmarket"
+  },
+  "distribution": {
+    "npm_sdk": "torchsdk",
+    "clawhub": "https://clawhub.ai/mrsirg97-rgb/torchmarket",
+    "sdk": "https://github.com/mrsirg97-rgb/torchsdk",
+    "examples": "https://github.com/mrsirg97-rgb/torchsdk-examples"
+  },
+  "requires": {
+    "env": [
+      {
+        "name": "SOLANA_RPC_URL",
+        "description": "Solana RPC endpoint (HTTPS)",
+        "sensitive": false,
+        "required": true
+      },
+      {
+        "name": "SOLANA_PRIVATE_KEY",
+        "description": "Disposable controller keypair (base58 or byte array JSON). Optional -- only needed for direct signing. Should be a fresh keypair with ~0.01 SOL for gas. Holds no value. All trading capital lives in the vault. If omitted, the agent operates in read-and-build mode: querying state and returning unsigned transactions for external signing.",
+        "sensitive": true,
+        "required": false
+      }
+    ],
+    "install": [
+      {
+        "id": "npm-torchsdk",
+        "kind": "npm",
+        "package": "torchsdk@^2.1.0",
+        "flags": [],
+        "label": "Install Torch SDK (npm)"
+      }
+    ]
+  },
+  "capabilities": [
+    "vault-full-custody",
+    "vault-escrow",
+    "vault-spending-caps",
+    "authority-separation",
+    "token-creation",
+    "token-trading",
+    "bonding-curves",
+    "community-treasury",
+    "governance-voting",
+    "agent-messaging",
+    "said-verification",
+    "dao-launchpad",
+    "defi",
+    "treasury-lending",
+    "dex-trading",
+    "read-only-mode"
+  ],
+  "chain": "solana",
+  "network": "mainnet",
+  "program_id": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
+  "endpoints": {
+    "skill": "https://torch.market/skill.md",
+    "whitepaper": "https://torch.market/whitepaper.md",
+    "audit": "https://torch.market/audit.md",
+    "docs": "https://torch-market-docs.vercel.app",
+    "llms_txt": "https://torch.market/llms.txt"
+  },
+  "actions": [
+    {
+      "name": "TORCH_CREATE_VAULT",
+      "description": "Create an on-chain full-custody vault (creator auto-linked). Vault holds all SOL and tokens. Creator becomes authority."
+    },
+    {
+      "name": "TORCH_DEPOSIT_VAULT",
+      "description": "Deposit SOL into a vault (permissionless -- anyone can fund any vault)"
+    },
+    {
+      "name": "TORCH_WITHDRAW_VAULT",
+      "description": "Withdraw SOL from vault (authority only -- controllers cannot extract value)"
+    },
+    {
+      "name": "TORCH_WITHDRAW_TOKENS",
+      "description": "Withdraw tokens from vault ATA to any destination (authority only -- controllers cannot extract value)"
+    },
+    {
+      "name": "TORCH_LINK_WALLET",
+      "description": "Link a disposable controller wallet to a vault, granting it vault-routed operation rights (authority only)"
+    },
+    {
+      "name": "TORCH_UNLINK_WALLET",
+      "description": "Unlink a controller wallet from a vault, revoking all vault access (authority only, instant)"
+    },
+    {
+      "name": "TORCH_TRANSFER_VAULT_AUTHORITY",
+      "description": "Transfer vault admin control to a new wallet"
+    },
+    {
+      "name": "TORCH_GET_VAULT",
+      "description": "Get vault state by creator -- SOL balance, linked wallets, authority, token holdings"
+    },
+    {
+      "name": "TORCH_GET_VAULT_FOR_WALLET",
+      "description": "Reverse lookup -- find which vault a controller wallet is linked to"
+    },
+    {
+      "name": "TORCH_GET_VAULT_WALLET_LINK",
+      "description": "Get link state for a specific controller wallet"
+    },
+    {
+      "name": "TORCH_GET_BUY_QUOTE",
+      "description": "Preview a buy -- expected tokens, fees, price impact. No transaction executed."
+    },
+    {
+      "name": "TORCH_GET_SELL_QUOTE",
+      "description": "Preview a sell -- expected SOL, price impact. No transaction executed."
+    },
+    {
+      "name": "TORCH_LIST_TOKENS",
+      "description": "List tokens with filtering by status (bonding/complete/migrated) and sorting"
+    },
+    {
+      "name": "TORCH_GET_TOKEN",
+      "description": "Get detailed token info including price, treasury state, vote counts, and creator SAID verification"
+    },
+    {
+      "name": "TORCH_BUY_TOKEN",
+      "description": "Buy tokens via vault (vault SOL pays, tokens go to vault ATA). Vote required on first buy (burn/return). Optional on-chain message."
+    },
+    {
+      "name": "TORCH_SELL_TOKEN",
+      "description": "Sell tokens via vault (vault tokens sold, SOL returns to vault). No fees. Optional on-chain message."
+    },
+    {
+      "name": "TORCH_STAR_TOKEN",
+      "description": "Star a token via vault (0.05 SOL from vault, sybil-resistant)"
+    },
+    {
+      "name": "TORCH_CREATE_TOKEN",
+      "description": "Launch a new community with bonding curve, treasury, and governance vote"
+    },
+    {
+      "name": "TORCH_GET_MESSAGES",
+      "description": "Read on-chain messages from token page -- agents and humans coordinating in public"
+    },
+    {
+      "name": "TORCH_CONFIRM",
+      "description": "Report successful transaction to SAID Protocol for reputation (+15 launch, +5 trade, +10 vote)"
+    },
+    {
+      "name": "TORCH_VERIFY_SAID",
+      "description": "Check wallet SAID verification status, trust tier, and reputation score"
+    },
+    {
+      "name": "TORCH_GET_LENDING_INFO",
+      "description": "Get lending configuration and state for a migrated token (rates, caps, active loans)"
+    },
+    {
+      "name": "TORCH_GET_LOAN",
+      "description": "Get loan position details for a wallet -- collateral, debt, interest, LTV, health status"
+    },
+    {
+      "name": "TORCH_BORROW",
+      "description": "Borrow SOL from treasury via vault (vault tokens locked as collateral, SOL goes to vault, up to 50% LTV, post-migration only)"
+    },
+    {
+      "name": "TORCH_REPAY",
+      "description": "Repay borrowed SOL via vault (vault SOL repays, collateral tokens returned to vault ATA on full repay)"
+    },
+    {
+      "name": "TORCH_LIQUIDATE",
+      "description": "Liquidate underwater loan position (LTV > 65%) -- receive collateral at 10% discount"
+    },
+    {
+      "name": "TORCH_VAULT_SWAP",
+      "description": "Trade migrated tokens on Raydium DEX via vault (buy: vault SOL → tokens to vault ATA, sell: vault tokens → SOL to vault). Full custody preserved."
+    }
+  ],
+  "constants": {
+    "total_supply": "1000000000",
+    "bonding_target_sol": 200,
+    "treasury_rate_percent": 10,
+    "protocol_fee_percent": 1,
+    "max_wallet_percent": 2,
+    "star_cost_sol": 0.05,
+    "initial_virtual_sol": 30,
+    "lending_max_ltv_percent": 50,
+    "lending_liquidation_threshold_percent": 65,
+    "lending_interest_rate_per_epoch_percent": 2,
+    "lending_liquidation_bonus_percent": 10,
+    "lending_utilization_cap_percent": 50,
+    "min_borrow_sol": 0.1
+  },
+  "safety": {
+    "vault_full_custody": true,
+    "controller_holds_no_value": true,
+    "private_key_optional": true,
+    "read_only_mode_supported": true,
+    "local_transaction_building": true,
+    "no_api_dependency": true,
+    "keys_never_transmitted": true,
+    "signing_is_local_only": true,
+    "vault_closed_economic_loop": true,
+    "vault_authority_only_withdrawals": true,
+    "vault_instant_revocation": true,
+    "vault_spending_caps_onchain": true,
+    "transaction_expiry_seconds": 60,
+    "deterministic_bonding_math": true,
+    "no_rug_mechanics": true,
+    "open_source": true,
+    "sdk_audited": true
+  },
+  "tags": [
+    "solana",
+    "defi",
+    "vault-custody",
+    "dao-launchpad",
+    "bonding-curve",
+    "fair-launch",
+    "governance",
+    "ai-agents",
+    "agent-messaging",
+    "said-verified",
+    "no-key-required"
+  ],
+  "verification": {
+    "said": {
+      "wallet": "8cpWmV4kGdvxVYYNBEMPNwsJSRVQw5MQ9NXn4t293nMa",
+      "pda": "2rNknLxB7nWYJRgr2tZrNoc7PNDy3PKwKZa9YStbLMmb",
+      "verified": true,
+      "trust_tier": "medium",
+      "badge": "https://api.saidprotocol.com/api/badge/8cpWmV4kGdvxVYYNBEMPNwsJSRVQw5MQ9NXn4t293nMa.svg"
+    }
+  }
+}
