@@ -287,9 +287,9 @@ surfpool start --network mainnet --no-tui
 npx tsx tests/test_e2e.ts
 ```
 
-Expected output: `RESULTS: 23 passed, 0 failed`
+Expected output: `RESULTS: 32 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims.
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
 
 ## License
 
