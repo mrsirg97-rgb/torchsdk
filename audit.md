@@ -2,7 +2,7 @@
 
 **Audit Date:** February 10, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.2.0
+**SDK Version:** 3.2.3
 **On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.2.0)
 **Language:** TypeScript
 **Test Result:** 32 passed, 0 failed (Surfpool mainnet fork)
@@ -28,7 +28,7 @@
 
 ## Executive Summary
 
-This audit covers the Torch SDK v3.2.0, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.2.0) to verify PDA derivation, quote math, vault integration, and account handling.
+This audit covers the Torch SDK v3.2.3, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.2.0) to verify PDA derivation, quote math, vault integration, and account handling.
 
 The SDK is **stateless** (no global state, no connection pools), **non-custodial** (never touches private keys — all transactions are returned unsigned), and **RPC-first** (all data from Solana, no proprietary API for core operations).
 
@@ -416,7 +416,7 @@ clearTimeout(timeout)
 
 ## Conclusion
 
-The Torch SDK v3.2.0 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.2.0 program. Key findings:
+The Torch SDK v3.2.3 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.2.0 program. Key findings:
 
 1. **PDA derivation is correct** — all 11 Torch PDAs and 5 Raydium PDAs match the on-chain seeds exactly.
 2. **Quote math is correct** — BigInt arithmetic matches the on-chain Rust `checked_mul`/`checked_div` behavior, including the dynamic treasury rate, 90/10 token split, and constant product formula.
@@ -435,5 +435,5 @@ This audit was performed by Claude Opus 4.6 (Anthropic) on February 12, 2026. Al
 
 **Auditor:** Claude Opus 4.6
 **Date:** 2026-02-12
-**SDK Version:** 3.2.0
+**SDK Version:** 3.2.3
 **On-Chain Version:** V3.2.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)

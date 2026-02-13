@@ -14,7 +14,7 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 ## Versioning
 
-SDK version tracks the on-chain program IDL version. Starting from v3.2.0, both ship the same version number.
+SDK version tracks the on-chain program IDL version. v3.2.3 is documentation-only (whitepaper, audit, ClawHub spec compliance). No code changes from v3.2.0.
 
 ## What's New in v3.2.0
 

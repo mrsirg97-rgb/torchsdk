@@ -32,7 +32,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.2.0",
+        "package": "torchsdk@^3.2.3",
         "flags": [],
         "label": "Install Torch SDK (npm)"
       }
