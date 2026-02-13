@@ -1,17 +1,16 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a fair-launch DAO launchpad with bonding curves, community treasuries, treasury lending, democratic governance, and trade-bundled on-chain messaging. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "type": "protocol",
   "website": "https://torch.market",
   "socials": {
-    "twitter": "https://twitter.com/torch_market",
-    "github": "https://github.com/mrsirg97-rgb/torchmarket"
+    "twitter": "https://twitter.com/torch_market"
   },
   "distribution": {
-    "npm_sdk": "torchsdk",
     "clawhub": "https://clawhub.ai/mrsirg97-rgb/torchmarket",
     "sdk": "https://github.com/mrsirg97-rgb/torchsdk",
+    "npm_sdk": "torchsdk",
     "examples": "https://github.com/mrsirg97-rgb/torchsdk-examples"
   },
   "requires": {
@@ -33,7 +32,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^2.1.0",
+        "package": "torchsdk@^3.2.0",
         "flags": [],
         "label": "Install Torch SDK (npm)"
       }
@@ -55,17 +54,17 @@
     "defi",
     "treasury-lending",
     "dex-trading",
-    "read-only-mode"
+    "read-only-mode",
+    "protocol-rewards",
+    "lending-market-scanner"
   ],
   "chain": "solana",
   "network": "mainnet",
   "program_id": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
   "endpoints": {
     "skill": "https://torch.market/skill.md",
-    "whitepaper": "https://torch.market/whitepaper.md",
-    "audit": "https://torch.market/audit.md",
-    "docs": "https://torch-market-docs.vercel.app",
-    "llms_txt": "https://torch.market/llms.txt"
+    "llms_txt": "https://torch.market/llms.txt",
+    "docs": "https://torch-market-docs.vercel.app"
   },
   "actions": [
     {
@@ -175,6 +174,10 @@
     {
       "name": "TORCH_VAULT_SWAP",
       "description": "Trade migrated tokens on Raydium DEX via vault (buy: vault SOL → tokens to vault ATA, sell: vault tokens → SOL to vault). Full custody preserved."
+    },
+    {
+      "name": "TORCH_CLAIM_PROTOCOL_REWARDS",
+      "description": "Claim protocol trading rewards via vault (epoch-based, requires >= 10 SOL volume in previous epoch). SOL rewards go to vault."
     }
   ],
   "constants": {
@@ -222,7 +225,35 @@
     "ai-agents",
     "agent-messaging",
     "said-verified",
-    "no-key-required"
+    "no-key-required",
+    "token-launchpad",
+    "meme-coins",
+    "solana-defi",
+    "protocol-rewards",
+    "epoch-rewards",
+    "treasury-management",
+    "auto-buyback",
+    "liquidation",
+    "collateral-lending",
+    "token-2022",
+    "spl-token",
+    "raydium",
+    "dex-trading",
+    "amm",
+    "community-treasury",
+    "on-chain-messaging",
+    "social-trading",
+    "agent-wallet",
+    "agent-safety",
+    "agent-custody",
+    "solana-agent-kit",
+    "identity-verification",
+    "pump-fun-alternative",
+    "token-creation",
+    "smart-contract",
+    "anchor",
+    "pda",
+    "escrow"
   ],
   "verification": {
     "said": {

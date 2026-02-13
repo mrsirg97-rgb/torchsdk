@@ -51,6 +51,7 @@ import {
   BorrowParams,
   RepayParams,
   LiquidateParams,
+  ClaimProtocolRewardsParams,
   VaultSwapParams,
   CreateVaultParams,
   DepositVaultParams,
@@ -1042,7 +1043,7 @@ export const buildLiquidateTransaction = async (
   connection: Connection,
   params: LiquidateParams,
 ): Promise<TransactionResult> => {
-  const { mint: mintStr, liquidator: liquidatorStr, borrower: borrowerStr } = params
+  const { mint: mintStr, liquidator: liquidatorStr, borrower: borrowerStr, vault: vaultCreatorStr } = params
 
   const mint = new PublicKey(mintStr)
   const liquidator = new PublicKey(liquidatorStr)
@@ -1064,6 +1065,22 @@ export const buildLiquidateTransaction = async (
   // Get Raydium pool accounts for price calculation
   const raydium = getRaydiumMigrationAccounts(mint)
 
+  // [V20] Vault accounts (optional — SOL from vault, collateral to vault ATA)
+  let torchVaultAccount: PublicKey | null = null
+  let vaultWalletLinkAccount: PublicKey | null = null
+  let vaultTokenAccount: PublicKey | null = null
+  if (vaultCreatorStr) {
+    const vaultCreator = new PublicKey(vaultCreatorStr)
+    ;[torchVaultAccount] = getTorchVaultPda(vaultCreator)
+    ;[vaultWalletLinkAccount] = getVaultWalletLinkPda(liquidator)
+    vaultTokenAccount = getAssociatedTokenAddressSync(
+      mint,
+      torchVaultAccount,
+      true,
+      TOKEN_2022_PROGRAM_ID,
+    )
+  }
+
   const tx = new Transaction()
 
   // Create liquidator ATA if needed
@@ -1077,6 +1094,20 @@ export const buildLiquidateTransaction = async (
       ASSOCIATED_TOKEN_PROGRAM_ID,
     ),
   )
+
+  // Create vault ATA if needed (collateral goes here)
+  if (vaultTokenAccount && torchVaultAccount) {
+    tx.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        liquidator,
+        vaultTokenAccount,
+        torchVaultAccount,
+        mint,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
+    )
+  }
 
   const provider = makeDummyProvider(connection, liquidator)
   const program = new Program(idl as unknown, provider)
@@ -1095,18 +1126,84 @@ export const buildLiquidateTransaction = async (
       poolState: raydium.poolState,
       tokenVault0: raydium.token0Vault,
       tokenVault1: raydium.token1Vault,
+      torchVault: torchVaultAccount,
+      vaultWalletLink: vaultWalletLinkAccount,
+      vaultTokenAccount,
       tokenProgram: TOKEN_2022_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
-    })
+    } as any)
     .instruction()
 
   tx.add(liquidateIx)
   await finalizeTransaction(connection, tx, liquidator)
 
+  const vaultLabel = vaultCreatorStr ? ' (via vault)' : ''
   return {
     transaction: tx,
-    message: `Liquidate loan position for ${borrowerStr}`,
+    message: `Liquidate loan position for ${borrowerStr.slice(0, 8)}...${vaultLabel}`,
+  }
+}
+
+// ============================================================================
+// Claim Protocol Rewards
+// ============================================================================
+
+/**
+ * Build an unsigned claim protocol rewards transaction.
+ *
+ * Claims the user's proportional share of protocol treasury rewards
+ * based on trading volume in the previous epoch. Requires >= 10 SOL volume.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Claim parameters (user, optional vault)
+ * @returns Unsigned transaction and descriptive message
+ */
+export const buildClaimProtocolRewardsTransaction = async (
+  connection: Connection,
+  params: ClaimProtocolRewardsParams,
+): Promise<TransactionResult> => {
+  const { user: userStr, vault: vaultCreatorStr } = params
+
+  const user = new PublicKey(userStr)
+
+  // Derive PDAs
+  const [userStatsPda] = getUserStatsPda(user)
+  const [protocolTreasuryPda] = getProtocolTreasuryPda()
+
+  // [V20] Vault accounts (optional — rewards go to vault instead of user)
+  let torchVaultAccount: PublicKey | null = null
+  let vaultWalletLinkAccount: PublicKey | null = null
+  if (vaultCreatorStr) {
+    const vaultCreator = new PublicKey(vaultCreatorStr)
+    ;[torchVaultAccount] = getTorchVaultPda(vaultCreator)
+    ;[vaultWalletLinkAccount] = getVaultWalletLinkPda(user)
+  }
+
+  const tx = new Transaction()
+
+  const provider = makeDummyProvider(connection, user)
+  const program = new Program(idl as unknown, provider)
+
+  const claimIx = await program.methods
+    .claimProtocolRewards()
+    .accounts({
+      user,
+      userStats: userStatsPda,
+      protocolTreasury: protocolTreasuryPda,
+      torchVault: torchVaultAccount,
+      vaultWalletLink: vaultWalletLinkAccount,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .instruction()
+
+  tx.add(claimIx)
+  await finalizeTransaction(connection, tx, user)
+
+  const vaultLabel = vaultCreatorStr ? ' (via vault)' : ''
+  return {
+    transaction: tx,
+    message: `Claim protocol rewards${vaultLabel}`,
   }
 }
 

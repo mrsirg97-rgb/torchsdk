@@ -2,65 +2,11 @@
     "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
     "metadata": {
         "name": "torch_market",
-        "version": "3.1.0",
+        "version": "3.2.0",
         "spec": "0.1.0",
         "description": "torch.market"
     },
     "instructions": [
-        {
-            "name": "advance_epoch",
-            "docs": [
-                "Advance the epoch for reward distribution."
-            ],
-            "discriminator": [
-                93,
-                138,
-                234,
-                218,
-                241,
-                230,
-                132,
-                38
-            ],
-            "accounts": [
-                {
-                    "name": "payer",
-                    "writable": true,
-                    "signer": true
-                },
-                {
-                    "name": "platform_treasury",
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    112,
-                                    108,
-                                    97,
-                                    116,
-                                    102,
-                                    111,
-                                    114,
-                                    109,
-                                    95,
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121
-                                ]
-                            }
-                        ]
-                    }
-                }
-            ],
-            "args": []
-        },
         {
             "name": "advance_protocol_epoch",
             "docs": [
@@ -814,40 +760,6 @@
                     }
                 },
                 {
-                    "name": "platform_treasury",
-                    "docs": [
-                        "[V4] Optional: Platform treasury for volume tracking"
-                    ],
-                    "writable": true,
-                    "optional": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    112,
-                                    108,
-                                    97,
-                                    116,
-                                    102,
-                                    111,
-                                    114,
-                                    109,
-                                    95,
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121
-                                ]
-                            }
-                        ]
-                    }
-                },
-                {
                     "name": "protocol_treasury",
                     "docs": [
                         "[V13] Protocol treasury receives protocol fees (0.75% after dev split)"
@@ -1164,91 +1076,6 @@
             "args": []
         },
         {
-            "name": "claim_epoch_rewards",
-            "docs": [
-                "Claim epoch rewards based on trading volume."
-            ],
-            "discriminator": [
-                89,
-                111,
-                14,
-                42,
-                237,
-                224,
-                162,
-                36
-            ],
-            "accounts": [
-                {
-                    "name": "user",
-                    "writable": true,
-                    "signer": true
-                },
-                {
-                    "name": "user_stats",
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    117,
-                                    115,
-                                    101,
-                                    114,
-                                    95,
-                                    115,
-                                    116,
-                                    97,
-                                    116,
-                                    115
-                                ]
-                            },
-                            {
-                                "kind": "account",
-                                "path": "user"
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "platform_treasury",
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    112,
-                                    108,
-                                    97,
-                                    116,
-                                    102,
-                                    111,
-                                    114,
-                                    109,
-                                    95,
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121
-                                ]
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "system_program",
-                    "address": "11111111111111111111111111111111"
-                }
-            ],
-            "args": []
-        },
-        {
             "name": "claim_protocol_rewards",
             "docs": [
                 "[V11] Claim protocol rewards.",
@@ -1334,6 +1161,46 @@
                 {
                     "name": "system_program",
                     "address": "11111111111111111111111111111111"
+                },
+                {
+                    "name": "torch_vault",
+                    "docs": [
+                        "[V20] Optional: Torch vault — receives claimed SOL"
+                    ],
+                    "writable": true,
+                    "optional": true
+                },
+                {
+                    "name": "vault_wallet_link",
+                    "docs": [
+                        "[V20] Optional: Proves user is authorized to use the vault"
+                    ],
+                    "optional": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    118,
+                                    97,
+                                    117,
+                                    108,
+                                    116,
+                                    95,
+                                    119,
+                                    97,
+                                    108,
+                                    108,
+                                    101,
+                                    116
+                                ]
+                            },
+                            {
+                                "kind": "account",
+                                "path": "user"
+                            }
+                        ]
+                    }
                 }
             ],
             "args": []
@@ -2192,93 +2059,6 @@
             "args": []
         },
         {
-            "name": "initialize_platform_treasury",
-            "docs": [
-                "Initialize the platform treasury for V4 rewards distribution."
-            ],
-            "discriminator": [
-                35,
-                40,
-                189,
-                111,
-                59,
-                198,
-                69,
-                211
-            ],
-            "accounts": [
-                {
-                    "name": "authority",
-                    "writable": true,
-                    "signer": true,
-                    "relations": [
-                        "global_config"
-                    ]
-                },
-                {
-                    "name": "global_config",
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    103,
-                                    108,
-                                    111,
-                                    98,
-                                    97,
-                                    108,
-                                    95,
-                                    99,
-                                    111,
-                                    110,
-                                    102,
-                                    105,
-                                    103
-                                ]
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "platform_treasury",
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    112,
-                                    108,
-                                    97,
-                                    116,
-                                    102,
-                                    111,
-                                    114,
-                                    109,
-                                    95,
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121
-                                ]
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "system_program",
-                    "address": "11111111111111111111111111111111"
-                }
-            ],
-            "args": []
-        },
-        {
             "name": "initialize_protocol_treasury",
             "docs": [
                 "[V11] Initialize the protocol treasury PDA.",
@@ -2699,6 +2479,107 @@
                 {
                     "name": "system_program",
                     "address": "11111111111111111111111111111111"
+                },
+                {
+                    "name": "torch_vault",
+                    "docs": [
+                        "[V20] Optional: Torch vault — SOL paid from vault, collateral received to vault ATA"
+                    ],
+                    "writable": true,
+                    "optional": true
+                },
+                {
+                    "name": "vault_wallet_link",
+                    "docs": [
+                        "[V20] Optional: Proves liquidator is authorized to use the vault"
+                    ],
+                    "optional": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    118,
+                                    97,
+                                    117,
+                                    108,
+                                    116,
+                                    95,
+                                    119,
+                                    97,
+                                    108,
+                                    108,
+                                    101,
+                                    116
+                                ]
+                            },
+                            {
+                                "kind": "account",
+                                "path": "liquidator"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "vault_token_account",
+                    "docs": [
+                        "[V20] Optional: Vault's token ATA — receives seized collateral + bonus"
+                    ],
+                    "writable": true,
+                    "optional": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "account",
+                                "path": "torch_vault"
+                            },
+                            {
+                                "kind": "account",
+                                "path": "token_program"
+                            },
+                            {
+                                "kind": "account",
+                                "path": "mint"
+                            }
+                        ],
+                        "program": {
+                            "kind": "const",
+                            "value": [
+                                140,
+                                151,
+                                37,
+                                143,
+                                78,
+                                36,
+                                137,
+                                241,
+                                187,
+                                61,
+                                16,
+                                41,
+                                20,
+                                142,
+                                13,
+                                131,
+                                11,
+                                90,
+                                19,
+                                153,
+                                218,
+                                255,
+                                16,
+                                132,
+                                4,
+                                142,
+                                123,
+                                216,
+                                219,
+                                233,
+                                248,
+                                89
+                            ]
+                        }
+                    }
                 }
             ],
             "args": []
@@ -3130,7 +3011,10 @@
                     }
                 },
                 {
-                    "name": "platform_treasury",
+                    "name": "protocol_treasury",
+                    "docs": [
+                        "[V3.2] Protocol treasury receives reclaimed SOL (was platform_treasury)"
+                    ],
                     "writable": true,
                     "pda": {
                         "seeds": [
@@ -3138,13 +3022,13 @@
                                 "kind": "const",
                                 "value": [
                                     112,
-                                    108,
-                                    97,
-                                    116,
-                                    102,
-                                    111,
                                     114,
-                                    109,
+                                    111,
+                                    116,
+                                    111,
+                                    99,
+                                    111,
+                                    108,
                                     95,
                                     116,
                                     114,
@@ -3153,7 +3037,11 @@
                                     115,
                                     117,
                                     114,
-                                    121
+                                    121,
+                                    95,
+                                    118,
+                                    49,
+                                    49
                                 ]
                             }
                         ]
@@ -3712,40 +3600,6 @@
                             {
                                 "kind": "account",
                                 "path": "seller"
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "platform_treasury",
-                    "docs": [
-                        "[V4] Optional: Platform treasury for volume tracking"
-                    ],
-                    "writable": true,
-                    "optional": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    112,
-                                    108,
-                                    97,
-                                    116,
-                                    102,
-                                    111,
-                                    114,
-                                    109,
-                                    95,
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121
-                                ]
                             }
                         ]
                     }
@@ -4816,19 +4670,6 @@
             ]
         },
         {
-            "name": "PlatformTreasury",
-            "discriminator": [
-                35,
-                229,
-                15,
-                221,
-                215,
-                174,
-                167,
-                92
-            ]
-        },
-        {
             "name": "ProtocolTreasury",
             "discriminator": [
                 162,
@@ -5591,9 +5432,9 @@
                         "type": "pubkey"
                     },
                     {
-                        "name": "platform_treasury",
+                        "name": "_deprecated_platform_treasury",
                         "docs": [
-                            "Platform treasury for V4 rewards (optional, Pubkey::default if not set)"
+                            "[DEPRECATED V3.2] Was platform treasury. Kept for byte layout compatibility."
                         ],
                         "type": "pubkey"
                     },
@@ -5786,94 +5627,6 @@
                     {
                         "name": "fully_repaid",
                         "type": "bool"
-                    }
-                ]
-            }
-        },
-        {
-            "name": "PlatformTreasury",
-            "docs": [
-                "Platform-wide treasury for V4 failed token reclaims and rewards"
-            ],
-            "type": {
-                "kind": "struct",
-                "fields": [
-                    {
-                        "name": "authority",
-                        "docs": [
-                            "Protocol authority"
-                        ],
-                        "type": "pubkey"
-                    },
-                    {
-                        "name": "total_reclaimed",
-                        "docs": [
-                            "Total SOL ever reclaimed from failed tokens"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "current_balance",
-                        "docs": [
-                            "Current distributable balance"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "total_distributed",
-                        "docs": [
-                            "Total SOL ever distributed as rewards"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "current_epoch",
-                        "docs": [
-                            "Current distribution epoch"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "last_epoch_ts",
-                        "docs": [
-                            "Timestamp of last epoch advance"
-                        ],
-                        "type": "i64"
-                    },
-                    {
-                        "name": "total_volume_current_epoch",
-                        "docs": [
-                            "Total platform volume in current epoch"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "total_volume_previous_epoch",
-                        "docs": [
-                            "Total platform volume in previous epoch (for claiming)"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "previous_epoch_rewards",
-                        "docs": [
-                            "SOL available for previous epoch claims"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "tokens_reclaimed_count",
-                        "docs": [
-                            "Number of failed tokens reclaimed"
-                        ],
-                        "type": "u64"
-                    },
-                    {
-                        "name": "bump",
-                        "docs": [
-                            "PDA bump"
-                        ],
-                        "type": "u8"
                     }
                 ]
             }

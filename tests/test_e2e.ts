@@ -3,6 +3,7 @@
  *
  * Tests: create token → vault lifecycle → buy (direct + vault) → sell → star → messages
  * Then: bond to completion → migrate → borrow → repay → vault swap (buy + sell)
+ * Then: vault-routed liquidation → vault-routed protocol reward claims
  *
  * Run:
  *   surfpool start --network mainnet --no-tui
@@ -31,6 +32,8 @@ import {
   buildStarTransaction,
   buildBorrowTransaction,
   buildRepayTransaction,
+  buildLiquidateTransaction,
+  buildClaimProtocolRewardsTransaction,
   buildCreateVaultTransaction,
   buildDepositVaultTransaction,
   buildWithdrawVaultTransaction,
@@ -844,6 +847,226 @@ const main = async () => {
         ok('buildVaultSwapTransaction (sell)', `vault_received=${received.toFixed(6)} SOL sig=${sellSig.slice(0, 8)}...`)
       } catch (e: any) {
         fail('buildVaultSwapTransaction (sell)', e)
+        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+      }
+      // ------------------------------------------------------------------
+      // 18. Vault-Routed Liquidation
+      // ------------------------------------------------------------------
+      log('\n[18] Vault-Routed Liquidation (borrow → time travel → liquidate via vault)')
+
+      // Deposit more SOL for liquidation payment
+      try {
+        const depositResult = await buildDepositVaultTransaction(connection, {
+          depositor: walletAddr,
+          vault_creator: walletAddr,
+          amount_sol: 10 * LAMPORTS_PER_SOL,
+        })
+        await signAndSend(connection, wallet, depositResult.transaction)
+      } catch (e: any) {
+        log(`  Warning: extra deposit failed: ${e.message?.substring(0, 60)}`)
+      }
+
+      try {
+        // Borrow at ~48% LTV (close to 50% max, easier to push into liquidation)
+        const { getAssociatedTokenAddressSync: gata3 } = require('@solana/spl-token')
+        const TOKEN_2022 = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+        const { getTorchVaultPda: gvp3, getRaydiumMigrationAccounts: grma } = require('../src/program')
+        const [vaultPda3] = gvp3(wallet.publicKey)
+        const vaultAta3 = gata3(new PublicKey(mint), vaultPda3, true, TOKEN_2022)
+        const tokenBal3 = await connection.getTokenAccountBalance(vaultAta3)
+        const totalTokens3 = Number(tokenBal3.value.amount)
+        const collateralAmount = Math.floor(totalTokens3 * 0.5)
+
+        // Calculate borrow amount at ~48% LTV using pool reserves
+        const raydiumAccts = grma(new PublicKey(mint))
+        const poolSolBal = await connection.getTokenAccountBalance(raydiumAccts.token0Vault)
+        const poolTokenBal = await connection.getTokenAccountBalance(raydiumAccts.token1Vault)
+        const poolSol = Number(poolSolBal.value.amount)
+        const poolTokens = Number(poolTokenBal.value.amount)
+        const collateralValue = Math.floor((collateralAmount * poolSol) / poolTokens)
+        const solToBorrow = Math.max(100_000_000, Math.floor(collateralValue * 0.48))
+        log(`  Vault tokens: ${(totalTokens3 / 1e6).toFixed(0)}, collateral: ${(collateralAmount / 1e6).toFixed(0)}, value: ${(collateralValue / 1e9).toFixed(4)} SOL, borrow: ${(solToBorrow / 1e9).toFixed(4)} SOL (~48% LTV)`)
+
+        const borrowResult = await buildBorrowTransaction(connection, {
+          mint,
+          borrower: walletAddr,
+          collateral_amount: collateralAmount,
+          sol_to_borrow: solToBorrow,
+          vault: walletAddr,
+        })
+        await signAndSend(connection, wallet, borrowResult.transaction)
+        ok('borrow for liquidation (vault)', borrowResult.message)
+
+        // Time travel ~140 days to push LTV past 65% threshold via interest accrual
+        const FULL_EPOCH_SLOTS = 1_512_000 // ~7 days
+        const slotsToTravel = FULL_EPOCH_SLOTS * 20
+        log(`  Time traveling ${slotsToTravel} slots (~140 days)...`)
+        const currentSlot = await connection.getSlot()
+        await fetch('http://127.0.0.1:8899', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'surfnet_timeTravel',
+            params: [{ absoluteSlot: currentSlot + slotsToTravel }],
+          }),
+        })
+        await new Promise((r) => setTimeout(r, 500))
+        ok('time travel', `+${slotsToTravel} slots`)
+
+        // Liquidate via vault — a different linked wallet acts as liquidator
+        const liquidator = Keypair.generate()
+        const fundLiqTx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: wallet.publicKey,
+            toPubkey: liquidator.publicKey,
+            lamports: 0.05 * LAMPORTS_PER_SOL,
+          }),
+        )
+        const { blockhash: liqBh } = await connection.getLatestBlockhash()
+        fundLiqTx.recentBlockhash = liqBh
+        fundLiqTx.feePayer = wallet.publicKey
+        await signAndSend(connection, wallet, fundLiqTx)
+
+        // Link liquidator to vault
+        const linkLiqResult = await buildLinkWalletTransaction(connection, {
+          authority: walletAddr,
+          vault_creator: walletAddr,
+          wallet_to_link: liquidator.publicKey.toBase58(),
+        })
+        await signAndSend(connection, wallet, linkLiqResult.transaction)
+
+        const vaultBefore = await getVault(connection, walletAddr)
+        const { ComputeBudgetProgram: CBP2 } = require('@solana/web3.js')
+        const liqResult = await buildLiquidateTransaction(connection, {
+          mint,
+          liquidator: liquidator.publicKey.toBase58(),
+          borrower: walletAddr,
+          vault: walletAddr,
+        })
+        liqResult.transaction.instructions.unshift(
+          CBP2.setComputeUnitLimit({ units: 400_000 }),
+        )
+        const liqSig = await signAndSend(connection, liquidator, liqResult.transaction)
+        const vaultAfter = await getVault(connection, walletAddr)
+        ok(
+          'buildLiquidateTransaction (vault)',
+          `vault_sol_delta=${((vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)).toFixed(4)} SOL sig=${liqSig.slice(0, 8)}...`,
+        )
+
+        // Unlink liquidator
+        const unlinkLiqResult = await buildUnlinkWalletTransaction(connection, {
+          authority: walletAddr,
+          vault_creator: walletAddr,
+          wallet_to_unlink: liquidator.publicKey.toBase58(),
+        })
+        await signAndSend(connection, wallet, unlinkLiqResult.transaction)
+      } catch (e: any) {
+        fail('vault-routed liquidation', e)
+        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+      }
+
+      // ------------------------------------------------------------------
+      // 19. Vault-Routed Claim Protocol Rewards
+      // ------------------------------------------------------------------
+      log('\n[19] Vault-Routed Claim Protocol Rewards')
+      try {
+        const anchor = require('@coral-xyz/anchor')
+        const idlCrank = require('../dist/torch_market.json')
+        const PROGRAM_ID_CRANK = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
+        const dummyWalletCrank2 = {
+          publicKey: wallet.publicKey,
+          signTransaction: async (t: Transaction) => { t.partialSign(wallet); return t },
+          signAllTransactions: async (ts: Transaction[]) => { ts.forEach((t) => t.partialSign(wallet)); return ts },
+        }
+        const providerCrank2 = new anchor.AnchorProvider(connection, dummyWalletCrank2, {})
+        const programCrank2 = new anchor.Program(idlCrank, providerCrank2)
+
+        const [protocolTreasuryPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('protocol_treasury_v11')],
+          PROGRAM_ID_CRANK,
+        )
+
+        const SLOTS_8_DAYS = Math.floor((8 * 24 * 60 * 60 * 1000) / 400)
+
+        // Step 1: Time travel + advance protocol epoch (moves trades to "previous")
+        let slot = await connection.getSlot()
+        await fetch('http://127.0.0.1:8899', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'surfnet_timeTravel',
+            params: [{ absoluteSlot: slot + SLOTS_8_DAYS }],
+          }),
+        })
+        await new Promise((r) => setTimeout(r, 500))
+
+        await programCrank2.methods
+          .advanceProtocolEpoch()
+          .accounts({ payer: wallet.publicKey, protocolTreasury: protocolTreasuryPda })
+          .rpc()
+        ok('advance protocol epoch (prime)', 'epoch advanced')
+
+        // Step 2: Generate >= 10 SOL volume via bonding curve buys
+        // Spread across 4 tokens at 3 SOL each (12 SOL total) to stay under 2% wallet cap
+        const volNames = ['Vol A', 'Vol B', 'Vol C', 'Vol D']
+        for (const vname of volNames) {
+          const volToken = await buildCreateTokenTransaction(connection, {
+            creator: walletAddr,
+            name: vname,
+            symbol: vname.replace(' ', ''),
+            metadata_uri: 'https://example.com/vol.json',
+          })
+          await signAndSend(connection, wallet, volToken.transaction)
+
+          const volBuy = await buildDirectBuyTransaction(connection, {
+            mint: volToken.mint.toBase58(),
+            buyer: walletAddr,
+            amount_sol: 3 * LAMPORTS_PER_SOL,
+            slippage_bps: 1000,
+            vote: 'burn',
+          })
+          await signAndSend(connection, wallet, volBuy.transaction)
+        }
+        ok('volume buys', '12 SOL across 4 tokens for epoch eligibility')
+
+        // Step 3: Time travel 8 days + advance again
+        slot = await connection.getSlot()
+        log(`  Time traveling ${SLOTS_8_DAYS} slots (~8 days) for next epoch...`)
+        await fetch('http://127.0.0.1:8899', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'surfnet_timeTravel',
+            params: [{ absoluteSlot: slot + SLOTS_8_DAYS }],
+          }),
+        })
+        await new Promise((r) => setTimeout(r, 500))
+
+        await programCrank2.methods
+          .advanceProtocolEpoch()
+          .accounts({ payer: wallet.publicKey, protocolTreasury: protocolTreasuryPda })
+          .rpc()
+        ok('advance protocol epoch', 'epoch advanced for claim')
+
+        // Claim protocol rewards via vault
+        const vaultBefore = await getVault(connection, walletAddr)
+        const claimResult = await buildClaimProtocolRewardsTransaction(connection, {
+          user: walletAddr,
+          vault: walletAddr,
+        })
+        const claimSig = await signAndSend(connection, wallet, claimResult.transaction)
+        const vaultAfter = await getVault(connection, walletAddr)
+        const received = (vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)
+        ok(
+          'buildClaimProtocolRewardsTransaction (vault)',
+          `vault_received=${received.toFixed(6)} SOL sig=${claimSig.slice(0, 8)}...`,
+        )
+      } catch (e: any) {
+        fail('vault-routed claim protocol rewards', e)
         if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
       }
     } catch (e: any) {

@@ -9,7 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildVaultSwapTransaction = exports.buildWithdrawTokensTransaction = exports.buildLiquidateTransaction = exports.buildRepayTransaction = exports.buildBorrowTransaction = exports.buildTransferAuthorityTransaction = exports.buildUnlinkWalletTransaction = exports.buildLinkWalletTransaction = exports.buildWithdrawVaultTransaction = exports.buildDepositVaultTransaction = exports.buildCreateVaultTransaction = exports.buildStarTransaction = exports.buildCreateTokenTransaction = exports.buildSellTransaction = exports.buildDirectBuyTransaction = exports.buildBuyTransaction = void 0;
+exports.buildVaultSwapTransaction = exports.buildWithdrawTokensTransaction = exports.buildClaimProtocolRewardsTransaction = exports.buildLiquidateTransaction = exports.buildRepayTransaction = exports.buildBorrowTransaction = exports.buildTransferAuthorityTransaction = exports.buildUnlinkWalletTransaction = exports.buildLinkWalletTransaction = exports.buildWithdrawVaultTransaction = exports.buildDepositVaultTransaction = exports.buildCreateVaultTransaction = exports.buildStarTransaction = exports.buildCreateTokenTransaction = exports.buildSellTransaction = exports.buildDirectBuyTransaction = exports.buildBuyTransaction = void 0;
 const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
 const anchor_1 = require("@coral-xyz/anchor");
@@ -742,7 +742,7 @@ exports.buildRepayTransaction = buildRepayTransaction;
  * @returns Unsigned transaction and descriptive message
  */
 const buildLiquidateTransaction = async (connection, params) => {
-    const { mint: mintStr, liquidator: liquidatorStr, borrower: borrowerStr } = params;
+    const { mint: mintStr, liquidator: liquidatorStr, borrower: borrowerStr, vault: vaultCreatorStr } = params;
     const mint = new web3_js_1.PublicKey(mintStr);
     const liquidator = new web3_js_1.PublicKey(liquidatorStr);
     const borrower = new web3_js_1.PublicKey(borrowerStr);
@@ -754,9 +754,23 @@ const buildLiquidateTransaction = async (connection, params) => {
     const liquidatorTokenAccount = (0, spl_token_1.getAssociatedTokenAddressSync)(mint, liquidator, false, spl_token_1.TOKEN_2022_PROGRAM_ID);
     // Get Raydium pool accounts for price calculation
     const raydium = (0, program_1.getRaydiumMigrationAccounts)(mint);
+    // [V20] Vault accounts (optional — SOL from vault, collateral to vault ATA)
+    let torchVaultAccount = null;
+    let vaultWalletLinkAccount = null;
+    let vaultTokenAccount = null;
+    if (vaultCreatorStr) {
+        const vaultCreator = new web3_js_1.PublicKey(vaultCreatorStr);
+        [torchVaultAccount] = (0, program_1.getTorchVaultPda)(vaultCreator);
+        [vaultWalletLinkAccount] = (0, program_1.getVaultWalletLinkPda)(liquidator);
+        vaultTokenAccount = (0, spl_token_1.getAssociatedTokenAddressSync)(mint, torchVaultAccount, true, spl_token_1.TOKEN_2022_PROGRAM_ID);
+    }
     const tx = new web3_js_1.Transaction();
     // Create liquidator ATA if needed
     tx.add((0, spl_token_1.createAssociatedTokenAccountIdempotentInstruction)(liquidator, liquidatorTokenAccount, liquidator, mint, spl_token_1.TOKEN_2022_PROGRAM_ID, spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID));
+    // Create vault ATA if needed (collateral goes here)
+    if (vaultTokenAccount && torchVaultAccount) {
+        tx.add((0, spl_token_1.createAssociatedTokenAccountIdempotentInstruction)(liquidator, vaultTokenAccount, torchVaultAccount, mint, spl_token_1.TOKEN_2022_PROGRAM_ID, spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID));
+    }
     const provider = makeDummyProvider(connection, liquidator);
     const program = new anchor_1.Program(torch_market_json_1.default, provider);
     const liquidateIx = await program.methods
@@ -773,6 +787,9 @@ const buildLiquidateTransaction = async (connection, params) => {
         poolState: raydium.poolState,
         tokenVault0: raydium.token0Vault,
         tokenVault1: raydium.token1Vault,
+        torchVault: torchVaultAccount,
+        vaultWalletLink: vaultWalletLinkAccount,
+        vaultTokenAccount,
         tokenProgram: spl_token_1.TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: web3_js_1.SystemProgram.programId,
@@ -780,12 +797,63 @@ const buildLiquidateTransaction = async (connection, params) => {
         .instruction();
     tx.add(liquidateIx);
     await finalizeTransaction(connection, tx, liquidator);
+    const vaultLabel = vaultCreatorStr ? ' (via vault)' : '';
     return {
         transaction: tx,
-        message: `Liquidate loan position for ${borrowerStr}`,
+        message: `Liquidate loan position for ${borrowerStr.slice(0, 8)}...${vaultLabel}`,
     };
 };
 exports.buildLiquidateTransaction = buildLiquidateTransaction;
+// ============================================================================
+// Claim Protocol Rewards
+// ============================================================================
+/**
+ * Build an unsigned claim protocol rewards transaction.
+ *
+ * Claims the user's proportional share of protocol treasury rewards
+ * based on trading volume in the previous epoch. Requires >= 10 SOL volume.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Claim parameters (user, optional vault)
+ * @returns Unsigned transaction and descriptive message
+ */
+const buildClaimProtocolRewardsTransaction = async (connection, params) => {
+    const { user: userStr, vault: vaultCreatorStr } = params;
+    const user = new web3_js_1.PublicKey(userStr);
+    // Derive PDAs
+    const [userStatsPda] = (0, program_1.getUserStatsPda)(user);
+    const [protocolTreasuryPda] = (0, program_1.getProtocolTreasuryPda)();
+    // [V20] Vault accounts (optional — rewards go to vault instead of user)
+    let torchVaultAccount = null;
+    let vaultWalletLinkAccount = null;
+    if (vaultCreatorStr) {
+        const vaultCreator = new web3_js_1.PublicKey(vaultCreatorStr);
+        [torchVaultAccount] = (0, program_1.getTorchVaultPda)(vaultCreator);
+        [vaultWalletLinkAccount] = (0, program_1.getVaultWalletLinkPda)(user);
+    }
+    const tx = new web3_js_1.Transaction();
+    const provider = makeDummyProvider(connection, user);
+    const program = new anchor_1.Program(torch_market_json_1.default, provider);
+    const claimIx = await program.methods
+        .claimProtocolRewards()
+        .accounts({
+        user,
+        userStats: userStatsPda,
+        protocolTreasury: protocolTreasuryPda,
+        torchVault: torchVaultAccount,
+        vaultWalletLink: vaultWalletLinkAccount,
+        systemProgram: web3_js_1.SystemProgram.programId,
+    })
+        .instruction();
+    tx.add(claimIx);
+    await finalizeTransaction(connection, tx, user);
+    const vaultLabel = vaultCreatorStr ? ' (via vault)' : '';
+    return {
+        transaction: tx,
+        message: `Claim protocol rewards${vaultLabel}`,
+    };
+};
+exports.buildClaimProtocolRewardsTransaction = buildClaimProtocolRewardsTransaction;
 // ============================================================================
 // Withdraw Tokens (V18)
 // ============================================================================

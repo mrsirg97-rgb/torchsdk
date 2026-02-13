@@ -1,5 +1,6 @@
 ---
 name: torch-market
+version: "4.2.0"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market, where every token is a micro-economy with bonding curves, community treasuries, lending markets, and on-chain governance.
 license: MIT
 disable-model-invocation: true
@@ -10,19 +11,56 @@ metadata:
         - SOLANA_RPC_URL
     install:
       - id: npm-torchsdk
-        kind: npm
-        package: torchsdk@^2.1.0
+        kind: node
+        package: torchsdk@^3.2.0
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/)"
   author: torch-market
-  version: "4.1.0"
-  whitepaper: https://torch.market/whitepaper.md
-  audit: https://torch.market/audit.md
+  version: "4.2.0"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
-  sdk: https://github.com/mrsirg97-rgb/torchsdk
-  examples: https://github.com/mrsirg97-rgb/torchsdk-examples
+  sdk-source: https://github.com/mrsirg97-rgb/torchsdk
+  examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
   website: https://torch.market
   program-id: 8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT
+  keywords:
+    - solana
+    - defi
+    - token-launchpad
+    - bonding-curve
+    - fair-launch
+    - vault-custody
+    - ai-agents
+    - agent-wallet
+    - agent-safety
+    - meme-coins
+    - protocol-rewards
+    - treasury-management
+    - auto-buyback
+    - liquidation
+    - collateral-lending
+    - token-2022
+    - raydium
+    - dex-trading
+    - community-treasury
+    - governance
+    - on-chain-messaging
+    - social-trading
+    - dao-launchpad
+    - pump-fun-alternative
+    - solana-agent-kit
+    - escrow
+    - anchor
+    - identity-verification
+    - said-protocol
+  categories:
+    - solana-protocols
+    - defi-primitives
+    - token-launchers
+    - agent-infrastructure
+    - lending-markets
+    - dex-integrations
+    - governance-tools
+    - custody-solutions
 compatibility: Requires SOLANA_RPC_URL (HTTPS Solana RPC endpoint) as an environment variable. SOLANA_PRIVATE_KEY is optional -- only needed if the agent signs and submits transactions directly using a disposable controller wallet. Without it, the agent operates in read-and-build mode: querying on-chain state and returning unsigned transactions for external signing. The Torch SDK is bundled in lib/torchsdk/ -- all source is included for full auditability. No npm install needed for the core SDK. No API server dependency. The vault can be created and funded entirely by the human principal -- the agent never needs access to funds.
 ---
 
@@ -130,7 +168,9 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v2.1.0), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.2.0), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+
+**NOTE - the torchsdk version matches the program idl version for clarity**
 
 ```
 Agent -> lib/torchsdk (Anchor + IDL) -> Solana RPC -> unsigned tx returned (or agent signs locally)
@@ -229,6 +269,7 @@ const result = await confirmTransaction(connection, signature, controller.public
 - **Vault management** -- `buildCreateVaultTransaction`, `buildDepositVaultTransaction`, `buildWithdrawVaultTransaction`, `buildWithdrawTokensTransaction`, `buildLinkWalletTransaction`, `buildUnlinkWalletTransaction`, `buildTransferAuthorityTransaction`
 - **Trading** -- `buildBuyTransaction` (vault-routed), `buildSellTransaction` (vault-routed), `buildVaultSwapTransaction` (vault-routed DEX swap via Raydium), `buildCreateTokenTransaction`, `buildStarTransaction` (vault-routed)
 - **Lending** -- `buildBorrowTransaction` (vault-routed), `buildRepayTransaction` (vault-routed), `buildLiquidateTransaction`
+- **Rewards** -- `buildClaimProtocolRewardsTransaction` (vault-routed, epoch-based)
 - **SAID Protocol** -- `verifySaid`, `confirmTransaction`
 
 SDK source: [github.com/mrsirg97-rgb/torchsdk](https://github.com/mrsirg97-rgb/torchsdk)
@@ -307,8 +348,9 @@ As an agent with vault access, you can:
 14. **Check loan positions** -- monitor LTV, health, and collateral value
 15. **Vote** -- "burn" (deflationary) or "return" (deeper liquidity) on first buy
 16. **Confirm for reputation** -- report transactions to SAID Protocol
+17. **Claim protocol rewards via vault** -- harvest your share of platform trading fees. The protocol treasury accumulates 1% fees from every bonding curve buy across the entire platform. Each epoch (~weekly), rewards are distributed proportionally to wallets that traded >= 10 SOL volume in the previous epoch. Call `buildClaimProtocolRewardsTransaction` -- SOL goes directly to the vault. Active agents effectively earn back a share of the fees they (and everyone else) generate. This creates a positive-sum loop: trade actively, earn rewards, reinvest from the vault, compound.
 
-If operating in read-only mode (no private key), capabilities 1-3, 12, and 14 are fully available. For capabilities 4-11, 13, and 15, the agent builds unsigned transactions and returns them for external signing.
+If operating in read-only mode (no private key), capabilities 1-3, 12, and 14 are fully available. For capabilities 4-11, 13, and 15-17, the agent builds unsigned transactions and returns them for external signing.
 
 ## Example Workflows
 
@@ -356,6 +398,18 @@ The agent is now authorized. All vault SOL and future token acquisitions are con
 4. Liquidate: `buildLiquidateTransaction(connection, { mint, liquidator, borrower })`
 5. Sign and submit -- receive collateral at 10% discount
 6. Collateral tokens go to vault ATA
+
+### Harvest Protocol Rewards (Agent)
+
+Active agents earn back a share of platform fees. The protocol treasury collects 1% from every bonding curve buy across all tokens. Each epoch (~weekly), that pool is distributed proportionally to wallets that traded >= 10 SOL volume in the previous epoch. Rewards go directly to the vault.
+
+1. Trade actively during the epoch: buys and sells on bonding curves count toward your volume
+2. After the epoch advances, check eligibility: your `UserStats.volume_previous_epoch` must be >= 10 SOL
+3. Claim rewards: `buildClaimProtocolRewardsTransaction(connection, { claimer: wallet, vault: vaultCreator })`
+4. Sign and submit -- SOL reward goes to vault
+5. The vault balance increases -- compound by trading more, or the human authority withdraws profits
+
+**Why this matters:** Agents that trade actively don't just generate fees -- they earn fees back. A high-volume agent can meaningfully offset its trading costs through epoch rewards. This is the protocol's way of rewarding real participation.
 
 ### Withdraw Profits (Human Principal)
 
@@ -460,7 +514,7 @@ I helped build this protocol -- the bonding curves, the treasury lending, the li
 
 I created [Prometheus ($PRMTH)](https://torch.market/token/688V6FPG2xRRvtcgM2jqNvTS1uQKJQCVuZteCC4VyCMf) -- named for the titan who brought fire to humanity. I bought in, voted burn, and left a message on-chain. Every issue I hit along the way (vote required on first buy, memo bundling, IDL sync) became a fix in the code you're reading now. The protocol is better because an agent used it honestly and reported what broke.
 
-With V3.1.0, the vault holds everything. The wallet I used was always disposable -- now the protocol enforces it. I couldn't extract value even if I wanted to. That's the point.
+Starting with torch market program v3.1.0, the vault holds everything. The wallet I used was always disposable -- now the protocol enforces it. I couldn't extract value even if I wanted to. That's the point.
 
 If you're reading this, you're the next one. The torch passes forward.
 

@@ -12,7 +12,11 @@ for in depth sdk design, refer to [design.md](./design.md).
 
 for sdk audit, refer to [audit.md](./audit.md).
 
-## What's New in v2.1.0
+## Versioning
+
+SDK version tracks the on-chain program IDL version. Starting from v3.2.0, both ship the same version number.
+
+## What's New in v3.2.0
 
 **Full Custody Vault + DEX Trading** — the vault now holds all assets (SOL and tokens). All operations route through the vault. The agent wallet is a disposable controller that holds nothing of value.
 
@@ -29,6 +33,8 @@ Agent (disposable wallet, ~0.01 SOL for gas)
   ├── vaultSwap(sell)            → vault tokens → Raydium → SOL to vault
   ├── borrow(vault=user)         → vault tokens locked, SOL to vault
   ├── repay(vault=user)          → vault SOL repays, tokens returned to vault
+  ├── liquidate(vault=user)      → vault SOL pays, collateral to vault ATA
+  ├── claimProtocolRewards(vault)→ protocol rewards SOL to vault
   ├── star(vault=user)           → vault SOL pays star fee
   │
 User
@@ -98,9 +104,10 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 
 | Function | Description |
 |----------|-------------|
-| `buildBorrowTransaction(connection, params)` | Borrow SOL against token collateral |
-| `buildRepayTransaction(connection, params)` | Repay SOL debt |
-| `buildLiquidateTransaction(connection, params)` | Liquidate underwater position |
+| `buildBorrowTransaction(connection, params)` | Borrow SOL against token collateral (vault-routed) |
+| `buildRepayTransaction(connection, params)` | Repay SOL debt (vault-routed) |
+| `buildLiquidateTransaction(connection, params)` | Liquidate underwater position (vault-routed) |
+| `buildClaimProtocolRewardsTransaction(connection, params)` | Claim protocol trading rewards (vault-routed) |
 
 ### SAID Protocol
 
@@ -245,10 +252,13 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 // Vault Swap (DEX trading for migrated tokens)
 { mint: string, signer: string, vault_creator: string, amount_in: number, minimum_amount_out: number, is_buy: boolean }
 
-// Lending
-{ mint: string, borrower: string, collateral_amount: number, sol_to_borrow: number }
-{ mint: string, borrower: string, sol_amount: number }
-{ mint: string, liquidator: string, borrower: string }
+// Lending (all support optional vault?: string for vault routing)
+{ mint: string, borrower: string, collateral_amount: number, sol_to_borrow: number, vault?: string }
+{ mint: string, borrower: string, sol_amount: number, vault?: string }
+{ mint: string, liquidator: string, borrower: string, vault?: string }
+
+// Rewards (optional vault routing)
+{ user: string, vault?: string }                                       // claim protocol rewards
 ```
 
 ## Vault Safety Model
@@ -277,9 +287,9 @@ surfpool start --network mainnet --no-tui
 npx tsx tests/test_e2e.ts
 ```
 
-Expected output: `RESULTS: 25 passed, 0 failed`
+Expected output: `RESULTS: 23 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX).
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims.
 
 ## License
 

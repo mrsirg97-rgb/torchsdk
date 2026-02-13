@@ -298,6 +298,14 @@ export interface LiquidateParams {
   mint: string
   liquidator: string
   borrower: string
+  /** Vault creator pubkey. SOL paid from vault, collateral received to vault ATA. */
+  vault?: string
+}
+
+export interface ClaimProtocolRewardsParams {
+  user: string
+  /** Vault creator pubkey. Claimed SOL goes to vault instead of user. */
+  vault?: string
 }
 
 // ============================================================================

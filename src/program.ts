@@ -62,7 +62,7 @@ export interface GlobalConfig {
   authority: PublicKey
   treasury: PublicKey
   dev_wallet: PublicKey // V8: receives 25% of treasury fee
-  platform_treasury: PublicKey // V4: platform treasury for rewards
+  _deprecated_platform_treasury: PublicKey // V4: deprecated V3.2 — merged into protocol treasury
   protocol_fee_bps: number
   paused: boolean
   total_tokens_launched: BN
