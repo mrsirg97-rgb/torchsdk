@@ -1,8 +1,9 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a fair-launch DAO launchpad with bonding curves, community treasuries, treasury lending, democratic governance, and trade-bundled on-chain messaging. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.2.0",
+  "version": "4.2.2",
   "type": "protocol",
+  "disable-model-invocation": true,
   "website": "https://torch.market",
   "socials": {
     "twitter": "https://twitter.com/torch_market"
@@ -34,7 +35,7 @@
         "kind": "npm",
         "package": "torchsdk@^3.2.3",
         "flags": [],
-        "label": "Install Torch SDK (npm)"
+        "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
     ]
   },

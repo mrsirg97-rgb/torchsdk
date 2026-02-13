@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.2.0"
+version: "4.2.2"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market, where every token is a micro-economy with bonding curves, community treasuries, lending markets, and on-chain governance.
 license: MIT
 disable-model-invocation: true
@@ -9,14 +9,15 @@ metadata:
     requires:
       env:
         - SOLANA_RPC_URL
+    primaryEnv: SOLANA_RPC_URL
     install:
       - id: npm-torchsdk
-        kind: node
+        kind: npm
         package: torchsdk@^3.2.3
         flags: []
-        label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/)"
+        label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.2.0"
+  version: "4.2.2"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -325,6 +326,18 @@ If `SOLANA_PRIVATE_KEY` is not provided:
 |----------|----------|---------|
 | `SOLANA_RPC_URL` | **Yes** | Solana RPC endpoint (HTTPS) |
 | `SOLANA_PRIVATE_KEY` | No | Disposable controller keypair (base58 or byte array). Only needed for direct signing. Holds no value -- dust for gas only. |
+
+### External Runtime Dependencies
+
+The SDK makes outbound HTTPS requests to three external services beyond the Solana RPC:
+
+| Service | Purpose | When Called |
+|---------|---------|------------|
+| **SAID Protocol** (`api.saidprotocol.com`) | Agent identity verification and trust tier lookup | `verifySaid()`, `confirmTransaction()` |
+| **CoinGecko** (`api.coingecko.com`) | SOL/USD price for display | Token queries with USD pricing |
+| **Irys Gateway** (`gateway.irys.xyz`) | Token metadata fallback (name, symbol, image) | `getToken()` when on-chain metadata URI points to Irys |
+
+No credentials are sent to these services. All requests are read-only GET/POST. If any service is unreachable, the SDK degrades gracefully (returns null for that field). No private key material is ever transmitted to any external endpoint.
 
 ---
 
