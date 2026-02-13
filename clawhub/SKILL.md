@@ -1,9 +1,12 @@
 ---
 name: torch-market
-version: "4.2.2"
+version: "4.2.3"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market, where every token is a micro-economy with bonding curves, community treasuries, lending markets, and on-chain governance.
 license: MIT
 disable-model-invocation: true
+requires:
+  env:
+    - SOLANA_RPC_URL
 metadata:
   openclaw:
     requires:
@@ -17,7 +20,7 @@ metadata:
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.2.2"
+  version: "4.2.3"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
