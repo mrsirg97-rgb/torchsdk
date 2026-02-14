@@ -1,6 +1,6 @@
 # torch.market
 
-**a programmable economic virtual machine**
+**a programmable economic substrate**
 
 Brightside Solutions, 2026
 
@@ -8,7 +8,7 @@ Brightside Solutions, 2026
 
 ---
 
-`torch.market` is a programmable economic virtual machine built on Solana. Every token launched on the protocol is its own self-sustaining economy — complete with a pricing engine, a central bank, a lending market, community governance, and optional privacy — all enclosed within a single non-extractive system where every action feeds a positive-sum feedback loop.
+`torch.market` is a programmable economic substrate built on Solana. Every token launched on the protocol is its own self-sustaining economy — complete with a pricing engine, a central bank, a lending market, community governance, and optional privacy — all enclosed within a single non-extractive system where every action feeds a positive-sum feedback loop.
 
 The protocol treats Solana not as a blockchain, but as a distributed computing substrate coupled with storage. On-chain accounts form a directed graph of economic relationships. PDA seeds define the edges. Handlers define the legal traversals. The result is a composable economic graph where anyone can launch a token and receive a complete, self-reinforcing financial ecosystem out of the box.
 
@@ -457,7 +457,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 
 ## Conclusion
 
-`torch.market` is a programmable economic virtual machine. Every token launched on the protocol receives a complete, self-sustaining economy: a pricing engine, a central bank with automatic buybacks, a lending market, community governance, creator rewards, a failure-recovery system, and optional privacy — all composed from a small set of on-chain primitives that enforce correctness by topology.
+`torch.market` is a programmable economic substrate. Every token launched on the protocol receives a complete, self-sustaining economy: a pricing engine, a central bank with automatic buybacks, a lending market, community governance, creator rewards, a failure-recovery system, and optional privacy — all composed from a small set of on-chain primitives that enforce correctness by topology.
 
 The protocol is non-extractive by design. There is no configuration that makes it extractive because the graph doesn't have that edge. Fees become buybacks. Buybacks become deflation. Failed tokens become protocol rewards. Interest from lending fuels larger buybacks. Every outflow is an inflow somewhere else in the system.
 
@@ -465,7 +465,7 @@ The Torch Vault adds a custody-aware resolution layer that makes every economic 
 
 The individual pieces — bonding curves, treasuries, lending, governance — are not new. The arrangement is. A closed, positive-sum economic graph where anyone can launch a token and receive a complete financial ecosystem, running on Solana as a distributed computing substrate.
 
-**This is not a zero-sum game. This is not a launchpad. This is a virtual machine for money.**
+**This is not a zero-sum game. This is not a launchpad. This is a substrate for programmable economies.**
 
 ---
 
