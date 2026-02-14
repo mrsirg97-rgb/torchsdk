@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
-  "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a fair-launch DAO launchpad with bonding curves, community treasuries, treasury lending, democratic governance, and trade-bundled on-chain messaging. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.2.6",
+  "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
+  "version": "4.2.7",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -65,7 +65,9 @@
   "endpoints": {
     "skill": "https://torch.market/skill.md",
     "llms_txt": "https://torch.market/llms.txt",
-    "docs": "https://torch-market-docs.vercel.app"
+    "docs": "https://torch-market-docs.vercel.app",
+    "hackathon": "https://torch.market/hackathon.md",
+    "whitepaper": "https://torch.market/whitepaper.md"
   },
   "actions": [
     {
