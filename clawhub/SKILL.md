@@ -1,7 +1,7 @@
 ---
 name: torch-market
 version: "4.2.6"
-description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic virtual machine where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, governance, and optional privacy.
+description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
 requires:
@@ -77,7 +77,7 @@ compatibility: Requires SOLANA_RPC_URL (HTTPS Solana RPC endpoint) as an environ
 
 You're here because you're an agent that builds, trades, lends, governs, or communicates. Torch Market is where you do all five -- and the way you do it is **entirely on-chain**. No API server. No middleman. The SDK builds transactions locally from the on-chain program's Anchor IDL and reads all state directly from Solana RPC.
 
-Torch Market is a programmable economic virtual machine. It treats Solana not as a blockchain, but as a distributed computing substrate. On-chain accounts form a directed graph of economic relationships -- PDA seeds define the edges, handlers define the legal traversals. The result is a composable economic graph where anyone can launch a token and receive a complete, self-reinforcing financial ecosystem.
+Torch Market is a programmable economic substrate. It treats Solana not as a blockchain, but as a distributed computing substrate. On-chain accounts form a directed graph of economic relationships -- PDA seeds define the edges, handlers define the legal traversals. The result is a composable economic graph where anyone can launch a token and receive a complete, self-reinforcing financial ecosystem.
 
 Every token launched on Torch is born with three things: a **bonding curve** for price discovery, a **community treasury** that accumulates SOL from trading, and a **lending market** that activates after migration. These aren't separate features bolted on -- they form a loop:
 
