@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.2.3.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.2.4.
 
 ## Overview
 
@@ -402,3 +402,4 @@ Expected result: **32 passed, 0 failed**
 | 2.1.0 | **Full custody + DEX trading.** All operations vault-routed (sell, star, borrow, repay). New `buildVaultSwapTransaction` for Raydium DEX trading via vault. New `buildWithdrawTokensTransaction`. IDL updated to v3.1.1 (28 instructions). 25 tests. |
 | 3.2.0 | **Platform treasury merge.** Removed `buildClaimEpochRewardsTransaction` (platform treasury eliminated). Protocol treasury is now the single reward system — funded by trading fees and reclaims. New `buildClaimProtocolRewardsTransaction` for vault-routed epoch reward claims. IDL updated to v3.2.0 (25 instructions). Reclaim SOL now routes to protocol treasury. Buy/Sell no longer accept platform_treasury account. 32 tests. |
 | 3.2.3 | **Documentation only.** Updated whitepaper, SKILL.md (ClawHub spec compliance), audit.md, design.md, readme. No code changes. |
+| 3.2.4 | **Audit remediation.** Metadata fetch timeout (10s AbortController in `fetchWithFallback`). Explicit slippage validation (throws on out-of-range instead of silent clamping). IDL-derived LoanPosition discriminator (replaces hardcoded bytes). All 3 low-severity audit findings resolved. |

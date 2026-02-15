@@ -53,7 +53,10 @@ const buildBuyTransactionInternal = async (connection, mintStr, buyerStr, amount
     const solAmount = BigInt(amount_sol);
     const result = (0, program_1.calculateTokensOut)(solAmount, virtualSol, virtualTokens, realSol);
     // Apply slippage
-    const slippage = Math.max(10, Math.min(1000, slippage_bps));
+    if (slippage_bps < 10 || slippage_bps > 1000) {
+        throw new Error(`slippage_bps must be between 10 (0.1%) and 1000 (10%), got ${slippage_bps}`);
+    }
+    const slippage = slippage_bps;
     const minTokens = (result.tokensToUser * BigInt(10000 - slippage)) / BigInt(10000);
     // Derive PDAs
     const [bondingCurvePda] = (0, program_1.getBondingCurvePda)(mint);
@@ -187,7 +190,10 @@ const buildSellTransaction = async (connection, params) => {
     const tokenAmount = BigInt(amount_tokens);
     const result = (0, program_1.calculateSolOut)(tokenAmount, virtualSol, virtualTokens);
     // Apply slippage
-    const slippage = Math.max(10, Math.min(1000, slippage_bps));
+    if (slippage_bps < 10 || slippage_bps > 1000) {
+        throw new Error(`slippage_bps must be between 10 (0.1%) and 1000 (10%), got ${slippage_bps}`);
+    }
+    const slippage = slippage_bps;
     const minSol = (result.solToUser * BigInt(10000 - slippage)) / BigInt(10000);
     // Derive PDAs
     const [bondingCurvePda] = (0, program_1.getBondingCurvePda)(mint);

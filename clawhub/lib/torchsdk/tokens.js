@@ -412,7 +412,9 @@ const getLendingInfo = async (connection, mintStr) => {
     let totalSolLent = 0;
     const warnings = [];
     try {
-        const loanDiscriminator = Buffer.from([45, 172, 28, 194, 82, 206, 243, 190]);
+        // Derive discriminator from IDL rather than hardcoding
+        const coder = new anchor_1.BorshCoder(torch_market_json_1.default);
+        const loanDiscriminator = coder.accounts.accountDiscriminator('LoanPosition');
         const accounts = await connection.getProgramAccounts(constants_1.PROGRAM_ID, {
             filters: [
                 { memcmp: { offset: 0, bytes: loanDiscriminator.toString('base64') } },

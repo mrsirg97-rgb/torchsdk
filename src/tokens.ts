@@ -536,7 +536,9 @@ export const getLendingInfo = async (
   const warnings: string[] = []
 
   try {
-    const loanDiscriminator = Buffer.from([45, 172, 28, 194, 82, 206, 243, 190])
+    // Derive discriminator from IDL rather than hardcoding
+    const coder = new BorshCoder(idl as Idl)
+    const loanDiscriminator = coder.accounts.accountDiscriminator('LoanPosition')
     const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
       filters: [
         { memcmp: { offset: 0, bytes: loanDiscriminator.toString('base64') } },

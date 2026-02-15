@@ -14,7 +14,17 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 ## Versioning
 
-SDK version tracks the on-chain program IDL version. v3.2.3 is documentation-only (whitepaper, audit, ClawHub spec compliance). No code changes from v3.2.0.
+SDK version tracks the on-chain program IDL version.
+
+### v3.2.4
+
+- **Metadata fetch timeout** — `fetchWithFallback` now enforces a 10s timeout via AbortController (prevents DoS from slow creator-controlled metadata URIs)
+- **Explicit slippage validation** — `slippage_bps` outside 10–1000 now throws instead of silently clamping
+- **IDL-derived discriminator** — LoanPosition discriminator derived from Anchor IDL instead of hardcoded bytes
+
+### v3.2.3
+
+Documentation-only (whitepaper, audit, ClawHub spec compliance). No code changes from v3.2.0.
 
 ## What's New in v3.2.0
 

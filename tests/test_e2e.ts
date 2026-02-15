@@ -990,6 +990,10 @@ const main = async () => {
 
         const SLOTS_8_DAYS = Math.floor((8 * 24 * 60 * 60 * 1000) / 400)
 
+        // Fund protocol treasury so rewards are distributable
+        const airdropSig = await connection.requestAirdrop(protocolTreasuryPda, 1500 * LAMPORTS_PER_SOL)
+        await connection.confirmTransaction(airdropSig)
+
         // Step 1: Time travel + advance protocol epoch (moves trades to "previous")
         let slot = await connection.getSlot()
         await fetch('http://127.0.0.1:8899', {

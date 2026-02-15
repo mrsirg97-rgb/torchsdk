@@ -1,31 +1,44 @@
 ---
 name: torch-market
-version: "4.2.8"
+version: "4.2.9"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
 requires:
   env:
-    - SOLANA_RPC_URL
+    - name: SOLANA_RPC_URL
+      description: "Solana RPC endpoint (HTTPS)"
+      sensitive: false
+      required: true
+    - name: SOLANA_PRIVATE_KEY
+      description: "Disposable controller keypair (base58 or byte array). Optional -- only needed for direct signing. Fresh keypair with ~0.01 SOL for gas. Holds no value."
+      sensitive: true
+      required: false
 metadata:
   clawdbot:
     requires:
       env:
-        - SOLANA_RPC_URL
+        - name: SOLANA_RPC_URL
+          required: true
+        - name: SOLANA_PRIVATE_KEY
+          required: false
     primaryEnv: SOLANA_RPC_URL
   openclaw:
     requires:
       env:
-        - SOLANA_RPC_URL
+        - name: SOLANA_RPC_URL
+          required: true
+        - name: SOLANA_PRIVATE_KEY
+          required: false
     primaryEnv: SOLANA_RPC_URL
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.2.3
+        package: torchsdk@^3.2.4
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.2.8"
+  version: "4.2.9"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -175,7 +188,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.2.3), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.2.4), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -288,8 +301,10 @@ SDK source: [github.com/mrsirg97-rgb/torchsdk](https://github.com/mrsirg97-rgb/t
 For a full local experience, use [Surfpool](https://surfpool.run) to run a local Solana validator with a forked copy of the Torch Market program. Surfpool clones mainnet accounts and programs on demand -- no full chain download needed.
 
 ```bash
-# Install Surfpool
-curl -sSf https://install.surfpool.run | sh
+# Install Surfpool (see https://surfpool.run for other installation methods)
+curl -sSf https://install.surfpool.run -o install-surfpool.sh
+less install-surfpool.sh   # inspect before running
+sh install-surfpool.sh
 
 # Start a local validator forking the Torch Market program from mainnet
 surfpool start --clone-program 8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT

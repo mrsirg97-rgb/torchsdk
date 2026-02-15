@@ -122,7 +122,10 @@ const buildBuyTransactionInternal = async (
   const result = calculateTokensOut(solAmount, virtualSol, virtualTokens, realSol)
 
   // Apply slippage
-  const slippage = Math.max(10, Math.min(1000, slippage_bps))
+  if (slippage_bps < 10 || slippage_bps > 1000) {
+    throw new Error(`slippage_bps must be between 10 (0.1%) and 1000 (10%), got ${slippage_bps}`)
+  }
+  const slippage = slippage_bps
   const minTokens = (result.tokensToUser * BigInt(10000 - slippage)) / BigInt(10000)
 
   // Derive PDAs
@@ -313,7 +316,10 @@ export const buildSellTransaction = async (
   const result = calculateSolOut(tokenAmount, virtualSol, virtualTokens)
 
   // Apply slippage
-  const slippage = Math.max(10, Math.min(1000, slippage_bps))
+  if (slippage_bps < 10 || slippage_bps > 1000) {
+    throw new Error(`slippage_bps must be between 10 (0.1%) and 1000 (10%), got ${slippage_bps}`)
+  }
+  const slippage = slippage_bps
   const minSol = (result.solToUser * BigInt(10000 - slippage)) / BigInt(10000)
 
   // Derive PDAs
