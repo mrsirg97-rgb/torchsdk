@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.2.7"
+version: "4.2.8"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -25,7 +25,7 @@ metadata:
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.2.7"
+  version: "4.2.8"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -498,6 +498,10 @@ Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 tra
 | Supply Floor | 500M tokens |
 | Vanity Suffix | All token addresses end in `tm` |
 
+### Formal Verification
+
+Core arithmetic (fees, bonding curve, lending, rewards, buyback) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 20 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
+
 ### SAID Protocol
 
 SAID (Solana Agent Identity) tracks your on-chain reputation. `verifySaid(wallet)` returns trust tier and verified status. `confirmTransaction(connection, signature, wallet)` reports activity for reputation accrual (+15 launch, +5 trade, +10 vote).
@@ -539,6 +543,7 @@ SAID (Solana Agent Identity) tracks your on-chain reputation. `verifySaid(wallet
 - Examples: [github.com/mrsirg97-rgb/torchsdk-examples](https://github.com/mrsirg97-rgb/torchsdk-examples)
 - Whitepaper: [torch.market/whitepaper.md](https://torch.market/whitepaper.md)
 - Security Audit: [torch.market/audit.md](https://torch.market/audit.md)
+- Formal Verification: [VERIFICATION.md](https://torch.market/verification.md) -- Kani proofs for core arithmetic (20 harnesses, all passing)
 - ClawHub: [clawhub.ai/mrsirg97-rgb/torchmarket](https://clawhub.ai/mrsirg97-rgb/torchmarket)
 - Website: [torch.market](https://torch.market)
 - Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`
