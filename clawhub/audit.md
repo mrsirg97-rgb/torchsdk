@@ -2,8 +2,8 @@
 
 **Audit Date:** February 14, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.3.0
-**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.3.0)
+**SDK Version:** 3.4.0
+**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.4.0)
 **Language:** TypeScript
 **Test Result:** 32 passed, 0 failed (Surfpool mainnet fork)
 
@@ -139,9 +139,10 @@ SDK implementation (program.ts:243-299) was compared step-by-step against on-cha
 | Protocol fee | `solAmount * 100n / 10000n` | `sol_amount * protocol_fee_bps / 10000` | YES |
 | Treasury fee | `solAmount * 100n / 10000n` | `sol_amount * TREASURY_FEE_BPS / 10000` | YES |
 | Sol after fees | `solAmount - protocolFee - treasuryFee` | `sol_amount - protocol_fee_total - token_treasury_fee` | YES |
-| Dynamic rate range | `BigInt(2000 - 500)` = 1500 | `(TREASURY_SOL_MAX_BPS - TREASURY_SOL_MIN_BPS)` = 1500 | YES |
-| Decay | `realSolReserves * rateRange / BONDING_TARGET` | `reserves * rate_range / target` | YES |
-| Rate floor | `Math.max(2000 - decay, 500)` | `rate.max(TREASURY_SOL_MIN_BPS)` | YES |
+| Dynamic rate bounds | `treasuryRateBounds(bondingTarget)` → per-tier (max, min) | `treasury_rate_bounds(bonding_target)` → per-tier (max, min) | YES |
+| Dynamic rate range | `BigInt(bounds.max - bounds.min)` | `(max_bps - min_bps)` | YES |
+| Decay | `realSolReserves * rateRange / resolvedTarget` | `reserves * rate_range / target` | YES |
+| Rate floor | `Math.max(bounds.max - decay, bounds.min)` | `rate.max(min_bps)` | YES |
 | Sol to treasury | `solAfterFees * treasuryRateBps / 10000` | `sol_after_fees * treasury_rate_bps / 10000` | YES |
 | Sol to curve | `solAfterFees - solToTreasurySplit` | `sol_after_fees - sol_to_treasury_split` | YES |
 | Tokens out | `virtualTokens * solToCurve / (virtualSol + solToCurve)` | `virtual_token_reserves * sol_to_curve / (virtual_sol_reserves + sol_to_curve)` | YES |
@@ -412,7 +413,7 @@ All transactions call `finalizeTransaction()` which fetches `getLatestBlockhash(
 
 ## Conclusion
 
-The Torch SDK v3.3.0 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.3.0 program. Key findings:
+The Torch SDK v3.4.0 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.4.0 program. Key findings:
 
 1. **PDA derivation is correct** — all 11 Torch PDAs and 5 Raydium PDAs match the on-chain seeds exactly.
 2. **Quote math is correct** — BigInt arithmetic matches the on-chain Rust `checked_mul`/`checked_div` behavior, including the dynamic treasury rate, 90/10 token split, and constant product formula.
@@ -422,6 +423,7 @@ The Torch SDK v3.3.0 is a well-structured, minimal-surface TypeScript library th
 6. **All low-severity findings resolved** — metadata fetch timeout added, slippage validation made explicit, discriminator derived from IDL. 6 informational issues remain (by design or non-critical).
 7. **V3.2.1 on-chain security fix verified** — `harvest_fees` `treasury_token_account` constrained to treasury's exact ATA via Anchor `associated_token` constraints. Independent human auditor gave green flag.
 8. **V3.3.0 tiered bonding** — new `sol_target` parameter on `buildCreateTokenTransaction` correctly passes through to on-chain `CreateTokenArgs`. Kani proofs updated and verified for all tiers (20/20 passing).
+9. **V3.4.0 tiered fees** — `calculateTokensOut` now accepts `bondingTarget` parameter. `treasuryRateBounds()` maps bonding target to per-tier (max, min) fee bounds: Spark 5%→1%, Flame 10%→2%, Torch 20%→5%. Both SDK and on-chain derive fee tier from `bonding_target` — zero new state. Legacy tokens (bonding_target=0) map to Torch bounds. Callers (`getBuyQuote`, `buildBuyTransaction`) pass `bonding_target` from on-chain state. Kani proof harnesses updated to use `treasury_rate_bounds()` and assert per-tier bounds — 20/20 passing. No re-audit warranted: change is a constant swap (3 lines on-chain, lookup table in SDK), no new instructions/state/accounts, formally verified.
 
 The SDK is safe for production use by AI agents and applications interacting with the Torch Market protocol.
 
@@ -429,9 +431,9 @@ The SDK is safe for production use by AI agents and applications interacting wit
 
 ## Audit Certification
 
-This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork of the live program. Independent human security auditor verified the on-chain program and frontend.
+This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure — per-tier treasury SOL rate bounds derived from bonding_target). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork of the live program. Independent human security auditor verified the on-chain program and frontend.
 
 **Auditor:** Claude Opus 4.6
-**Date:** 2026-02-15
-**SDK Version:** 3.3.0
-**On-Chain Version:** V3.3.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
+**Date:** 2026-02-16
+**SDK Version:** 3.4.0
+**On-Chain Version:** V3.4.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)

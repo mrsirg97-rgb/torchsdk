@@ -117,9 +117,10 @@ const buildBuyTransactionInternal = async (
   const virtualSol = BigInt(bondingCurve.virtual_sol_reserves.toString())
   const virtualTokens = BigInt(bondingCurve.virtual_token_reserves.toString())
   const realSol = BigInt(bondingCurve.real_sol_reserves.toString())
+  const bondingTarget = BigInt(bondingCurve.bonding_target.toString())
   const solAmount = BigInt(amount_sol)
 
-  const result = calculateTokensOut(solAmount, virtualSol, virtualTokens, realSol)
+  const result = calculateTokensOut(solAmount, virtualSol, virtualTokens, realSol, 100, 100, bondingTarget)
 
   // Apply slippage
   if (slippage_bps < 10 || slippage_bps > 1000) {

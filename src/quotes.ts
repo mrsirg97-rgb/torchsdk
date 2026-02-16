@@ -34,9 +34,10 @@ export const getBuyQuote = async (
   const virtualSol = BigInt(bondingCurve.virtual_sol_reserves.toString())
   const virtualTokens = BigInt(bondingCurve.virtual_token_reserves.toString())
   const realSol = BigInt(bondingCurve.real_sol_reserves.toString())
+  const bondingTarget = BigInt(bondingCurve.bonding_target.toString())
   const amountSol = BigInt(amountSolLamports)
 
-  const result = calculateTokensOut(amountSol, virtualSol, virtualTokens, realSol)
+  const result = calculateTokensOut(amountSol, virtualSol, virtualTokens, realSol, 100, 100, bondingTarget)
 
   const priceBefore = calculatePrice(virtualSol, virtualTokens)
   const priceAfter = calculatePrice(
