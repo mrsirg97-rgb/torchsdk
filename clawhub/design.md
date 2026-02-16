@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.2.4.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.3.0.
 
 ## Overview
 
@@ -219,7 +219,7 @@ CREATE → BONDING → COMPLETE → MIGRATE → DEX TRADING
    └── star token (appreciation signal, 0.05 SOL)
 ```
 
-### Bonding Phase (0–200 SOL)
+### Bonding Phase (0–target SOL, per tier: 50/100/200)
 
 - `buildBuyTransaction` — buy tokens on the bonding curve
 - `buildSellTransaction` — sell tokens back to the curve
@@ -382,7 +382,7 @@ The SDK includes a comprehensive end-to-end test that runs against a Surfpool ma
 | Star | Sybil-resistant appreciation signal |
 | Messages | Trade-bundled SPL Memo retrieval |
 | Confirm | SAID Protocol transaction confirmation |
-| Full Lifecycle | Bond to 200 SOL → migrate to Raydium → borrow → repay |
+| Full Lifecycle | Bond to graduation (50/100/200 SOL tier) → migrate to Raydium → borrow → repay |
 | Vault Swap Buy | Vault-routed Raydium buy (SOL → tokens via DEX) |
 | Vault Swap Sell | Vault-routed Raydium sell (tokens → SOL via DEX) |
 | Withdraw Tokens | Authority withdraws tokens from vault ATA |
@@ -403,3 +403,4 @@ Expected result: **32 passed, 0 failed**
 | 3.2.0 | **Platform treasury merge.** Removed `buildClaimEpochRewardsTransaction` (platform treasury eliminated). Protocol treasury is now the single reward system — funded by trading fees and reclaims. New `buildClaimProtocolRewardsTransaction` for vault-routed epoch reward claims. IDL updated to v3.2.0 (25 instructions). Reclaim SOL now routes to protocol treasury. Buy/Sell no longer accept platform_treasury account. 32 tests. |
 | 3.2.3 | **Documentation only.** Updated whitepaper, SKILL.md (ClawHub spec compliance), audit.md, design.md, readme. No code changes. |
 | 3.2.4 | **Audit remediation.** Metadata fetch timeout (10s AbortController in `fetchWithFallback`). Explicit slippage validation (throws on out-of-range instead of silent clamping). IDL-derived LoanPosition discriminator (replaces hardcoded bytes). All 3 low-severity audit findings resolved. |
+| 3.3.0 | **Tiered Bonding Curves (V23).** New optional `sol_target` parameter on `buildCreateTokenTransaction`: Spark (50 SOL, ~7x), Flame (100 SOL, ~19x), Torch (200 SOL, ~59x, default). Same formula, different graduation points. On-chain: `harvest_fees` hardened (V3.2.1 security fix — constrained treasury ATA destination). Raydium pool validation confirmed by independent auditor. Kani proofs updated for all tiers (20/20 passing). IDL updated to v3.3.0. |

@@ -2,8 +2,8 @@
 
 **Audit Date:** February 14, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.2.4
-**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.2.0)
+**SDK Version:** 3.3.0
+**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.3.0)
 **Language:** TypeScript
 **Test Result:** 32 passed, 0 failed (Surfpool mainnet fork)
 
@@ -412,7 +412,7 @@ All transactions call `finalizeTransaction()` which fetches `getLatestBlockhash(
 
 ## Conclusion
 
-The Torch SDK v3.2.4 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.2.0 program. Key findings:
+The Torch SDK v3.3.0 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.3.0 program. Key findings:
 
 1. **PDA derivation is correct** — all 11 Torch PDAs and 5 Raydium PDAs match the on-chain seeds exactly.
 2. **Quote math is correct** — BigInt arithmetic matches the on-chain Rust `checked_mul`/`checked_div` behavior, including the dynamic treasury rate, 90/10 token split, and constant product formula.
@@ -420,6 +420,8 @@ The Torch SDK v3.2.4 is a well-structured, minimal-surface TypeScript library th
 4. **No key custody** — the SDK never touches private keys. All transactions are returned unsigned.
 5. **Minimal dependency surface** — 4 runtime deps, all standard Solana ecosystem.
 6. **All low-severity findings resolved** — metadata fetch timeout added, slippage validation made explicit, discriminator derived from IDL. 6 informational issues remain (by design or non-critical).
+7. **V3.2.1 on-chain security fix verified** — `harvest_fees` `treasury_token_account` constrained to treasury's exact ATA via Anchor `associated_token` constraints. Independent human auditor gave green flag.
+8. **V3.3.0 tiered bonding** — new `sol_target` parameter on `buildCreateTokenTransaction` correctly passes through to on-chain `CreateTokenArgs`. Kani proofs updated and verified for all tiers (20/20 passing).
 
 The SDK is safe for production use by AI agents and applications interacting with the Torch Market protocol.
 
@@ -427,9 +429,9 @@ The SDK is safe for production use by AI agents and applications interacting wit
 
 ## Audit Certification
 
-This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork of the live program.
+This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork of the live program. Independent human security auditor verified the on-chain program and frontend.
 
 **Auditor:** Claude Opus 4.6
-**Date:** 2026-02-14
-**SDK Version:** 3.2.4
-**On-Chain Version:** V3.2.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
+**Date:** 2026-02-15
+**SDK Version:** 3.3.0
+**On-Chain Version:** V3.3.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)

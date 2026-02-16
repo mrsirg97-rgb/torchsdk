@@ -16,6 +16,13 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.3.0
+
+- **Tiered Bonding Curves (V23)** — Creators choose a graduation target at token creation: Spark (50 SOL), Flame (100 SOL), or Torch (200 SOL, default). Same formula, same virtual reserves, different graduation points. New optional `sol_target` parameter on `buildCreateTokenTransaction`.
+- **Security: `harvest_fees` hardened (V3.2.1)** — Fixed critical vulnerability where `treasury_token_account` was unconstrained. Added Anchor `associated_token` constraints. Independent auditor verified the fix.
+- **Raydium pool validation confirmed** — Oracle manipulation report reviewed and dismissed; `validate_pool_accounts()` already validates pool ownership, vaults, and mints. Auditor gave green flag.
+- **Kani proofs updated** — Treasury rate proofs now formally verify for all tier targets (50/100/200 SOL). 20/20 harnesses passing.
+
 ### v3.2.4
 
 - **Metadata fetch timeout** — `fetchWithFallback` now enforces a 10s timeout via AbortController (prevents DoS from slow creator-controlled metadata URIs)
@@ -246,7 +253,8 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 }
 
 // Create Token
-{ creator: string, name: string, symbol: string, metadata_uri: string }
+{ creator: string, name: string, symbol: string, metadata_uri: string, sol_target?: number }
+// sol_target: 50_000_000_000 (Spark), 100_000_000_000 (Flame), 200_000_000_000 (Torch, default)
 
 // Star
 { mint: string, user: string }
@@ -299,7 +307,7 @@ npx tsx tests/test_e2e.ts
 
 Expected output: `RESULTS: 32 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to 200 SOL, Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
 
 ## License
 

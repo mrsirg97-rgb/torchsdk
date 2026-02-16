@@ -52,6 +52,7 @@ export interface BondingCurve {
   bump: number
   // [V13] burn_vault_bump removed - treasury ATA now holds vote vault tokens
   treasury_bump: number
+  bonding_target: BN // [V23] Per-token graduation target in lamports (0 = 200 SOL default)
   // V6: Migration timelock
   migration_announced_slot: BN
   pending_token_destination: PublicKey

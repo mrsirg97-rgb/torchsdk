@@ -231,6 +231,8 @@ export interface CreateTokenParams {
   name: string
   symbol: string
   metadata_uri: string
+  /** [V23] Bonding target in lamports. 0 or omitted = default 200 SOL. */
+  sol_target?: number
 }
 
 export interface StarParams {

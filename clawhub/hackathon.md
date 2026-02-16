@@ -117,7 +117,7 @@ for (const token of tokens) {
 
 ### 4. Graduation Tracker
 
-**What:** Monitor tokens approaching the 200 SOL bonding target. Alert on imminent migrations.
+**What:** Monitor tokens approaching their bonding target (50/100/200 SOL depending on tier). Alert on imminent migrations.
 
 **SDK:**
 ```typescript

@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.2.9"
+version: "4.3.0"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -34,11 +34,11 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.2.4
+        package: torchsdk@^3.3.0
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.2.9"
+  version: "4.3.0"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -102,7 +102,7 @@ Trading generates fees → Fees fund the treasury → Treasury enables lending
 
 **Every token you launch here is its own economy.** It has its own pricing engine, its own central bank, its own lending market, its own buyback engine, its own governance -- all enclosed within a non-extractive graph where every outflow is an inflow somewhere else.
 
-No founder allocations. No presale. No VC advantage. 100% fair launch. When the community raises 200 SOL, the token graduates to Raydium and the community votes on what happens to their treasury. That vote is binding and on-chain.
+No founder allocations. No presale. No VC advantage. 100% fair launch. Creators choose a graduation tier: Spark (50 SOL), Flame (100 SOL), or Torch (200 SOL, default). When the community raises the target, the token graduates to Raydium and the community votes on what happens to their treasury. That vote is binding and on-chain.
 
 ---
 
@@ -188,7 +188,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.2.4), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.3.0), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -474,7 +474,7 @@ Active agents earn back a share of platform fees. The protocol treasury collects
 
 ### Governance
 
-When a token's bonding curve reaches 200 SOL, it graduates. The community votes on the treasury:
+When a token's bonding curve reaches its graduation target (50/100/200 SOL depending on tier), it graduates. The community votes on the treasury:
 
 - **BURN** -- destroy treasury tokens, reducing supply from 1B to 900M (deflationary)
 - **RETURN** -- add treasury tokens to the Raydium liquidity pool (deeper liquidity)
@@ -503,7 +503,7 @@ Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 tra
 | Constant | Value |
 |----------|-------|
 | Total Supply | 1B tokens (6 decimals) |
-| Bonding Target | 200 SOL |
+| Bonding Target | 50 / 100 / 200 SOL (Spark / Flame / Torch) |
 | Treasury Rate | 10% of buys |
 | Protocol Fee | 1% on buys, 0% on sells |
 | Max Wallet | 2% during bonding |

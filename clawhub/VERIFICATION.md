@@ -29,9 +29,9 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 |---------|----------|-------------|
 | `verify_buy_fee_conservation` | `protocol_fee + treasury_fee + after_fees == sol_amount` | 0.001-200 SOL |
 | `verify_protocol_fee_split` | `dev_share + protocol_portion == protocol_fee_total` | 0.001-200 SOL |
-| `verify_treasury_rate_bounds` | `rate in [TREASURY_SOL_MIN_BPS, TREASURY_SOL_MAX_BPS]` (5-20%) | 0-200 SOL reserves |
-| `verify_treasury_rate_monotonic` | More reserves -> lower treasury rate | 0-200 SOL (two symbolic) |
-| `verify_sol_distribution_conservation` | `curve + treasury + dev + protocol == sol_amount` (zero SOL created or lost) | 0.001-10 SOL per trade, 0-200 SOL reserves |
+| `verify_treasury_rate_bounds` | `rate in [TREASURY_SOL_MIN_BPS, TREASURY_SOL_MAX_BPS]` (5-20%) | 0-target SOL reserves, all tiers (50/100/200) |
+| `verify_treasury_rate_monotonic` | More reserves -> lower treasury rate (per tier) | 0-target SOL (two symbolic), all tiers (50/100/200) |
+| `verify_sol_distribution_conservation` | `curve + treasury + dev + protocol == sol_amount` (zero SOL created or lost) | 0.001-10 SOL per trade, 0-target SOL reserves, all tiers (50/100/200) |
 | `verify_curve_tokens_bounded` | `tokens_out < virtual_token_reserves` (can't mint from thin air) | Full pool state space |
 | `verify_token_split_conservation` | `tokens_to_buyer + tokens_to_treasury == tokens_out` | 0 to TOTAL_SUPPLY |
 
@@ -85,7 +85,8 @@ A passing harness means: "there exists no input in the constrained range that vi
 
 Each harness constrains symbolic inputs to realistic protocol bounds:
 
-- **SOL amounts:** `MIN_SOL_AMOUNT` (0.001 SOL) to `BONDING_TARGET_LAMPORTS` (200 SOL)
+- **SOL amounts:** `MIN_SOL_AMOUNT` (0.001 SOL) to `BONDING_TARGET_LAMPORTS` (200 SOL max)
+- **Bonding tiers:** Treasury rate proofs verify for all valid targets: Spark (50 SOL), Flame (100 SOL), Torch (200 SOL)
 - **Token amounts:** Up to `TOTAL_SUPPLY` (1 billion tokens, 6 decimals)
 - **Pool reserves:** `INITIAL_VIRTUAL_SOL` (30 SOL) to `INITIAL_VIRTUAL_SOL + BONDING_TARGET_LAMPORTS` (230 SOL)
 - **Token reserves:** Up to `INITIAL_VIRTUAL_TOKENS` (107.3 trillion raw units)
@@ -153,7 +154,10 @@ All 20 harnesses complete in under 60 seconds each (total suite: ~90 seconds on 
 |----------|-------|-------------|
 | `TOTAL_SUPPLY` | 1,000,000,000,000,000 | 1 billion tokens (6 decimals) |
 | `SUPPLY_FLOOR` | 500,000,000,000,000 | 500M tokens -- buyback burn floor |
-| `BONDING_TARGET_LAMPORTS` | 200,000,000,000 | 200 SOL bonding target |
+| `BONDING_TARGET_LAMPORTS` | 200,000,000,000 | 200 SOL default bonding target |
+| `BONDING_TARGET_SPARK` | 50,000,000,000 | 50 SOL (Spark tier) |
+| `BONDING_TARGET_FLAME` | 100,000,000,000 | 100 SOL (Flame tier) |
+| `BONDING_TARGET_TORCH` | 200,000,000,000 | 200 SOL (Torch tier, default) |
 | `INITIAL_VIRTUAL_SOL` | 30,000,000,000 | 30 SOL initial virtual reserves |
 | `INITIAL_VIRTUAL_TOKENS` | 107,300,000,000,000 | Initial virtual token reserves |
 | `PROTOCOL_FEE_BPS` | 100 | 1% protocol fee |

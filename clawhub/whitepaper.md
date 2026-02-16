@@ -84,11 +84,11 @@ User spends 1 SOL
                                 └── 10% → Community Treasury (vote vault)
 ```
 
-> **Dynamic Treasury Rate**: The treasury SOL split uses inverse decay based on bonding progress. Early buyers contribute more to treasury (stronger early funding), late buyers get more tokens per SOL.
+> **Dynamic Treasury Rate**: The treasury SOL split uses inverse decay based on bonding progress. Early buyers contribute more to treasury (stronger early funding), late buyers get more tokens per SOL. The rate scales by the per-token bonding target (Spark 50, Flame 100, Torch 200 SOL).
 >
-> | 0 SOL | 100 SOL | 200 SOL |
-> |-------|---------|---------|
-> | 20%   | 12.5%   | 5%      |
+> | 0 SOL | 50% of target | 100% of target |
+> |-------|---------------|----------------|
+> | 20%   | 12.5%         | 5%             |
 
 This creates a different mindset to how newly minted tokens are created. Users are not just paying into themselves, but paying into the long term growth of their communities.
 
@@ -108,7 +108,7 @@ The token treasury creates a positive-sum dynamic where every participant's acti
 
 Each user casts a vote prelaunch to determine what happens to 10% of their tokens.
 
-Once a token reaches the 200 SOL funding needed to migrate its pool to Raydium, a 24-hour voting period begins. The community votes to decide what happens to the tokens held in the community treasury (vote vault). The voters can decide to:
+Once a token reaches its bonding target (50, 100, or 200 SOL depending on tier), the community votes to decide what happens to the tokens held in the community treasury (vote vault). The voters can decide to:
 
 - **Burn**: Destroy the tokens forever, reducing total supply from 1B to 900M
 - **Return to LP**: Add the tokens back to the migrated DEX pool for deeper liquidity
@@ -141,7 +141,7 @@ New buyers may also be more likely to purchase a token seeing that it is "safer"
 
 The token treasury pays the migration fee to DEX.
 
-One of the main issues with current launchpads is that somebody has to pay the migration fee for the token to be migrated to a decentralized exchange. Because the treasury wallet is fully funded by the time the token bonds at 200 SOL, it is given the authority to pay the Raydium pool creation fee (0.15 SOL).
+One of the main issues with current launchpads is that somebody has to pay the migration fee for the token to be migrated to a decentralized exchange. Because the treasury wallet is fully funded by the time the token bonds at its target (50/100/200 SOL), it is given the authority to pay the Raydium pool creation fee (0.15 SOL).
 
 This automatic process is funded by the early community as a whole. When your token bonds, the protocol handles everything else:
 
@@ -271,11 +271,11 @@ Not every token succeeds. `torch.market` has mechanisms to handle failed tokens 
 
 ### Reclaim: Cleaning Up Failed Tokens
 
-If a token fails to reach its 200 SOL bonding target and becomes inactive for *7 days*, anyone can trigger a reclaim:
+If a token fails to reach its bonding target (50/100/200 SOL depending on tier) and becomes inactive for *7 days*, anyone can trigger a reclaim:
 
 ```
 Conditions for reclaim:
-  ✓ Bonding not complete (< 200 SOL raised)
+  ✓ Bonding not complete (target not reached)
   ✓ No trading activity for 7+ days
   ✓ At least 0.01 SOL in reserves (not dust)
 ```
@@ -433,7 +433,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 |-----------|-------|-------------|
 | Total Supply | 1,000,000,000 | Initial token supply (6 decimals) |
 | Max Wallet | 2% (20,000,000) | Maximum tokens per wallet during bonding |
-| Bonding Target | 200 SOL | SOL needed to complete bonding curve |
+| Bonding Target | 50 / 100 / 200 SOL | Spark / Flame / Torch tier (creator chooses at launch) |
 | Community Treasury | 10% | Portion of bought tokens to vote vault |
 | Treasury SOL Share | 20%→5% | Dynamic: decays as bonding progresses |
 | Token Treasury Fee | 1% | Fee on all buys (lifetime) |

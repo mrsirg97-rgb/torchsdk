@@ -435,7 +435,7 @@ export const buildCreateTokenTransaction = async (
   connection: Connection,
   params: CreateTokenParams,
 ): Promise<CreateTokenResult> => {
-  const { creator: creatorStr, name, symbol, metadata_uri } = params
+  const { creator: creatorStr, name, symbol, metadata_uri, sol_target = 0 } = params
 
   const creator = new PublicKey(creatorStr)
 
@@ -471,7 +471,7 @@ export const buildCreateTokenTransaction = async (
   const program = new Program(idl as unknown, provider)
 
   const createIx = await program.methods
-    .createToken({ name, symbol, uri: metadata_uri })
+    .createToken({ name, symbol, uri: metadata_uri, solTarget: new BN(sol_target) })
     .accounts({
       creator,
       globalConfig,

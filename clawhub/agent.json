@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.2.9",
+  "version": "4.3.0",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -33,7 +33,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.2.4",
+        "package": "torchsdk@^3.3.0",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
@@ -141,7 +141,7 @@
     },
     {
       "name": "TORCH_CREATE_TOKEN",
-      "description": "Launch a new community with bonding curve, treasury, and governance vote"
+      "description": "Launch a new community with bonding curve, treasury, and governance vote. Optional sol_target selects tier: Spark (50 SOL), Flame (100 SOL), or Torch (200 SOL, default)"
     },
     {
       "name": "TORCH_GET_MESSAGES",
@@ -186,7 +186,12 @@
   ],
   "constants": {
     "total_supply": "1000000000",
-    "bonding_target_sol": 200,
+    "bonding_target_sol_default": 200,
+    "bonding_tiers": {
+      "spark": 50,
+      "flame": 100,
+      "torch": 200
+    },
     "treasury_rate_percent": 10,
     "protocol_fee_percent": 1,
     "max_wallet_percent": 2,
