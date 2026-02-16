@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRaydiumMigrationAccounts = exports.getRaydiumObservationPda = exports.getRaydiumVaultPda = exports.getRaydiumLpMintPda = exports.getRaydiumPoolStatePda = exports.getRaydiumAuthorityPda = exports.orderTokensForRaydium = exports.calculateBondingProgress = exports.calculatePrice = exports.calculateSolOut = exports.calculateTokensOut = exports.getProgram = exports.getVaultWalletLinkPda = exports.getTorchVaultPda = exports.getCollateralVaultPda = exports.getLoanPositionPda = exports.getStarRecordPda = exports.getUserStatsPda = exports.getProtocolTreasuryPda = exports.getTokenTreasuryPda = exports.getVoteRecordPda = exports.getUserPositionPda = exports.getTreasuryTokenAccount = exports.getBondingCurvePda = exports.getGlobalConfigPda = exports.decodeString = exports.PROGRAM_ID = void 0;
+exports.getRaydiumMigrationAccounts = exports.getRaydiumObservationPda = exports.getRaydiumVaultPda = exports.getRaydiumLpMintPda = exports.getRaydiumPoolStatePda = exports.getRaydiumAuthorityPda = exports.orderTokensForRaydium = exports.calculateBondingProgress = exports.calculatePrice = exports.calculateSolOut = exports.calculateTokensOut = exports.treasuryRateBounds = exports.getProgram = exports.getVaultWalletLinkPda = exports.getTorchVaultPda = exports.getCollateralVaultPda = exports.getLoanPositionPda = exports.getStarRecordPda = exports.getUserStatsPda = exports.getProtocolTreasuryPda = exports.getTokenTreasuryPda = exports.getVoteRecordPda = exports.getUserPositionPda = exports.getTreasuryTokenAccount = exports.getBondingCurvePda = exports.getGlobalConfigPda = exports.decodeString = exports.PROGRAM_ID = void 0;
 const anchor_1 = require("@coral-xyz/anchor");
 const web3_js_1 = require("@solana/web3.js");
 const constants_1 = require("./constants");
@@ -82,22 +82,35 @@ const getProgram = (provider) => {
     return new anchor_1.Program(torch_market_json_1.default, provider);
 };
 exports.getProgram = getProgram;
-// Calculate tokens out for a given SOL amount (V2.3: dynamic treasury rate 20%→5%)
+// [V24] Per-tier treasury SOL rate bounds
+const TREASURY_RATE_BOUNDS = {
+    '50000000000': { max: 500, min: 100 }, // Spark: 5% → 1%
+    '100000000000': { max: 1000, min: 200 }, // Flame: 10% → 2%
+    '200000000000': { max: 2000, min: 500 }, // Torch: 20% → 5%
+};
+const DEFAULT_TREASURY_BOUNDS = { max: 2000, min: 500 }; // Torch / legacy (0)
+// [V24] Returns (maxBps, minBps) for the treasury SOL rate based on bonding tier
+const treasuryRateBounds = (bondingTarget) => {
+    return TREASURY_RATE_BOUNDS[bondingTarget.toString()] ?? DEFAULT_TREASURY_BOUNDS;
+};
+exports.treasuryRateBounds = treasuryRateBounds;
+// Calculate tokens out for a given SOL amount (V2.3: dynamic treasury rate, V24: tiered)
 const calculateTokensOut = (solAmount, virtualSolReserves, virtualTokenReserves, realSolReserves = BigInt(0), // V2.3: needed for dynamic rate calculation
 protocolFeeBps = 100, // 1% protocol fee (75% protocol treasury, 25% dev)
-treasuryFeeBps = 100) => {
+treasuryFeeBps = 100, // 1% treasury fee
+bondingTarget = BigInt('200000000000')) => {
     // Calculate protocol fee (1%)
     const protocolFee = (solAmount * BigInt(protocolFeeBps)) / BigInt(10000);
     // Calculate treasury fee (1%)
     const treasuryFee = (solAmount * BigInt(treasuryFeeBps)) / BigInt(10000);
     const solAfterFees = solAmount - protocolFee - treasuryFee;
-    // V2.3: Dynamic treasury rate - decays from 20% to 5% as bonding progresses
-    const TREASURY_MAX_BPS = 2000; // 20%
-    const TREASURY_MIN_BPS = 500; // 5%
-    const BONDING_TARGET = BigInt('200000000000'); // 200 SOL in lamports
-    const rateRange = BigInt(TREASURY_MAX_BPS - TREASURY_MIN_BPS);
-    const decay = (realSolReserves * rateRange) / BONDING_TARGET;
-    const treasuryRateBps = Math.max(TREASURY_MAX_BPS - Number(decay), TREASURY_MIN_BPS);
+    // [V24] Resolve bonding target and tier fee bounds
+    const resolvedTarget = bondingTarget === BigInt(0) ? BigInt('200000000000') : bondingTarget;
+    const bounds = (0, exports.treasuryRateBounds)(resolvedTarget);
+    // V2.3: Dynamic treasury rate - decays from max to min as bonding progresses
+    const rateRange = BigInt(bounds.max - bounds.min);
+    const decay = (realSolReserves * rateRange) / resolvedTarget;
+    const treasuryRateBps = Math.max(bounds.max - Number(decay), bounds.min);
     // Split remaining SOL using dynamic rate
     const solToTreasurySplit = (solAfterFees * BigInt(treasuryRateBps)) / BigInt(10000);
     const solToCurve = solAfterFees - solToTreasurySplit;

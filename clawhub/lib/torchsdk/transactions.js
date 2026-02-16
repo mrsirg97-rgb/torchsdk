@@ -50,8 +50,9 @@ const buildBuyTransactionInternal = async (connection, mintStr, buyerStr, amount
     const virtualSol = BigInt(bondingCurve.virtual_sol_reserves.toString());
     const virtualTokens = BigInt(bondingCurve.virtual_token_reserves.toString());
     const realSol = BigInt(bondingCurve.real_sol_reserves.toString());
+    const bondingTarget = BigInt(bondingCurve.bonding_target.toString());
     const solAmount = BigInt(amount_sol);
-    const result = (0, program_1.calculateTokensOut)(solAmount, virtualSol, virtualTokens, realSol);
+    const result = (0, program_1.calculateTokensOut)(solAmount, virtualSol, virtualTokens, realSol, 100, 100, bondingTarget);
     // Apply slippage
     if (slippage_bps < 10 || slippage_bps > 1000) {
         throw new Error(`slippage_bps must be between 10 (0.1%) and 1000 (10%), got ${slippage_bps}`);
