@@ -329,15 +329,28 @@ const getMessages = async (connection, mintStr, limit = 50) => {
     const mint = new web3_js_1.PublicKey(mintStr);
     const safeLimit = Math.min(limit, 100);
     const [bondingCurvePda] = (0, program_1.getBondingCurvePda)(mint);
-    const signatures = await connection.getSignaturesForAddress(bondingCurvePda, { limit: 500 }, 'confirmed');
+    // Fetch only as many signatures as needed (keep small to avoid 429s)
+    const sigLimit = Math.min(safeLimit, 50);
+    const signatures = await connection.getSignaturesForAddress(bondingCurvePda, { limit: sigLimit }, 'confirmed');
+    if (signatures.length === 0)
+        return { messages: [], total: 0 };
     const messages = [];
-    for (const sig of signatures) {
-        if (messages.length >= safeLimit)
-            break;
+    // Batch fetch transactions (1 RPC call per batch instead of 1 per tx)
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < signatures.length && messages.length < safeLimit; i += BATCH_SIZE) {
+        const batch = signatures.slice(i, i + BATCH_SIZE);
+        const sigStrings = batch.map((s) => s.signature);
+        let txs;
         try {
-            const tx = await connection.getParsedTransaction(sig.signature, {
+            txs = await connection.getParsedTransactions(sigStrings, {
                 maxSupportedTransactionVersion: 0,
             });
+        }
+        catch {
+            continue;
+        }
+        for (let j = 0; j < txs.length && messages.length < safeLimit; j++) {
+            const tx = txs[j];
             if (!tx?.meta || tx.meta.err)
                 continue;
             for (const ix of tx.transaction.message.instructions) {
@@ -364,18 +377,15 @@ const getMessages = async (connection, mintStr, limit = 50) => {
                     if (memoText && memoText.trim()) {
                         const sender = tx.transaction.message.accountKeys[0]?.pubkey?.toString() || 'Unknown';
                         messages.push({
-                            signature: sig.signature,
+                            signature: batch[j].signature,
                             memo: memoText.trim(),
                             sender,
-                            timestamp: sig.blockTime || 0,
+                            timestamp: batch[j].blockTime || 0,
                         });
                         break;
                     }
                 }
             }
-        }
-        catch {
-            // Skip failed parsing
         }
     }
     return { messages, total: messages.length };

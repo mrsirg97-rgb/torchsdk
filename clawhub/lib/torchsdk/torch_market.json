@@ -2,7 +2,7 @@
     "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
     "metadata": {
         "name": "torch_market",
-        "version": "3.2.0",
+        "version": "3.3.0",
         "spec": "0.1.0",
         "description": "torch.market"
     },
@@ -1990,10 +1990,70 @@
                 },
                 {
                     "name": "treasury_token_account",
-                    "writable": true
+                    "docs": [
+                        "Treasury's Token-2022 ATA — must match treasury PDA's ATA for this mint"
+                    ],
+                    "writable": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "account",
+                                "path": "token_treasury"
+                            },
+                            {
+                                "kind": "account",
+                                "path": "token_2022_program"
+                            },
+                            {
+                                "kind": "account",
+                                "path": "mint"
+                            }
+                        ],
+                        "program": {
+                            "kind": "const",
+                            "value": [
+                                140,
+                                151,
+                                37,
+                                143,
+                                78,
+                                36,
+                                137,
+                                241,
+                                187,
+                                61,
+                                16,
+                                41,
+                                20,
+                                142,
+                                13,
+                                131,
+                                11,
+                                90,
+                                19,
+                                153,
+                                218,
+                                255,
+                                16,
+                                132,
+                                4,
+                                142,
+                                123,
+                                216,
+                                219,
+                                233,
+                                248,
+                                89
+                            ]
+                        }
+                    }
                 },
                 {
                     "name": "token_2022_program"
+                },
+                {
+                    "name": "associated_token_program",
+                    "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
                 }
             ],
             "args": []
@@ -5136,6 +5196,11 @@
             "code": 6058,
             "name": "InvalidWsolAccount",
             "msg": "Invalid WSOL account - must be vault's WSOL ATA"
+        },
+        {
+            "code": 6059,
+            "name": "InvalidBondingTarget",
+            "msg": "Invalid bonding target: must be 50, 100, or 200 SOL"
         }
     ],
     "types": [
@@ -5330,6 +5395,14 @@
                             "Treasury bump [V2]"
                         ],
                         "type": "u8"
+                    },
+                    {
+                        "name": "bonding_target",
+                        "docs": [
+                            "Per-token graduation target in lamports [V23]",
+                            "0 = default (200 SOL) for backwards compat with existing tokens"
+                        ],
+                        "type": "u64"
                     }
                 ]
             }
@@ -5398,6 +5471,10 @@
                     {
                         "name": "uri",
                         "type": "string"
+                    },
+                    {
+                        "name": "sol_target",
+                        "type": "u64"
                     }
                 ]
             }

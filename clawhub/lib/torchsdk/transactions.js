@@ -275,7 +275,7 @@ exports.buildSellTransaction = buildSellTransaction;
  * @returns Partially-signed transaction, mint PublicKey, and mint Keypair
  */
 const buildCreateTokenTransaction = async (connection, params) => {
-    const { creator: creatorStr, name, symbol, metadata_uri } = params;
+    const { creator: creatorStr, name, symbol, metadata_uri, sol_target = 0 } = params;
     const creator = new web3_js_1.PublicKey(creatorStr);
     if (name.length > 32)
         throw new Error('Name must be 32 characters or less');
@@ -303,7 +303,7 @@ const buildCreateTokenTransaction = async (connection, params) => {
     const provider = makeDummyProvider(connection, creator);
     const program = new anchor_1.Program(torch_market_json_1.default, provider);
     const createIx = await program.methods
-        .createToken({ name, symbol, uri: metadata_uri })
+        .createToken({ name, symbol, uri: metadata_uri, solTarget: new anchor_1.BN(sol_target) })
         .accounts({
         creator,
         globalConfig,
