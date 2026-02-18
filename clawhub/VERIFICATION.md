@@ -6,7 +6,7 @@ We used [Kani](https://model-checking.github.io/kani/), a formal verification to
 
 This is **not** a security audit. It proves the arithmetic is correct, but does not cover access control, account validation, or economic attacks. See [What Is NOT Verified](#what-is-not-verified) for full scope limitations.
 
-**20 proof harnesses. All passing. Zero failures.**
+**26 proof harnesses. All passing. Zero failures.**
 
 ---
 
@@ -15,8 +15,8 @@ This is **not** a security audit. It proves the arithmetic is correct, but does 
 torch_market's core arithmetic has been formally verified using [Kani](https://model-checking.github.io/kani/), a Rust model checker backed by the CBMC bounded model checker. Kani exhaustively proves properties hold for **all** valid inputs within constrained ranges -- not just sampled test cases.
 
 **Tool:** Kani Rust Verifier 0.67.0 / CBMC 6.8.0
-**Target:** `torch_market` v3.3.0
-**Harnesses:** 20 proof harnesses, all passing
+**Target:** `torch_market` v3.4.2
+**Harnesses:** 26 proof harnesses, all passing
 **Source:** `programs/torch_market/src/kani_proofs.rs`
 
 ## What Is Formally Verified
@@ -29,9 +29,9 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 |---------|----------|-------------|
 | `verify_buy_fee_conservation` | `protocol_fee + treasury_fee + after_fees == sol_amount` | 0.001-200 SOL |
 | `verify_protocol_fee_split` | `dev_share + protocol_portion == protocol_fee_total` | 0.001-200 SOL |
-| `verify_treasury_rate_bounds` | `rate in [TREASURY_SOL_MIN_BPS, TREASURY_SOL_MAX_BPS]` (5-20%) | 0-target SOL reserves, all tiers (50/100/200) |
-| `verify_treasury_rate_monotonic` | More reserves -> lower treasury rate (per tier) | 0-target SOL (two symbolic), all tiers (50/100/200) |
-| `verify_sol_distribution_conservation` | `curve + treasury + dev + protocol == sol_amount` (zero SOL created or lost) | 0.001-10 SOL per trade, 0-target SOL reserves, all tiers (50/100/200) |
+| `verify_treasury_rate_bounds` | `rate in [tier_min, tier_max]` per tier (Spark 1-5%, Flame 2-10%, Torch 5-20%) | 0-target SOL reserves, all 3 tiers |
+| `verify_treasury_rate_monotonic` | More reserves -> lower treasury rate (per tier) | 0-target SOL (two symbolic), all 3 tiers |
+| `verify_sol_distribution_conservation` | `curve + treasury + dev + protocol == sol_amount` (zero SOL created or lost) | 0.001-10 SOL per trade, 0-target SOL reserves, all 3 tiers |
 | `verify_curve_tokens_bounded` | `tokens_out < virtual_token_reserves` (can't mint from thin air) | Full pool state space |
 | `verify_token_split_conservation` | `tokens_to_buyer + tokens_to_treasury == tokens_out` | 0 to TOTAL_SUPPLY |
 
@@ -65,13 +65,26 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 |---------|----------|-------------|
 | `verify_user_share_bounded` | `user_share <= distributable` (no user can drain reward pool) | 500 SOL epoch, 50 SOL distributable |
 
-### Auto Buyback & Migration (Harnesses 18-20)
+### Auto Buyback (Harnesses 18-20)
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
 | `verify_ratio_fits_u64` | Pool ratio `(sol * 1e9) / tokens` fits in u64 | Up to 1000 SOL, tokens >= SUPPLY_FLOOR |
 | `verify_buyback_respects_reserve` | `buyback_amount <= available <= balance` | Up to 200 SOL, variable reserve/buyback rates |
 | `verify_double_transfer_fee_positive` | Token amount remains positive after two consecutive transfer fees | 1 token to TOTAL_SUPPLY |
+
+### Migration (Harnesses 21-26)
+
+These harnesses were added after the [price-matched migration fix](#migration-price-match-fix) to formally verify the corrected migration logic.
+
+| Harness | Property | Input Range |
+|---------|----------|-------------|
+| `verify_prepare_migration_conservation` | `bc_lamports - sol_amount == rent_exempt` (SOL withdrawal is exact) | 0 to 200 SOL reserves |
+| `verify_refund_skip_after_prepare_migration` | After prepare_migration drains BC, refund correctly evaluates to skip | 0 to 200 SOL, rent up to 10M lamports |
+| `verify_normal_refund_path` | Without prepare_migration, refund transfers exactly `sol_amount` | 0 to 200 SOL, rent up to 10M lamports |
+| `verify_price_matched_pool_spark` | Pool ratio matches curve ratio (truncation error < 1 unit) | Spark tier (50 SOL), 3 representative token values |
+| `verify_price_matched_pool_torch` | Pool ratio matches curve ratio (truncation error < 1 unit) | Torch tier (200 SOL), 3 representative token values |
+| `verify_excess_token_burn_conservation` | `pool_tokens + burned_tokens == vault_total` (no tokens created or lost) | Spark tier, vault up to TOTAL_SUPPLY |
 
 ## Verification Methodology
 
@@ -85,15 +98,20 @@ A passing harness means: "there exists no input in the constrained range that vi
 
 Each harness constrains symbolic inputs to realistic protocol bounds:
 
-- **SOL amounts:** `MIN_SOL_AMOUNT` (0.001 SOL) to `BONDING_TARGET_LAMPORTS` (200 SOL max)
-- **Bonding tiers:** Treasury rate proofs verify for all valid targets: Spark (50 SOL), Flame (100 SOL), Torch (200 SOL)
+- **SOL amounts:** `MIN_SOL_AMOUNT` (0.001 SOL) to `BONDING_TARGET_LAMPORTS` (200 SOL)
 - **Token amounts:** Up to `TOTAL_SUPPLY` (1 billion tokens, 6 decimals)
 - **Pool reserves:** `INITIAL_VIRTUAL_SOL` (30 SOL) to `INITIAL_VIRTUAL_SOL + BONDING_TARGET_LAMPORTS` (230 SOL)
 - **Token reserves:** Up to `INITIAL_VIRTUAL_TOKENS` (107.3 trillion raw units)
 - **Lending pools:** Concrete post-migration pool states (50-500 SOL, 50B-200T tokens)
 - **Interest rates:** Up to `DEFAULT_INTEREST_RATE_BPS` (2% per epoch)
 
-Some harnesses use concrete pool states instead of fully symbolic parameters. This is necessary because multiple symbolic u64 values flowing through u128 intermediate arithmetic create state spaces that exceed SAT solver tractability. The concrete values are chosen to represent realistic post-migration pool conditions.
+Some harnesses use concrete pool states instead of fully symbolic parameters. This is a deliberate constraint design choice driven by SAT solver tractability:
+
+- **Symbolic inputs** (e.g., `kani::any()`) allow Kani to prove properties for *all* values in a range. This is the strongest form of proof but creates exponentially larger SAT formulas when multiple symbolic u64 values flow through u128 intermediate arithmetic.
+- **Concrete inputs** fix specific values (e.g., `pool_sol = 100_000_000_000`), eliminating those variables from the SAT formula entirely. Properties are verified exactly at those values rather than universally.
+- **Representative concrete values** are a middle ground used for the migration price-match harnesses. Instead of a single symbolic `virtual_tokens` spanning 47 bits (which the solver cannot handle), three concrete values are tested at key pool states: bonding completion, midpoint, and maximum. This reduces solve time from intractable to sub-100ms while covering the important points.
+
+The concrete values are chosen to represent realistic protocol conditions: post-migration pool states for lending, bonding completion states for migration, and protocol-default rates for buyback.
 
 ### Dropped Harnesses (Design Rationale)
 
@@ -105,7 +123,7 @@ Seven harnesses were dropped during verification because they prove structurally
 | `verify_no_round_trip_fresh/half/full` | Round-trip loss (`buy then sell <= original`) is inherent in AMM constant-product formulas with integer truncation. Floor division always rounds down. |
 | `verify_ltv_100_percent` | `(v * 10000) / v == 10000` is a mathematical tautology. SAT solvers cannot efficiently prove symbolic u128 division cancellation. |
 
-These properties remain true by construction. The remaining 20 harnesses cover every non-tautological safety property.
+These properties remain true by construction. The remaining 26 harnesses cover every non-tautological safety property.
 
 ## What Is NOT Verified
 
@@ -146,7 +164,7 @@ cargo kani
 cargo kani --harness verify_buy_fee_conservation
 ```
 
-All 20 harnesses complete in under 60 seconds each (total suite: ~90 seconds on Apple Silicon).
+All 26 harnesses complete in under 1 second total on Apple Silicon.
 
 ## Constants Reference
 
@@ -154,16 +172,20 @@ All 20 harnesses complete in under 60 seconds each (total suite: ~90 seconds on 
 |----------|-------|-------------|
 | `TOTAL_SUPPLY` | 1,000,000,000,000,000 | 1 billion tokens (6 decimals) |
 | `SUPPLY_FLOOR` | 500,000,000,000,000 | 500M tokens -- buyback burn floor |
-| `BONDING_TARGET_LAMPORTS` | 200,000,000,000 | 200 SOL default bonding target |
-| `BONDING_TARGET_SPARK` | 50,000,000,000 | 50 SOL (Spark tier) |
-| `BONDING_TARGET_FLAME` | 100,000,000,000 | 100 SOL (Flame tier) |
-| `BONDING_TARGET_TORCH` | 200,000,000,000 | 200 SOL (Torch tier, default) |
+| `BONDING_TARGET_LAMPORTS` | 200,000,000,000 | 200 SOL bonding target (Torch default) |
+| `BONDING_TARGET_SPARK` | 50,000,000,000 | 50 SOL bonding target (Spark tier) |
+| `BONDING_TARGET_FLAME` | 100,000,000,000 | 100 SOL bonding target (Flame tier) |
+| `BONDING_TARGET_TORCH` | 200,000,000,000 | 200 SOL bonding target (Torch tier) |
 | `INITIAL_VIRTUAL_SOL` | 30,000,000,000 | 30 SOL initial virtual reserves |
 | `INITIAL_VIRTUAL_TOKENS` | 107,300,000,000,000 | Initial virtual token reserves |
 | `PROTOCOL_FEE_BPS` | 100 | 1% protocol fee |
 | `TREASURY_FEE_BPS` | 100 | 1% token treasury fee |
-| `TREASURY_SOL_MIN_BPS` | 500 | 5% min treasury SOL rate |
-| `TREASURY_SOL_MAX_BPS` | 2000 | 20% max treasury SOL rate |
+| `TREASURY_SOL_MIN_BPS` | 500 | 5% min treasury SOL rate (Torch/legacy default) |
+| `TREASURY_SOL_MAX_BPS` | 2000 | 20% max treasury SOL rate (Torch/legacy default) |
+| `TREASURY_SOL_MIN_BPS_SPARK` | 100 | 1% min treasury SOL rate (Spark tier) |
+| `TREASURY_SOL_MAX_BPS_SPARK` | 500 | 5% max treasury SOL rate (Spark tier) |
+| `TREASURY_SOL_MIN_BPS_FLAME` | 200 | 2% min treasury SOL rate (Flame tier) |
+| `TREASURY_SOL_MAX_BPS_FLAME` | 1000 | 10% max treasury SOL rate (Flame tier) |
 | `DEV_WALLET_SHARE_BPS` | 2500 | 25% of protocol fee to dev |
 | `BURN_RATE_BPS` | 1000 | 10% token burn on buy |
 | `TRANSFER_FEE_BPS` | 100 | 1% Token-2022 transfer fee |

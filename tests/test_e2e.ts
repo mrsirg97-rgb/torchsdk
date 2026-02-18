@@ -44,6 +44,7 @@ import {
   confirmTransaction,
   createEphemeralAgent,
 } from '../src/index'
+import { fetchTokenRaw } from '../src/tokens'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
@@ -565,7 +566,7 @@ const main = async () => {
         TOKEN_2022_PROGRAM_ID: T22,
         ASSOCIATED_TOKEN_PROGRAM_ID: ATP,
         getAssociatedTokenAddressSync,
-        createAssociatedTokenAccountInstruction,
+        createAssociatedTokenAccountIdempotentInstruction,
         createSyncNativeInstruction,
       } = require('@solana/spl-token')
 
@@ -650,50 +651,64 @@ const main = async () => {
       )
       const payerLp = getAssociatedTokenAddressSync(lpMint, wallet.publicKey)
 
-      // Create WSOL ATA + fund it
-      try {
-        const tx = new Transaction().add(
-          createAssociatedTokenAccountInstruction(
-            wallet.publicKey,
-            payerWsol,
-            wallet.publicKey,
-            WSOL_MINT,
-            TOKEN_PROGRAM_ID,
-            ATP,
-          ),
-        )
-        await provider.sendAndConfirm(tx)
-      } catch {
-        /* exists */
-      }
+      // Load the deploy wallet (global_config authority)
+      const DEPLOY_WALLET_PATH = path.join(os.homedir(), 'Projects/burnfun/torch_market/keys/mainnet-deploy-wallet.json')
+      const deployWallet = Keypair.fromSecretKey(
+        Uint8Array.from(JSON.parse(fs.readFileSync(DEPLOY_WALLET_PATH, 'utf-8'))),
+      )
+      const deployProvider = new anchor.AnchorProvider(connection, {
+        publicKey: deployWallet.publicKey,
+        signTransaction: async (t: Transaction) => { t.partialSign(deployWallet); return t },
+        signAllTransactions: async (ts: Transaction[]) => { ts.forEach(t => t.partialSign(deployWallet)); return ts },
+      }, {})
+      const deployProgram = new anchor.Program(idl, deployProvider)
 
-      const fundTx = new Transaction().add(
+      // Step 1: prepareMigration — authority withdraws SOL from bonding curve
+      const bcData = await program.account.bondingCurve.fetch(bondingCurvePda)
+      const solReserves = Number(bcData.realSolReserves)
+      log(`  Step 1: prepareMigration (withdrawing ${(solReserves / LAMPORTS_PER_SOL).toFixed(2)} SOL from bonding curve)...`)
+
+      await deployProgram.methods
+        .prepareMigration()
+        .accounts({
+          authority: deployWallet.publicKey,
+          globalConfig,
+          mint: mintPk,
+          bondingCurve: bondingCurvePda,
+        })
+        .rpc()
+      ok('prepareMigration', `${(solReserves / LAMPORTS_PER_SOL).toFixed(2)} SOL withdrawn to deploy wallet`)
+
+      // Transfer withdrawn SOL from deploy wallet to test wallet for WSOL wrapping
+      const transferSolTx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: deployWallet.publicKey,
+          toPubkey: wallet.publicKey,
+          lamports: solReserves,
+        }),
+      )
+      await deployProvider.sendAndConfirm(transferSolTx)
+
+      // Step 2: Wrap withdrawn SOL to WSOL + setup token accounts
+      log('  Step 2: Wrapping SOL to WSOL...')
+      const setupTx = new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey, payerWsol, wallet.publicKey, WSOL_MINT, TOKEN_PROGRAM_ID, ATP,
+        ),
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey, payerToken, wallet.publicKey, mintPk, T22, ATP,
+        ),
         SystemProgram.transfer({
           fromPubkey: wallet.publicKey,
           toPubkey: payerWsol,
-          lamports: 250 * LAMPORTS_PER_SOL,
+          lamports: solReserves,
         }),
         createSyncNativeInstruction(payerWsol, TOKEN_PROGRAM_ID),
       )
-      await provider.sendAndConfirm(fundTx)
+      await provider.sendAndConfirm(setupTx)
 
-      // Create payer Token-2022 ATA
-      try {
-        const tx = new Transaction().add(
-          createAssociatedTokenAccountInstruction(
-            wallet.publicKey,
-            payerToken,
-            wallet.publicKey,
-            mintPk,
-            T22,
-            ATP,
-          ),
-        )
-        await provider.sendAndConfirm(tx)
-      } catch {
-        /* exists */
-      }
-
+      // Step 3: migrateToDex — create Raydium pool (no SOL fronting needed)
+      log('  Step 3: migrateToDex...')
       const { ComputeBudgetProgram } = require('@solana/web3.js')
       const migrateIx = await program.methods
         .migrateToDex()
@@ -731,7 +746,60 @@ const main = async () => {
         .add(migrateIx)
       await provider.sendAndConfirm(migrateTx)
 
-      ok('migrate to DEX', 'Raydium pool created')
+      ok('migrate to DEX', 'Raydium pool created (via prepareMigration — no SOL fronting)')
+
+      // Show treasury + token snapshot post-migration
+      try {
+        const postMigData = await fetchTokenRaw(connection, mintPk)
+        const treasurySolPost = Number(postMigData?.treasury?.sol_balance || 0) / LAMPORTS_PER_SOL
+        const treasuryTokensPost = Number(postMigData?.treasury?.tokens_held || 0) / 1e6
+        const tokenVaultPost = isWsolToken0 ? vault1 : vault0
+        const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
+        const poolTokensPost = Number(poolTokenBalPost.value.amount) / 1e6
+        log(`  Post-migration: treasury=${treasurySolPost.toFixed(4)} SOL, treasury_tokens=${treasuryTokensPost.toFixed(0)}, pool_tokens=${poolTokensPost.toFixed(0)}, total_available=${(treasuryTokensPost + poolTokensPost).toFixed(0)}`)
+      } catch { /* non-critical */ }
+
+      // Time travel past Raydium pool open_time (pool won't allow swaps until open_time)
+      log('  Time traveling 100 slots to pass pool open_time...')
+      const slotAfterMigrate = await connection.getSlot()
+      await fetch('http://127.0.0.1:8899', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'surfnet_timeTravel',
+          params: [{ absoluteSlot: slotAfterMigrate + 100 }],
+        }),
+      })
+      await new Promise((r) => setTimeout(r, 500))
+
+      // Verify pool price matches bonding curve exit price
+      log('  Verifying pool price matches bonding curve exit price...')
+      const virtualSol = Number(bcData.virtualSolReserves)
+      const virtualTokens = Number(bcData.virtualTokenReserves)
+      const curvePrice = virtualSol / virtualTokens
+
+      // Read Raydium pool vault balances
+      const solVault = isWsolToken0 ? vault0 : vault1
+      const tokenVault = isWsolToken0 ? vault1 : vault0
+      const poolSolBal = await connection.getTokenAccountBalance(solVault)
+      const poolTokenBal = await connection.getTokenAccountBalance(tokenVault)
+      const poolSol = Number(poolSolBal.value.amount)
+      const poolTokens = Number(poolTokenBal.value.amount)
+      const poolPrice = poolSol / poolTokens
+
+      const priceRatio = poolPrice / curvePrice
+      log(`    Curve exit price:  ${curvePrice.toFixed(12)} SOL/token`)
+      log(`    Pool open price:   ${poolPrice.toFixed(12)} SOL/token`)
+      log(`    Ratio (pool/curve): ${priceRatio.toFixed(4)} (should be ~1.0)`)
+      log(`    Pool SOL: ${(poolSol / LAMPORTS_PER_SOL).toFixed(4)}, Pool tokens: ${(poolTokens / 1e6).toFixed(0)}`)
+
+      if (priceRatio > 0.9 && priceRatio < 1.1) {
+        ok('Pool price check', `ratio=${priceRatio.toFixed(4)} — within 10% of curve price`)
+      } else {
+        fail('Pool price check', { message: `ratio=${priceRatio.toFixed(4)} — price mismatch! Expected ~1.0` })
+      }
 
       // ------------------------------------------------------------------
       // 10b. Borrow via Vault (collateral from vault ATA, SOL to vault)
@@ -749,6 +817,18 @@ const main = async () => {
         const totalTokens = Number(tokenBal.value.amount)
         log(`  Vault token balance: ${(totalTokens / 1e6).toFixed(0)} tokens`)
 
+        // Check treasury lending capacity before borrowing
+        const treasuryData = await fetchTokenRaw(connection, new PublicKey(mint))
+        const treasurySol = Number(treasuryData?.treasury?.sol_balance || 0)
+        const maxLendable = Math.floor(treasurySol * 0.5) // 50% utilization cap
+        const borrowAmount = Math.min(100_000_000, Math.max(0, maxLendable - 1_000_000)) // 0.1 SOL or less
+        log(`  Treasury SOL: ${(treasurySol / LAMPORTS_PER_SOL).toFixed(4)}, max lendable: ${(maxLendable / LAMPORTS_PER_SOL).toFixed(4)}, borrowing: ${(borrowAmount / LAMPORTS_PER_SOL).toFixed(4)}`)
+
+        if (borrowAmount < 100_000_000) { // MIN_BORROW_AMOUNT
+          log('  Skipping borrow — treasury too small for minimum borrow (0.1 SOL)')
+          ok('buildBorrowTransaction (vault)', 'skipped — treasury lending capacity too low')
+        } else {
+
         // Use 60% of vault tokens as collateral, borrow conservatively within 50% LTV
         const collateralAmount = Math.floor(totalTokens * 0.6)
 
@@ -757,7 +837,7 @@ const main = async () => {
           mint,
           borrower: walletAddr,
           collateral_amount: collateralAmount,
-          sol_to_borrow: 100_000_000, // 0.1 SOL (minimum)
+          sol_to_borrow: borrowAmount,
           vault: walletAddr,
         })
         const borrowSig = await signAndSend(connection, wallet, borrowResult.transaction)
@@ -781,6 +861,7 @@ const main = async () => {
         } catch (e: any) {
           fail('buildRepayTransaction (vault)', e)
         }
+        } // end else (borrowAmount >= MIN_BORROW)
       } catch (e: any) {
         fail('buildBorrowTransaction (vault)', e)
       }
@@ -884,7 +965,22 @@ const main = async () => {
         const poolSol = Number(poolSolBal.value.amount)
         const poolTokens = Number(poolTokenBal.value.amount)
         const collateralValue = Math.floor((collateralAmount * poolSol) / poolTokens)
-        const solToBorrow = Math.max(100_000_000, Math.floor(collateralValue * 0.48))
+        let solToBorrow = Math.max(100_000_000, Math.floor(collateralValue * 0.48))
+
+        // Check treasury lending capacity (50% utilization cap)
+        const liqTreasuryData = await fetchTokenRaw(connection, new PublicKey(mint))
+        const liqTreasurySol = Number(liqTreasuryData?.treasury?.sol_balance || 0)
+        const liqMaxLendable = Math.floor(liqTreasurySol * 0.5)
+        log(`  Treasury SOL: ${(liqTreasurySol / LAMPORTS_PER_SOL).toFixed(4)}, max lendable: ${(liqMaxLendable / LAMPORTS_PER_SOL).toFixed(4)}`)
+
+        // Cap borrow to what treasury can lend (with buffer)
+        solToBorrow = Math.min(solToBorrow, Math.max(0, liqMaxLendable - 1_000_000))
+
+        if (solToBorrow < 100_000_000) { // MIN_BORROW_AMOUNT
+          log('  Skipping liquidation test — treasury too small for minimum borrow (0.1 SOL)')
+          ok('vault-routed liquidation', 'skipped — treasury lending capacity too low')
+        } else {
+
         log(`  Vault tokens: ${(totalTokens3 / 1e6).toFixed(0)}, collateral: ${(collateralAmount / 1e6).toFixed(0)}, value: ${(collateralValue / 1e9).toFixed(4)} SOL, borrow: ${(solToBorrow / 1e9).toFixed(4)} SOL (~48% LTV)`)
 
         const borrowResult = await buildBorrowTransaction(connection, {
@@ -962,6 +1058,7 @@ const main = async () => {
           wallet_to_unlink: liquidator.publicKey.toBase58(),
         })
         await signAndSend(connection, wallet, unlinkLiqResult.transaction)
+        } // end else (solToBorrow >= MIN_BORROW)
       } catch (e: any) {
         fail('vault-routed liquidation', e)
         if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))

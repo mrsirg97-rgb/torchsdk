@@ -241,11 +241,11 @@ const main = async () => {
         TOKEN_2022_PROGRAM_ID: T22,
         ASSOCIATED_TOKEN_PROGRAM_ID: ATP,
         getAssociatedTokenAddressSync,
-        createAssociatedTokenAccountInstruction,
+        createAssociatedTokenAccountIdempotentInstruction,
         createSyncNativeInstruction,
       } = require('@solana/spl-token')
 
-      const idl = require('../src/torch_market.json')
+      const idl = require('../dist/torch_market.json')
       const PROGRAM_ID = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
       const RAYDIUM_CPMM = new PublicKey('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C')
       const RAYDIUM_AMM_CONFIG = new PublicKey('D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2')
@@ -283,29 +283,64 @@ const main = async () => {
       const [payerToken] = PublicKey.findProgramAddressSync([wallet.publicKey.toBuffer(), T22.toBuffer(), mintPk.toBuffer()], ATP)
       const payerLp = getAssociatedTokenAddressSync(lpMint, wallet.publicKey)
 
-      // Create WSOL ATA
-      try {
-        const tx = new Transaction().add(
-          createAssociatedTokenAccountInstruction(wallet.publicKey, payerWsol, wallet.publicKey, WSOL_MINT, TOKEN_PROGRAM_ID, ATP),
-        )
-        await provider.sendAndConfirm(tx)
-      } catch { /* exists */ }
+      // Load the deploy wallet (global_config authority)
+      const DEPLOY_WALLET_PATH = path.join(os.homedir(), 'Projects/burnfun/torch_market/keys/mainnet-deploy-wallet.json')
+      const deployWallet = Keypair.fromSecretKey(
+        Uint8Array.from(JSON.parse(fs.readFileSync(DEPLOY_WALLET_PATH, 'utf-8'))),
+      )
+      const deployProvider = new anchor.AnchorProvider(connection, {
+        publicKey: deployWallet.publicKey,
+        signTransaction: async (t: Transaction) => { t.partialSign(deployWallet); return t },
+        signAllTransactions: async (ts: Transaction[]) => { ts.forEach(t => t.partialSign(deployWallet)); return ts },
+      }, {})
+      const deployProgram = new anchor.Program(idl, deployProvider)
 
-      // Fund WSOL ATA
-      const fundTx = new Transaction().add(
-        SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: payerWsol, lamports: 100 * LAMPORTS_PER_SOL }),
+      // Step 1: prepareMigration — authority withdraws SOL from bonding curve
+      const bcData = await program.account.bondingCurve.fetch(bondingCurvePda)
+      const solReserves = Number(bcData.realSolReserves)
+      log(`  Step 1: prepareMigration (withdrawing ${(solReserves / LAMPORTS_PER_SOL).toFixed(2)} SOL from bonding curve)...`)
+
+      await deployProgram.methods
+        .prepareMigration()
+        .accounts({
+          authority: deployWallet.publicKey,
+          globalConfig,
+          mint: mintPk,
+          bondingCurve: bondingCurvePda,
+        })
+        .rpc()
+      ok('prepareMigration', `${(solReserves / LAMPORTS_PER_SOL).toFixed(2)} SOL withdrawn to deploy wallet`)
+
+      // Transfer withdrawn SOL from deploy wallet to test wallet for WSOL wrapping
+      const transferTx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: deployWallet.publicKey,
+          toPubkey: wallet.publicKey,
+          lamports: solReserves,
+        }),
+      )
+      await deployProvider.sendAndConfirm(transferTx)
+
+      // Step 2: Wrap withdrawn SOL to WSOL + setup token accounts
+      log('  Step 2: Wrapping SOL to WSOL...')
+      const setupTx = new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey, payerWsol, wallet.publicKey, WSOL_MINT, TOKEN_PROGRAM_ID, ATP,
+        ),
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey, payerToken, wallet.publicKey, mintPk, T22, ATP,
+        ),
+        SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: payerWsol,
+          lamports: solReserves,
+        }),
         createSyncNativeInstruction(payerWsol, TOKEN_PROGRAM_ID),
       )
-      await provider.sendAndConfirm(fundTx)
+      await provider.sendAndConfirm(setupTx)
 
-      // Create payer Token-2022 ATA
-      try {
-        const tx = new Transaction().add(
-          createAssociatedTokenAccountInstruction(wallet.publicKey, payerToken, wallet.publicKey, mintPk, T22, ATP),
-        )
-        await provider.sendAndConfirm(tx)
-      } catch { /* exists */ }
-
+      // Step 3: migrateToDex — create Raydium pool (no SOL fronting needed)
+      log('  Step 3: migrateToDex...')
       const { ComputeBudgetProgram } = require('@solana/web3.js')
       const migrateIx = await program.methods
         .migrateToDex()
@@ -343,7 +378,18 @@ const main = async () => {
         .add(migrateIx)
       await provider.sendAndConfirm(migrateTx)
 
-      ok('Migrate to DEX', 'Raydium pool created for Spark token')
+      ok('Migrate to DEX', 'Raydium pool created for Spark token (via prepareMigration — no SOL fronting)')
+
+      // Show treasury + token snapshot post-migration
+      try {
+        const postMigData = await fetchTokenRaw(connection, new PublicKey(sparkMint))
+        const treasurySolPost = Number(postMigData?.treasury?.sol_balance || 0) / LAMPORTS_PER_SOL
+        const treasuryTokensPost = Number(postMigData?.treasury?.tokens_held || 0) / 1e6
+        const tokenVaultPost = isWsolToken0 ? vault1 : vault0
+        const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
+        const poolTokensPost = Number(poolTokenBalPost.value.amount) / 1e6
+        log(`  Post-migration: treasury=${treasurySolPost.toFixed(4)} SOL, treasury_tokens=${treasuryTokensPost.toFixed(0)}, pool_tokens=${poolTokensPost.toFixed(0)}, total_available=${(treasuryTokensPost + poolTokensPost).toFixed(0)}`)
+      } catch { /* non-critical */ }
 
       // Verify migrated flag
       const postMigrate = await fetchTokenRaw(connection, new PublicKey(sparkMint))
@@ -351,6 +397,33 @@ const main = async () => {
         ok('Migration verified', 'bonding_curve.migrated = true')
       } else {
         fail('Migration verified', 'migrated flag not set')
+      }
+
+      // Verify pool price matches bonding curve exit price
+      log('\n  Verifying pool price matches bonding curve exit price...')
+      const virtualSol = Number(bcData.virtualSolReserves)
+      const virtualTokens = Number(bcData.virtualTokenReserves)
+      const curvePrice = virtualSol / virtualTokens
+
+      // Read Raydium pool vault balances
+      const solVault = isWsolToken0 ? vault0 : vault1
+      const tokenVault = isWsolToken0 ? vault1 : vault0
+      const poolSolBal = await connection.getTokenAccountBalance(solVault)
+      const poolTokenBal = await connection.getTokenAccountBalance(tokenVault)
+      const poolSol = Number(poolSolBal.value.amount)
+      const poolTokens = Number(poolTokenBal.value.amount)
+      const poolPrice = poolSol / poolTokens
+
+      const priceRatio = poolPrice / curvePrice
+      log(`    Curve exit price:  ${curvePrice.toFixed(12)} SOL/token`)
+      log(`    Pool open price:   ${poolPrice.toFixed(12)} SOL/token`)
+      log(`    Ratio (pool/curve): ${priceRatio.toFixed(4)} (should be ~1.0)`)
+      log(`    Pool SOL: ${(poolSol / LAMPORTS_PER_SOL).toFixed(4)}, Pool tokens: ${(poolTokens / 1e6).toFixed(0)}`)
+
+      if (priceRatio > 0.9 && priceRatio < 1.1) {
+        ok('Pool price check', `ratio=${priceRatio.toFixed(4)} — within 10% of curve price`)
+      } else {
+        fail('Pool price check', { message: `ratio=${priceRatio.toFixed(4)} — price mismatch! Expected ~1.0` })
       }
 
       // ==================================================================

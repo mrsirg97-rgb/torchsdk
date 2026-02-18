@@ -2,7 +2,7 @@
     "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
     "metadata": {
         "name": "torch_market",
-        "version": "3.4.0",
+        "version": "3.4.2",
         "spec": "0.1.0",
         "description": "torch.market"
     },
@@ -1744,8 +1744,9 @@
                 {
                     "name": "amm_config",
                     "docs": [
-                        "Raydium AMM config"
-                    ]
+                        "Raydium AMM config — constrained to prevent pool substitution attacks"
+                    ],
+                    "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
                 },
                 {
                     "name": "pool_state",
@@ -2987,6 +2988,89 @@
                 {
                     "name": "rent",
                     "address": "SysvarRent111111111111111111111111111111111"
+                }
+            ],
+            "args": []
+        },
+        {
+            "name": "prepare_migration",
+            "docs": [
+                "[V25] Withdraw bonding curve SOL to authority before migration.",
+                "Authority-only. Call this, wrap SOL to WSOL, then call migrate_to_dex."
+            ],
+            "discriminator": [
+                59,
+                118,
+                102,
+                18,
+                9,
+                133,
+                23,
+                172
+            ],
+            "accounts": [
+                {
+                    "name": "authority",
+                    "writable": true,
+                    "signer": true
+                },
+                {
+                    "name": "global_config",
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    103,
+                                    108,
+                                    111,
+                                    98,
+                                    97,
+                                    108,
+                                    95,
+                                    99,
+                                    111,
+                                    110,
+                                    102,
+                                    105,
+                                    103
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "mint"
+                },
+                {
+                    "name": "bonding_curve",
+                    "writable": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    98,
+                                    111,
+                                    110,
+                                    100,
+                                    105,
+                                    110,
+                                    103,
+                                    95,
+                                    99,
+                                    117,
+                                    114,
+                                    118,
+                                    101
+                                ]
+                            },
+                            {
+                                "kind": "account",
+                                "path": "mint"
+                            }
+                        ]
+                    }
                 }
             ],
             "args": []
@@ -4411,8 +4495,9 @@
                 {
                     "name": "amm_config",
                     "docs": [
-                        "Raydium AMM config"
-                    ]
+                        "Raydium AMM config — constrained to prevent pool substitution attacks"
+                    ],
+                    "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
                 },
                 {
                     "name": "pool_state",
