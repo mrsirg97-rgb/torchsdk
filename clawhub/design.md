@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.5.0.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.5.1.
 
 ## Overview
 
@@ -405,4 +405,4 @@ Expected result: **32 passed, 0 failed**
 | 3.2.4 | **Audit remediation.** Metadata fetch timeout (10s AbortController in `fetchWithFallback`). Explicit slippage validation (throws on out-of-range instead of silent clamping). IDL-derived LoanPosition discriminator (replaces hardcoded bytes). All 3 low-severity audit findings resolved. |
 | 3.3.0 | **Tiered Bonding Curves (V23).** New optional `sol_target` parameter on `buildCreateTokenTransaction`: Spark (50 SOL, ~7x), Flame (100 SOL, ~19x), Torch (200 SOL, ~59x, default). Same formula, different graduation points. On-chain: `harvest_fees` hardened (V3.2.1 security fix — constrained treasury ATA destination). Raydium pool validation confirmed by independent auditor. Kani proofs updated for all tiers (20/20 passing). IDL updated to v3.3.0. |
 | 3.4.0 | **Tiered Fee Structure (V24).** Dynamic treasury SOL rate is now per-tier: Spark 5%→1%, Flame 10%→2%, Torch 20%→5% (unchanged). Fee bounds derived from `bonding_target` at runtime — zero new on-chain state. `calculateTokensOut` accepts optional `bondingTarget` parameter. Callers (`getBuyQuote`, `buildBuyTransaction`) pass `bonding_target` from on-chain state. Legacy tokens (bonding_target=0) get Torch rates. IDL updated to v3.4.0. |
-| 3.5.0 | **V25 Pump-Style Token Distribution.** New virtual reserve model: IVS = bonding_target/8 (6.25-25 SOL), IVT = 900M tokens, ~81x multiplier across all tiers. Reverted V24 per-tier treasury fees to flat 20%→5% for all tiers. 35 Kani proof harnesses (up from 26), including 7 new V25 supply conservation and excess burn proofs. IDL updated to v3.5.0. |
+| 3.5.1 | **V25 Pump-Style Token Distribution.** New virtual reserve model: IVS = bonding_target/8 (6.25-25 SOL), IVT = 900M tokens, ~81x multiplier across all tiers. Reverted V24 per-tier treasury fees to flat 20%→5% for all tiers. 35 Kani proof harnesses (up from 26), including 7 new V25 supply conservation and excess burn proofs. IDL updated to v3.5.1. |
