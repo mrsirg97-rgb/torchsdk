@@ -84,7 +84,7 @@ User spends 1 SOL
                                 └── 10% → Community Treasury (vote vault)
 ```
 
-> **Dynamic Treasury Rate**: The treasury SOL split uses inverse decay based on bonding progress. Early buyers contribute more to treasury (stronger early funding), late buyers get more tokens per SOL. The rate scales by the per-token bonding target (Spark 50, Flame 100, Torch 200 SOL).
+> **Dynamic Treasury Rate**: The treasury SOL split uses inverse decay based on bonding progress. Early buyers contribute more to treasury (stronger early funding), late buyers get more tokens per SOL. The rate is flat across all tiers (Spark 50, Flame 100, Torch 200 SOL).
 >
 > | 0 SOL | 50% of target | 100% of target |
 > |-------|---------------|----------------|
@@ -293,10 +293,10 @@ The reclaimed SOL joins the protocol treasury and is distributed to active trade
 A reclaimed token can be **revived** if the community believes in it. Anyone can contribute SOL to a reclaimed token:
 
 ```
-Revival threshold: 30 SOL
+Revival threshold: IVS (6.25 SOL Spark, 12.5 SOL Flame, 25 SOL Torch)
 ```
 
-Contributors are patrons — they do NOT receive tokens for their contribution. They're simply signaling belief that the token deserves another chance. Once 30 SOL is contributed:
+Contributors are patrons — they do NOT receive tokens for their contribution. They're simply signaling belief that the token deserves another chance. Once the revival threshold is reached:
 
 1. The `reclaimed` flag is removed
 2. Trading is re-enabled
@@ -441,7 +441,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Transfer Fee | 1% | Post-migration fee on all transfers |
 | Supply Floor | 500,000,000 | Minimum supply (buyback burns stop here) |
 | Inactivity Period | 7 days | Time before failed token can be reclaimed |
-| Revival Threshold | 30 SOL | SOL needed to revive a reclaimed token |
+| Revival Threshold | IVS per tier (6.25 / 12.5 / 25 SOL) | SOL needed to revive a reclaimed token |
 | Voting Duration | ~24 hours | Time for community to vote on burn/return |
 | Epoch Duration | 7 days | Protocol reward distribution cycle |
 | Reward Eligibility | 10 SOL | Minimum epoch volume for protocol rewards |
@@ -451,7 +451,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Interest Rate | 2% / epoch | Lending interest per ~7-day epoch |
 | Liquidation Bonus | 10% | Discount for liquidators on seized collateral |
 | Utilization Cap | 50% | Max fraction of treasury SOL available for loans |
-| Min Borrow | 0.01 SOL | Minimum borrow amount per loan |
+| Min Borrow | 0.1 SOL | Minimum borrow amount per loan |
 
 ---
 

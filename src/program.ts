@@ -241,18 +241,9 @@ export const getProgram = (provider: AnchorProvider): Program => {
   return new Program(idl as unknown, provider)
 }
 
-// [V24] Per-tier treasury SOL rate bounds
-const TREASURY_RATE_BOUNDS: Record<string, { max: number; min: number }> = {
-  '50000000000':  { max: 500,  min: 100 },  // Spark: 5% → 1%
-  '100000000000': { max: 1000, min: 200 },  // Flame: 10% → 2%
-  '200000000000': { max: 2000, min: 500 },  // Torch: 20% → 5%
-}
-const DEFAULT_TREASURY_BOUNDS = { max: 2000, min: 500 } // Torch / legacy (0)
-
-// [V24] Returns (maxBps, minBps) for the treasury SOL rate based on bonding tier
-export const treasuryRateBounds = (bondingTarget: bigint): { max: number; min: number } => {
-  return TREASURY_RATE_BOUNDS[bondingTarget.toString()] ?? DEFAULT_TREASURY_BOUNDS
-}
+// [V25] Flat treasury SOL rate: 20% → 5% across all tiers (reverted from V24 tiered fees)
+const TREASURY_SOL_MAX_BPS = 2000 // 20% at start
+const TREASURY_SOL_MIN_BPS = 500  // 5% at completion
 
 // Calculate tokens out for a given SOL amount (V2.3: dynamic treasury rate, V24: tiered)
 export const calculateTokensOut = (
@@ -279,14 +270,13 @@ export const calculateTokensOut = (
   const treasuryFee = (solAmount * BigInt(treasuryFeeBps)) / BigInt(10000)
   const solAfterFees = solAmount - protocolFee - treasuryFee
 
-  // [V24] Resolve bonding target and tier fee bounds
+  // [V25] Flat 20% → 5% treasury rate across all tiers
   const resolvedTarget = bondingTarget === BigInt(0) ? BigInt('200000000000') : bondingTarget
-  const bounds = treasuryRateBounds(resolvedTarget)
 
-  // V2.3: Dynamic treasury rate - decays from max to min as bonding progresses
-  const rateRange = BigInt(bounds.max - bounds.min)
+  // V2.3: Dynamic treasury rate - decays from 20% to 5% as bonding progresses
+  const rateRange = BigInt(TREASURY_SOL_MAX_BPS - TREASURY_SOL_MIN_BPS)
   const decay = (realSolReserves * rateRange) / resolvedTarget
-  const treasuryRateBps = Math.max(bounds.max - Number(decay), bounds.min)
+  const treasuryRateBps = Math.max(TREASURY_SOL_MAX_BPS - Number(decay), TREASURY_SOL_MIN_BPS)
 
   // Split remaining SOL using dynamic rate
   const solToTreasurySplit = (solAfterFees * BigInt(treasuryRateBps)) / BigInt(10000)

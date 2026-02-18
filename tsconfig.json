@@ -6,7 +6,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "./dist",
+    "outDir": "clawhub/lib/torchsdk",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
@@ -16,5 +16,5 @@
     "moduleResolution": "node"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "clawhub/lib/torchsdk"]
 }

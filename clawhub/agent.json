@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.4.2",
+  "version": "4.5.0",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -33,7 +33,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.4.2",
+        "package": "torchsdk@^3.5.0",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
@@ -193,14 +193,21 @@
       "torch": 200
     },
     "treasury_rate": {
-      "spark": { "max_percent": 5, "min_percent": 1 },
-      "flame": { "max_percent": 10, "min_percent": 2 },
-      "torch": { "max_percent": 20, "min_percent": 5 }
+      "max_percent": 20,
+      "min_percent": 5,
+      "note": "Flat 20%→5% decay across all tiers (V25)"
     },
     "protocol_fee_percent": 1,
     "max_wallet_percent": 2,
     "star_cost_sol": 0.05,
-    "initial_virtual_sol": 30,
+    "initial_virtual_sol_legacy": 30,
+    "initial_virtual_tokens_v25": 900000000,
+    "initial_virtual_sol_v25": {
+      "spark": 6.25,
+      "flame": 12.5,
+      "torch": 25,
+      "note": "bonding_target / 8"
+    },
     "lending_max_ltv_percent": 50,
     "lending_liquidation_threshold_percent": 65,
     "lending_interest_rate_per_epoch_percent": 2,

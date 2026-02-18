@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.4.2"
+version: "4.5.0"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -28,11 +28,11 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.4.2
+        package: torchsdk@^3.5.0
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.4.2"
+  version: "4.5.0"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -182,7 +182,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.4.2), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.5.0), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -498,7 +498,7 @@ Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 tra
 |----------|-------|
 | Total Supply | 1B tokens (6 decimals) |
 | Bonding Target | 50 / 100 / 200 SOL (Spark / Flame / Torch) |
-| Treasury Rate | Tiered: Spark 5%→1%, Flame 10%→2%, Torch 20%→5% (decays as bonding progresses) |
+| Treasury Rate | 20%→5% flat across all tiers (decays as bonding progresses) |
 | Protocol Fee | 1% on buys, 0% on sells |
 | Max Wallet | 2% during bonding |
 | Star Cost | 0.05 SOL |
@@ -509,7 +509,7 @@ Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 tra
 
 ### Formal Verification
 
-Core arithmetic (fees, bonding curve, lending, rewards, buyback) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 20 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
+Core arithmetic (fees, bonding curve, lending, rewards, buyback, V25 token distribution) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 35 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
 
 ### SAID Protocol
 
@@ -552,7 +552,7 @@ SAID (Solana Agent Identity) tracks your on-chain reputation. `verifySaid(wallet
 - Examples: [github.com/mrsirg97-rgb/torchsdk-examples](https://github.com/mrsirg97-rgb/torchsdk-examples)
 - Whitepaper: [torch.market/whitepaper.md](https://torch.market/whitepaper.md)
 - Security Audit: [torch.market/audit.md](https://torch.market/audit.md)
-- Formal Verification: [VERIFICATION.md](https://torch.market/verification.md) -- Kani proofs for core arithmetic (20 harnesses, all passing)
+- Formal Verification: [VERIFICATION.md](https://torch.market/verification.md) -- Kani proofs for core arithmetic (35 harnesses, all passing)
 - ClawHub: [clawhub.ai/mrsirg97-rgb/torchmarket](https://clawhub.ai/mrsirg97-rgb/torchmarket)
 - Website: [torch.market](https://torch.market)
 - Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`

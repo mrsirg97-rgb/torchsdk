@@ -100,7 +100,7 @@ const main = async () => {
   // ==================================================================
   // 2. Verify bonding target stored correctly
   // ==================================================================
-  log('\n[2] Verify bonding target')
+  log('\n[2] Verify bonding target and V25 virtual reserves')
   try {
     const data = await fetchTokenRaw(connection, new PublicKey(sparkMint))
     const bc = data?.bondingCurve as any
@@ -109,6 +109,20 @@ const main = async () => {
       ok('bonding_target', `${target} (50 SOL)`)
     } else {
       fail('bonding_target', `expected 50000000000, got ${target}`)
+    }
+
+    // V25: Verify virtual reserves — Spark should have IVS=6.25 SOL, IVT=900M tokens
+    const ivs = Number((bc?.virtual_sol_reserves ?? bc?.virtualSolReserves)?.toString())
+    const ivt = Number((bc?.virtual_token_reserves ?? bc?.virtualTokenReserves)?.toString())
+    if (ivs === 6_250_000_000) {
+      ok('V25 virtual_sol_reserves', `${ivs} (6.25 SOL)`)
+    } else {
+      fail('V25 virtual_sol_reserves', `expected 6250000000, got ${ivs}`)
+    }
+    if (ivt === 900_000_000_000_000) {
+      ok('V25 virtual_token_reserves', `${ivt} (900M tokens)`)
+    } else {
+      fail('V25 virtual_token_reserves', `expected 900000000000000, got ${ivt}`)
     }
   } catch (e: any) {
     fail('bonding_target read', e)
@@ -136,22 +150,26 @@ const main = async () => {
   // 4. Bond Spark to completion (50 SOL) using multiple wallets
   // ==================================================================
   log('\n[4] Bond Spark to 50 SOL (multiple wallets, 2% cap)')
+  // V25: With IVS=6.25 SOL and IVT=900M, the initial price is very low.
+  // A 5 SOL buy would yield ~400M tokens, far exceeding the 2% wallet cap (20M).
+  // Max buy at initial price ≈ 0.14 SOL. Use 0.1 SOL buys with many wallets.
+  // As the price rises ~81x during bonding, later wallets can absorb more SOL.
 
-  const NUM_BUYERS = 20
-  const BUY_AMOUNT = 5 * LAMPORTS_PER_SOL
+  const NUM_BUYERS = 700
+  const BUY_AMOUNT = Math.floor(0.1 * LAMPORTS_PER_SOL) // 0.1 SOL per buy
   const buyers: Keypair[] = []
   for (let i = 0; i < NUM_BUYERS; i++) buyers.push(Keypair.generate())
 
-  // Fund buyers in batches
-  for (let i = 0; i < buyers.length; i += 10) {
-    const batch = buyers.slice(i, i + 10)
+  // Fund buyers in batches of 20
+  for (let i = 0; i < buyers.length; i += 20) {
+    const batch = buyers.slice(i, i + 20)
     const fundTx = new Transaction()
     for (const b of batch) {
       fundTx.add(
         SystemProgram.transfer({
           fromPubkey: wallet.publicKey,
           toPubkey: b.publicKey,
-          lamports: BUY_AMOUNT + 0.1 * LAMPORTS_PER_SOL,
+          lamports: BUY_AMOUNT + Math.floor(0.05 * LAMPORTS_PER_SOL), // buy + gas/rent
         }),
       )
     }
@@ -177,8 +195,8 @@ const main = async () => {
       await signAndSend(connection, buyer, result.transaction)
       buyCount++
 
-      // Check progress every 5 buys
-      if (buyCount % 5 === 0) {
+      // Check progress every 50 buys
+      if (buyCount % 50 === 0) {
         const data = await fetchTokenRaw(connection, new PublicKey(sparkMint))
         const reserves = Number(data?.bondingCurve?.real_sol_reserves) / LAMPORTS_PER_SOL
         const complete = data?.bondingCurve?.bonding_complete
@@ -380,16 +398,73 @@ const main = async () => {
 
       ok('Migrate to DEX', 'Raydium pool created for Spark token (via prepareMigration — no SOL fronting)')
 
-      // Show treasury + token snapshot post-migration
+      // V25: Post-migration token distribution breakdown
       try {
         const postMigData = await fetchTokenRaw(connection, new PublicKey(sparkMint))
-        const treasurySolPost = Number(postMigData?.treasury?.sol_balance || 0) / LAMPORTS_PER_SOL
-        const treasuryTokensPost = Number(postMigData?.treasury?.tokens_held || 0) / 1e6
+        const bc = postMigData!.bondingCurve
+        const tr = postMigData!.treasury!
+
+        const TOTAL_SUPPLY = 1_000_000_000 // 1B tokens (display units)
         const tokenVaultPost = isWsolToken0 ? vault1 : vault0
         const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
-        const poolTokensPost = Number(poolTokenBalPost.value.amount) / 1e6
-        log(`  Post-migration: treasury=${treasurySolPost.toFixed(4)} SOL, treasury_tokens=${treasuryTokensPost.toFixed(0)}, pool_tokens=${poolTokensPost.toFixed(0)}, total_available=${(treasuryTokensPost + poolTokensPost).toFixed(0)}`)
-      } catch { /* non-critical */ }
+        const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
+        const voteVault = Number(bc.vote_vault_balance.toString()) / 1e6
+        const excessBurned = Number(bc.permanently_burned_tokens.toString()) / 1e6
+        const treasuryTokens = Number(tr.tokens_held.toString()) / 1e6
+        const tokensSold = TOTAL_SUPPLY - poolTokens - voteVault - excessBurned
+        const treasurySol = Number(tr.sol_balance.toString()) / LAMPORTS_PER_SOL
+        const poolSolBal = await connection.getTokenAccountBalance(isWsolToken0 ? vault0 : vault1)
+        const poolSol = Number(poolSolBal.value.amount) / LAMPORTS_PER_SOL
+        const baselineSol = Number(tr.baseline_sol_reserves.toString()) / LAMPORTS_PER_SOL
+        const baselineTokens = Number(tr.baseline_token_reserves.toString()) / 1e6
+
+        // V25 virtual reserves for Spark: IVS = 6.25 SOL, IVT = 900M tokens
+        const ivs = 6.25 // SOL
+        const entryPrice = (ivs / 900_000_000) // SOL per token at first buy
+        const exitPrice = poolSol / poolTokens
+        const multiplier = exitPrice / entryPrice
+
+        log(`\n  ┌─── V25 Post-Migration Token Distribution ───────────────┐`)
+        log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
+        log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Vote Vault:       ${voteVault.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Pool Tokens:      ${poolTokens.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Excess Burned:    ${excessBurned.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Accounted:        ${(tokensSold + voteVault + poolTokens + excessBurned).toFixed(0).padStart(15)} tokens  │`)
+        log(`  ├────────────────────────────────────────────────────────────┤`)
+        log(`  │  Pool SOL:         ${poolSol.toFixed(4).padStart(15)} SOL     │`)
+        log(`  │  Treasury SOL:     ${treasurySol.toFixed(4).padStart(15)} SOL     │`)
+        log(`  │  Baseline SOL:     ${baselineSol.toFixed(4).padStart(15)} SOL     │`)
+        log(`  │  Baseline Tokens:  ${baselineTokens.toFixed(0).padStart(15)} tokens  │`)
+        log(`  ├────────────────────────────────────────────────────────────┤`)
+        log(`  │  Entry Price:      ${entryPrice.toExponential(4).padStart(15)} SOL/tok │`)
+        log(`  │  Exit Price:       ${exitPrice.toExponential(4).padStart(15)} SOL/tok │`)
+        log(`  │  Multiplier:       ${multiplier.toFixed(1).padStart(15)}x        │`)
+        log(`  │  Sold %:           ${((tokensSold / TOTAL_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
+        log(`  │  Excess Burn %:    ${((excessBurned / TOTAL_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
+        log(`  └────────────────────────────────────────────────────────────┘`)
+
+        // Verify V25 expectations: ~80% sold, ~11% excess burn, ~81x multiplier
+        const soldPct = (tokensSold / TOTAL_SUPPLY) * 100
+        const burnPct = (excessBurned / TOTAL_SUPPLY) * 100
+        if (soldPct > 70 && soldPct < 95) {
+          ok('V25 tokens sold %', `${soldPct.toFixed(1)}% (expected ~80%)`)
+        } else {
+          fail('V25 tokens sold %', { message: `${soldPct.toFixed(1)}% — expected 70-95%` })
+        }
+        if (burnPct < 20) {
+          ok('V25 excess burn %', `${burnPct.toFixed(1)}% (expected <20%)`)
+        } else {
+          fail('V25 excess burn %', { message: `${burnPct.toFixed(1)}% — expected <20%` })
+        }
+        if (multiplier > 50 && multiplier < 120) {
+          ok('V25 price multiplier', `${multiplier.toFixed(1)}x (expected ~81x)`)
+        } else {
+          fail('V25 price multiplier', { message: `${multiplier.toFixed(1)}x — expected 50-120x` })
+        }
+      } catch (e: any) {
+        fail('V25 distribution breakdown', e)
+      }
 
       // Verify migrated flag
       const postMigrate = await fetchTokenRaw(connection, new PublicKey(sparkMint))

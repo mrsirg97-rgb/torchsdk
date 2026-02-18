@@ -262,10 +262,12 @@ const main = async () => {
   log('\n[8] Buy Token (via vault)')
   try {
     const vaultBefore = await getVault(connection, walletAddr)
+    // V25: 2 SOL at initial price would yield ~66M tokens (over 20M wallet cap).
+    // 0.5 SOL yields ~17M tokens — under cap and enough for borrow tests.
     const result = await buildBuyTransaction(connection, {
       mint,
       buyer: walletAddr,
-      amount_sol: 2_000_000_000, // 2 SOL (enough tokens for later vault borrow test)
+      amount_sol: 500_000_000, // 0.5 SOL (V25: stays under 2% wallet cap)
       slippage_bps: 500,
       // No vote — wallet already voted on direct buy above
       vault: walletAddr,
@@ -476,22 +478,23 @@ const main = async () => {
   log('\n[15] Full Lifecycle: Bond → Migrate → Borrow → Repay')
   log('  Bonding to 200 SOL using multiple wallets (2% wallet cap)...')
 
-  // Generate buyer wallets and fund them
-  const NUM_BUYERS = 60
-  const BUY_AMOUNT = 5 * LAMPORTS_PER_SOL
+  // V25: With IVS=25 SOL and IVT=900M, max buy at initial price ≈ 0.57 SOL
+  // before hitting the 2% wallet cap (20M tokens). Use 0.5 SOL buys with many wallets.
+  const NUM_BUYERS = 500
+  const BUY_AMOUNT = Math.floor(0.5 * LAMPORTS_PER_SOL) // 0.5 SOL per buy
   const buyers: Keypair[] = []
   for (let i = 0; i < NUM_BUYERS; i++) buyers.push(Keypair.generate())
 
-  // Fund in batches
-  for (let i = 0; i < buyers.length; i += 10) {
-    const batch = buyers.slice(i, i + 10)
+  // Fund in batches of 20
+  for (let i = 0; i < buyers.length; i += 20) {
+    const batch = buyers.slice(i, i + 20)
     const fundTx = new Transaction()
     for (const b of batch) {
       fundTx.add(
         SystemProgram.transfer({
           fromPubkey: wallet.publicKey,
           toPubkey: b.publicKey,
-          lamports: BUY_AMOUNT + 0.1 * LAMPORTS_PER_SOL,
+          lamports: BUY_AMOUNT + Math.floor(0.05 * LAMPORTS_PER_SOL),
         }),
       )
     }
@@ -518,7 +521,7 @@ const main = async () => {
       await signAndSend(connection, buyer, result.transaction)
       buyCount++
 
-      if (buyCount % 10 === 0) {
+      if (buyCount % 50 === 0) {
         const detail = await getToken(connection, mint)
         log(
           `  Buy ${buyCount}: ${detail.progress_percent.toFixed(1)}% (${detail.sol_raised.toFixed(1)} SOL)`,
@@ -748,15 +751,55 @@ const main = async () => {
 
       ok('migrate to DEX', 'Raydium pool created (via prepareMigration — no SOL fronting)')
 
-      // Show treasury + token snapshot post-migration
+      // V25: Post-migration token distribution breakdown
       try {
         const postMigData = await fetchTokenRaw(connection, mintPk)
-        const treasurySolPost = Number(postMigData?.treasury?.sol_balance || 0) / LAMPORTS_PER_SOL
-        const treasuryTokensPost = Number(postMigData?.treasury?.tokens_held || 0) / 1e6
+        const bc = postMigData!.bondingCurve
+        const tr = postMigData!.treasury!
+
+        const TOTAL_SUPPLY = 1_000_000_000 // 1B tokens (display units)
         const tokenVaultPost = isWsolToken0 ? vault1 : vault0
         const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
-        const poolTokensPost = Number(poolTokenBalPost.value.amount) / 1e6
-        log(`  Post-migration: treasury=${treasurySolPost.toFixed(4)} SOL, treasury_tokens=${treasuryTokensPost.toFixed(0)}, pool_tokens=${poolTokensPost.toFixed(0)}, total_available=${(treasuryTokensPost + poolTokensPost).toFixed(0)}`)
+        const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
+        const voteVault = Number(bc.vote_vault_balance.toString()) / 1e6
+        const excessBurned = Number(bc.permanently_burned_tokens.toString()) / 1e6
+        const tokensSold = TOTAL_SUPPLY - poolTokens - voteVault - excessBurned
+        const treasurySol = Number(tr.sol_balance.toString()) / LAMPORTS_PER_SOL
+        const poolSolBal2 = await connection.getTokenAccountBalance(isWsolToken0 ? vault0 : vault1)
+        const poolSol2 = Number(poolSolBal2.value.amount) / LAMPORTS_PER_SOL
+        const baselineSol = Number(tr.baseline_sol_reserves.toString()) / LAMPORTS_PER_SOL
+        const baselineTokens = Number(tr.baseline_token_reserves.toString()) / 1e6
+
+        // Determine initial virtual reserves for this token's tier
+        const bondingTarget = Number(bc.bonding_target.toString())
+        let ivs = 30 // legacy default
+        let ivt = 107_300_000 // legacy default
+        if (bondingTarget === 50_000_000_000) { ivs = 6.25; ivt = 900_000_000 }
+        else if (bondingTarget === 100_000_000_000) { ivs = 12.5; ivt = 900_000_000 }
+        else if (bondingTarget === 200_000_000_000) { ivs = 25; ivt = 900_000_000 }
+
+        const entryPrice = ivs / ivt
+        const exitPrice = poolSol2 / poolTokens
+        const multiplier = exitPrice / entryPrice
+
+        log(`\n  ┌─── Post-Migration Token Distribution ────────────────────┐`)
+        log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
+        log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Vote Vault:       ${voteVault.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Pool Tokens:      ${poolTokens.toFixed(0).padStart(15)} tokens  │`)
+        log(`  │  Excess Burned:    ${excessBurned.toFixed(0).padStart(15)} tokens  │`)
+        log(`  ├────────────────────────────────────────────────────────────┤`)
+        log(`  │  Pool SOL:         ${poolSol2.toFixed(4).padStart(15)} SOL     │`)
+        log(`  │  Treasury SOL:     ${treasurySol.toFixed(4).padStart(15)} SOL     │`)
+        log(`  │  Baseline SOL:     ${baselineSol.toFixed(4).padStart(15)} SOL     │`)
+        log(`  │  Baseline Tokens:  ${baselineTokens.toFixed(0).padStart(15)} tokens  │`)
+        log(`  ├────────────────────────────────────────────────────────────┤`)
+        log(`  │  Entry Price:      ${entryPrice.toExponential(4).padStart(15)} SOL/tok │`)
+        log(`  │  Exit Price:       ${exitPrice.toExponential(4).padStart(15)} SOL/tok │`)
+        log(`  │  Multiplier:       ${multiplier.toFixed(1).padStart(15)}x        │`)
+        log(`  │  Sold %:           ${((tokensSold / TOTAL_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
+        log(`  │  Excess Burn %:    ${((excessBurned / TOTAL_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
+        log(`  └────────────────────────────────────────────────────────────┘`)
       } catch { /* non-critical */ }
 
       // Time travel past Raydium pool open_time (pool won't allow swaps until open_time)
@@ -1111,8 +1154,9 @@ const main = async () => {
         ok('advance protocol epoch (prime)', 'epoch advanced')
 
         // Step 2: Generate >= 10 SOL volume via bonding curve buys
-        // Spread across 4 tokens at 3 SOL each (12 SOL total) to stay under 2% wallet cap
-        const volNames = ['Vol A', 'Vol B', 'Vol C', 'Vol D']
+        // V25: 3 SOL on a fresh token would yield ~96M tokens (over 20M wallet cap).
+        // Use 0.5 SOL per buy across 20 tokens (10 SOL total) to stay under cap.
+        const volNames = Array.from({ length: 20 }, (_, i) => `Vol ${String.fromCharCode(65 + i)}`)
         for (const vname of volNames) {
           const volToken = await buildCreateTokenTransaction(connection, {
             creator: walletAddr,
@@ -1125,13 +1169,13 @@ const main = async () => {
           const volBuy = await buildDirectBuyTransaction(connection, {
             mint: volToken.mint.toBase58(),
             buyer: walletAddr,
-            amount_sol: 3 * LAMPORTS_PER_SOL,
+            amount_sol: Math.floor(0.5 * LAMPORTS_PER_SOL),
             slippage_bps: 1000,
             vote: 'burn',
           })
           await signAndSend(connection, wallet, volBuy.transaction)
         }
-        ok('volume buys', '12 SOL across 4 tokens for epoch eligibility')
+        ok('volume buys', '10 SOL across 20 tokens for epoch eligibility')
 
         // Step 3: Time travel 8 days + advance again
         slot = await connection.getSlot()
