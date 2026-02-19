@@ -3,8 +3,12 @@ import { PublicKey } from '@solana/web3.js'
 // Program ID - Mainnet/Devnet (deployed program)
 export const PROGRAM_ID = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
 
-// Network detection: evaluated at call time so env can be set dynamically
-const isDevnet = () => typeof process !== 'undefined' && process.env?.TORCH_NETWORK === 'devnet'
+// Network detection: evaluated at call time so env can be set dynamically.
+// Checks globalThis.__TORCH_NETWORK__ first (for browser runtime switching),
+// then falls back to process.env.TORCH_NETWORK (for Node.js / build-time).
+const isDevnet = (): boolean =>
+  (globalThis as any).__TORCH_NETWORK__ === 'devnet' ||
+  (typeof process !== 'undefined' && process.env?.TORCH_NETWORK === 'devnet')
 
 // Raydium CPMM Program (different on mainnet vs devnet)
 export const getRaydiumCpmmProgram = () => new PublicKey(
