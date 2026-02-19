@@ -1,17 +1,37 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TOKEN_MULTIPLIER = exports.LAMPORTS_PER_SOL = exports.BLACKLISTED_MINTS = exports.TOKEN_DECIMALS = exports.TOTAL_SUPPLY = exports.VAULT_WALLET_LINK_SEED = exports.TORCH_VAULT_SEED = exports.COLLATERAL_VAULT_SEED = exports.LOAN_SEED = exports.STAR_RECORD_SEED = exports.USER_STATS_SEED = exports.PROTOCOL_TREASURY_SEED = exports.VOTE_SEED = exports.USER_POSITION_SEED = exports.TREASURY_SEED = exports.BONDING_CURVE_SEED = exports.GLOBAL_CONFIG_SEED = exports.TOKEN_2022_PROGRAM_ID = exports.MEMO_PROGRAM_ID = exports.RAYDIUM_AMM_CONFIG = exports.WSOL_MINT = exports.RAYDIUM_CPMM_PROGRAM = exports.PROGRAM_ID = void 0;
+exports.TOKEN_MULTIPLIER = exports.LAMPORTS_PER_SOL = exports.BLACKLISTED_MINTS = exports.TOKEN_DECIMALS = exports.TOTAL_SUPPLY = exports.VAULT_WALLET_LINK_SEED = exports.TORCH_VAULT_SEED = exports.COLLATERAL_VAULT_SEED = exports.LOAN_SEED = exports.STAR_RECORD_SEED = exports.USER_STATS_SEED = exports.PROTOCOL_TREASURY_SEED = exports.VOTE_SEED = exports.USER_POSITION_SEED = exports.TREASURY_SEED = exports.BONDING_CURVE_SEED = exports.GLOBAL_CONFIG_SEED = exports.TOKEN_2022_PROGRAM_ID = exports.MEMO_PROGRAM_ID = exports.RAYDIUM_FEE_RECEIVER = exports.getRaydiumFeeReceiver = exports.RAYDIUM_AMM_CONFIG = exports.getRaydiumAmmConfig = exports.WSOL_MINT = exports.RAYDIUM_CPMM_PROGRAM = exports.getRaydiumCpmmProgram = exports.PROGRAM_ID = void 0;
 const web3_js_1 = require("@solana/web3.js");
 // Program ID - Mainnet/Devnet (deployed program)
 exports.PROGRAM_ID = new web3_js_1.PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT');
-// Raydium CPMM Program
-// Note: Same address on mainnet and devnet - Raydium deploys to same program ID
-exports.RAYDIUM_CPMM_PROGRAM = new web3_js_1.PublicKey('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C');
+// Network detection: evaluated at call time so env can be set dynamically.
+// Checks globalThis.__TORCH_NETWORK__ first (for browser runtime switching),
+// then falls back to process.env.TORCH_NETWORK (for Node.js / build-time).
+const isDevnet = () => globalThis.__TORCH_NETWORK__ === 'devnet' ||
+    (typeof process !== 'undefined' && process.env?.TORCH_NETWORK === 'devnet');
+// Raydium CPMM Program (different on mainnet vs devnet)
+const getRaydiumCpmmProgram = () => new web3_js_1.PublicKey(isDevnet()
+    ? 'CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW'
+    : 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C');
+exports.getRaydiumCpmmProgram = getRaydiumCpmmProgram;
+/** @deprecated Use getRaydiumCpmmProgram() for dynamic network support */
+exports.RAYDIUM_CPMM_PROGRAM = (0, exports.getRaydiumCpmmProgram)();
 // WSOL Mint (same on all networks)
 exports.WSOL_MINT = new web3_js_1.PublicKey('So11111111111111111111111111111111111111112');
-// Raydium AMM Config (0.25% fee tier - standard)
-// Note: This config PDA exists on both mainnet and devnet
-exports.RAYDIUM_AMM_CONFIG = new web3_js_1.PublicKey('D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2');
+// Raydium AMM Config (different on mainnet vs devnet)
+const getRaydiumAmmConfig = () => new web3_js_1.PublicKey(isDevnet()
+    ? '9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6'
+    : 'D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2');
+exports.getRaydiumAmmConfig = getRaydiumAmmConfig;
+/** @deprecated Use getRaydiumAmmConfig() for dynamic network support */
+exports.RAYDIUM_AMM_CONFIG = (0, exports.getRaydiumAmmConfig)();
+// Raydium Fee Receiver (different on mainnet vs devnet)
+const getRaydiumFeeReceiver = () => new web3_js_1.PublicKey(isDevnet()
+    ? 'G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2'
+    : 'DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8');
+exports.getRaydiumFeeReceiver = getRaydiumFeeReceiver;
+/** @deprecated Use getRaydiumFeeReceiver() for dynamic network support */
+exports.RAYDIUM_FEE_RECEIVER = (0, exports.getRaydiumFeeReceiver)();
 // SPL Memo Program
 exports.MEMO_PROGRAM_ID = new web3_js_1.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 // Token-2022 Program (for Token Extensions)

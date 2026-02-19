@@ -27,13 +27,19 @@
         "description": "Disposable controller keypair (base58 or byte array JSON). Optional -- only needed for direct signing. Should be a fresh keypair with ~0.01 SOL for gas. Holds no value. All trading capital lives in the vault. If omitted, the agent operates in read-and-build mode: querying state and returning unsigned transactions for external signing.",
         "sensitive": true,
         "required": false
+      },
+      {
+        "name": "TORCH_NETWORK",
+        "description": "Set to 'devnet' for devnet Raydium addresses. Omit or leave empty for mainnet. SDK also checks globalThis.__TORCH_NETWORK__ at runtime (browser).",
+        "sensitive": false,
+        "required": false
       }
     ],
     "install": [
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.6.0",
+        "package": "torchsdk@^3.6.8",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
@@ -57,10 +63,13 @@
     "dex-trading",
     "read-only-mode",
     "protocol-rewards",
-    "lending-market-scanner"
+    "lending-market-scanner",
+    "permissionless-migration",
+    "dynamic-network"
   ],
   "chain": "solana",
   "network": "mainnet",
+  "network_support": ["mainnet", "devnet"],
   "program_id": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
   "endpoints": {
     "skill": "https://torch.market/skill.md",
@@ -178,6 +187,10 @@
     {
       "name": "TORCH_VAULT_SWAP",
       "description": "Trade migrated tokens on Raydium DEX via vault (buy: vault SOL → tokens to vault ATA, sell: vault tokens → SOL to vault). Full custody preserved."
+    },
+    {
+      "name": "TORCH_MIGRATE",
+      "description": "Migrate a bonding-complete token to Raydium DEX (permissionless -- anyone can trigger). Two-step: fund WSOL from treasury + create Raydium CPMM pool. Payer covers rent (~0.02 SOL), treasury pays 0.15 SOL pool fee."
     },
     {
       "name": "TORCH_CLAIM_PROTOCOL_REWARDS",

@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.5.1.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.6.8.
 
 ## Overview
 
@@ -29,10 +29,11 @@ The SDK is designed for AI agent integration. The core safety primitive is the *
 │  getHolders()            │  │  buildVaultSwapTx()        │
 │  getMessages()           │  │  buildCreateTokenTx()      │
 │  getLendingInfo()        │  │  buildStarTransaction()    │
-│  getLoanPosition()       │  │  buildBorrowTransaction()  │
-│  getVault()              │  │  buildRepayTransaction()   │
-│  getVaultForWallet()     │  │  buildLiquidateTransaction │
-│  getVaultWalletLink()    │  │  buildClaimProtocolRewardsTx│
+│  getLoanPosition()       │  │  buildMigrateTransaction() │
+│  getVault()              │  │  buildBorrowTransaction()  │
+│  getVaultForWallet()     │  │  buildRepayTransaction()   │
+│  getVaultWalletLink()    │  │  buildLiquidateTransaction │
+│                          │  │  buildClaimProtocolRewardsTx│
 │                          │  │  buildCreateVaultTx()      │
 │                          │  │  buildDepositVaultTx()     │
 │                          │  │  buildWithdrawVaultTx()    │
@@ -52,7 +53,7 @@ The SDK is designed for AI agent integration. The core safety primitive is the *
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────┐
-│              Solana RPC (mainnet / validator)             │
+│         Solana RPC (mainnet / devnet / validator)         │
 │                                                          │
 │  getProgramAccounts    getAccountInfo    sendTransaction  │
 └──────────────────────────────────────────────────────────┘
@@ -64,14 +65,14 @@ The SDK is designed for AI agent integration. The core safety primitive is the *
 src/
 ├── index.ts            Public API — all exports
 ├── types.ts            TypeScript interfaces (params, results, types)
-├── constants.ts        Program ID, PDA seeds, token constants, blacklist
+├── constants.ts        Program ID, PDA seeds, token constants, blacklist, dynamic network
 ├── program.ts          Anchor IDL, PDA derivation, on-chain types, math
-├── tokens.ts           Read-only queries (tokens, holders, vault, lending)
-├── transactions.ts     Transaction builders (buy, sell, vault, lending)
+├── tokens.ts           Read-only queries (tokens, holders, vault, lending, pool price)
+├── transactions.ts     Transaction builders (buy, sell, vault, lending, migrate)
 ├── quotes.ts           Buy/sell quote calculations (no RPC write)
 ├── said.ts             SAID Protocol integration (verify, confirm)
 ├── gateway.ts          Irys metadata fetch with fallback
-└── torch_market.json   Anchor IDL (v3.2.0, 25 instructions)
+└── torch_market.json   Anchor IDL (v3.6.0, 35 instructions)
 ```
 
 ### Dependency Graph
@@ -226,6 +227,10 @@ CREATE → BONDING → COMPLETE → MIGRATE → DEX TRADING
 - `getBuyQuote` / `getSellQuote` — simulate trades
 - Fee split: 1% protocol fee, 1% treasury fee, remainder to curve+treasury (20%→5% flat dynamic rate across all tiers)
 
+### Migration (V26 — Permissionless)
+
+- `buildMigrateTransaction` — two-step: fund WSOL from treasury + create Raydium CPMM pool. Anyone can trigger for bonding-complete tokens. Payer covers ~0.02 SOL rent, treasury pays 0.15 SOL pool fee.
+
 ### Post-Migration
 
 - `buildVaultSwapTransaction` — buy/sell migrated tokens on Raydium DEX via vault (full custody)
@@ -355,8 +360,8 @@ Transaction builders validate inputs locally before constructing the transaction
 | `PROGRAM_ID` | `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` | Torch Market program |
 | `TOTAL_SUPPLY` | 1,000,000,000 (1B × 10^6) | Token supply with 6 decimals |
 | `TOKEN_DECIMALS` | 6 | SPL token decimals |
-| `RAYDIUM_CPMM_PROGRAM` | `CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C` | Raydium CPMM |
-| `RAYDIUM_AMM_CONFIG` | `D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2` | 0.25% fee tier |
+| `getRaydiumCpmmProgram()` | Mainnet: `CPMMoo8L3F4...` / Devnet: `CPMDWBwJ...` | Raydium CPMM (dynamic) |
+| `getRaydiumAmmConfig()` | Mainnet: `D4FPEru...` / Devnet: `9zSzfk...` | Fee tier (dynamic) |
 | `TOKEN_2022_PROGRAM_ID` | `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | Token Extensions |
 | `MEMO_PROGRAM_ID` | `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` | SPL Memo |
 
@@ -406,3 +411,4 @@ Expected result: **32 passed, 0 failed**
 | 3.3.0 | **Tiered Bonding Curves (V23).** New optional `sol_target` parameter on `buildCreateTokenTransaction`: Spark (50 SOL, ~7x), Flame (100 SOL, ~19x), Torch (200 SOL, ~59x, default). Same formula, different graduation points. On-chain: `harvest_fees` hardened (V3.2.1 security fix — constrained treasury ATA destination). Raydium pool validation confirmed by independent auditor. Kani proofs updated for all tiers (20/20 passing). IDL updated to v3.3.0. |
 | 3.4.0 | **Tiered Fee Structure (V24).** Dynamic treasury SOL rate is now per-tier: Spark 5%→1%, Flame 10%→2%, Torch 20%→5% (unchanged). Fee bounds derived from `bonding_target` at runtime — zero new on-chain state. `calculateTokensOut` accepts optional `bondingTarget` parameter. Callers (`getBuyQuote`, `buildBuyTransaction`) pass `bonding_target` from on-chain state. Legacy tokens (bonding_target=0) get Torch rates. IDL updated to v3.4.0. |
 | 3.5.1 | **V25 Pump-Style Token Distribution.** New virtual reserve model: IVS = bonding_target/8 (6.25-25 SOL), IVT = 900M tokens, ~81x multiplier across all tiers. Reverted V24 per-tier treasury fees to flat 20%→5% for all tiers. 35 Kani proof harnesses (up from 26), including 7 new V25 supply conservation and excess burn proofs. IDL updated to v3.5.1. |
+| 3.6.8 | **V26-V28 + Dynamic Network.** Permissionless DEX migration (`buildMigrateTransaction`) — two-step fund WSOL + migrate in one tx. Pool account validation hardened (V27 — AMM config constrained, pool ownership verified). `update_authority` admin instruction (V28). Critical lending `sol_balance` accounting fix. Lending utilization cap properly applied (50% - total_sol_lent). Live Raydium pool price for migrated tokens. Dynamic network detection (`globalThis.__TORCH_NETWORK__` / `process.env.TORCH_NETWORK`). Pre-migration buyback removed. IDL updated to v3.6.0. |

@@ -6,7 +6,7 @@ We used [Kani](https://model-checking.github.io/kani/), a formal verification to
 
 This is **not** a security audit. It proves the arithmetic is correct, but does not cover access control, account validation, or economic attacks. See [What Is NOT Verified](#what-is-not-verified) for full scope limitations.
 
-**35 proof harnesses. All passing. Zero failures.**
+**36 proof harnesses. All passing. Zero failures.**
 
 ---
 
@@ -15,8 +15,8 @@ This is **not** a security audit. It proves the arithmetic is correct, but does 
 torch_market's core arithmetic has been formally verified using [Kani](https://model-checking.github.io/kani/), a Rust model checker backed by the CBMC bounded model checker. Kani exhaustively proves properties hold for **all** valid inputs within constrained ranges -- not just sampled test cases.
 
 **Tool:** Kani Rust Verifier 0.67.0 / CBMC 6.8.0
-**Target:** `torch_market` v3.5.1
-**Harnesses:** 35 proof harnesses, all passing
+**Target:** `torch_market` v3.6.0
+**Harnesses:** 36 proof harnesses, all passing
 **Source:** `programs/torch_market/src/kani_proofs.rs`
 
 ## What Is Formally Verified
@@ -75,20 +75,18 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 | `verify_buyback_respects_reserve` | `buyback_amount <= available <= balance` | Up to 200 SOL, variable reserve/buyback rates |
 | `verify_double_transfer_fee_positive` | Token amount remains positive after two consecutive transfer fees | 1 token to TOTAL_SUPPLY |
 
-### Migration (Harnesses 23-28)
+### Migration (Harnesses 23-26)
 
-These harnesses verify the price-matched migration logic ensuring pool pricing matches the bonding curve at graduation.
+These harnesses verify the V26 permissionless migration: SOL wrapping conservation, price-matched pool creation, and token burn accounting.
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
-| `verify_prepare_migration_conservation` | `bc_lamports - sol_amount == rent_exempt` (SOL withdrawal is exact) | 0 to 200 SOL reserves |
-| `verify_refund_skip_after_prepare_migration` | After prepare_migration drains BC, refund correctly evaluates to skip | 0 to 200 SOL, rent up to 10M lamports |
-| `verify_normal_refund_path` | Without prepare_migration, refund transfers exactly `sol_amount` | 0 to 200 SOL, rent up to 10M lamports |
+| `verify_sol_wrapping_conservation` | [V26] `bc_debited == wsol_credited`, total lamports conserved (bonding curve SOL → payer WSOL) | 0 to 200 SOL reserves, rent up to 10M lamports |
 | `verify_price_matched_pool_spark` | Pool ratio matches curve ratio (truncation error < 1 unit) | Spark tier (50 SOL), 3 representative token values |
 | `verify_price_matched_pool_torch` | Pool ratio matches curve ratio (truncation error < 1 unit) | Torch tier (200 SOL), 3 representative token values |
 | `verify_excess_token_burn_conservation` | `pool_tokens + burned_tokens == vault_total` (no tokens created or lost) | Spark tier, vault up to TOTAL_SUPPLY |
 
-### V25 Pump-Style Token Distribution (Harnesses 29-35)
+### V25 Pump-Style Token Distribution (Harnesses 27-33)
 
 These harnesses verify the V25 token distribution model where IVS = bonding_target/8 and IVT = 900M tokens, ensuring supply conservation and bounded excess burn across all tiers.
 
@@ -101,6 +99,22 @@ These harnesses verify the V25 token distribution model where IVS = bonding_targ
 | `verify_v25_excess_burn_bounded_spark` | Excess burn < 20% of supply | Spark tier, representative sold amounts |
 | `verify_v25_excess_burn_bounded_flame` | Excess burn < 20% of supply | Flame tier, representative sold amounts |
 | `verify_v25_excess_burn_bounded_torch` | Excess burn < 20% of supply | Torch tier, representative sold amounts |
+
+### Sell Fee (Harness 34)
+
+| Harness | Property | Input Range |
+|---------|----------|-------------|
+| `verify_sell_fee_always_zero` | `SELL_FEE_BPS == 0` and computed fee == 0 for all valid sol_out | 0.001-200 SOL |
+
+### Lending Lifecycle (Harnesses 35-36)
+
+These harnesses verify end-to-end lending correctness: borrow → (optional interest accrual) → repay, proving treasury SOL conservation, correct interest-first repayment ordering, and loan zeroing.
+
+| Harness | Property | Input Range |
+|---------|----------|-------------|
+| `verify_lending_lifecycle_conservation` | After borrow + full repay (same slot): treasury SOL exactly restored, loan zeroed, principal_paid == sol_borrowed | 100 SOL / 50T token pool, up to 50 SOL borrow |
+| `verify_lending_partial_repay_accounting` | After partial repay: remaining_debt == total_owed - repaid, interest paid first, borrowed never increases | Up to 50 SOL, interest < 10% of principal |
+| `verify_lending_lifecycle_with_interest` | After borrow + 1 epoch interest + full repay: treasury gains exactly the interest, principal fully returned | Up to 50 SOL, 2%/epoch, 1 epoch max |
 
 ## Verification Methodology
 
@@ -140,7 +154,7 @@ Seven harnesses were dropped during verification because they prove structurally
 | `verify_no_round_trip_fresh/half/full` | Round-trip loss (`buy then sell <= original`) is inherent in AMM constant-product formulas with integer truncation. Floor division always rounds down. |
 | `verify_ltv_100_percent` | `(v * 10000) / v == 10000` is a mathematical tautology. SAT solvers cannot efficiently prove symbolic u128 division cancellation. |
 
-These properties remain true by construction. The remaining 35 harnesses cover every non-tautological safety property.
+These properties remain true by construction. The remaining 36 harnesses cover every non-tautological safety property.
 
 ## What Is NOT Verified
 
@@ -181,7 +195,7 @@ cargo kani
 cargo kani --harness verify_buy_fee_conservation
 ```
 
-All 35 harnesses pass. Most complete in under 1 second; the slowest (`verify_transfer_fee_bounds`, `verify_treasury_rate_monotonic`) take 30-55 seconds due to larger SAT formula complexity.
+All 36 harnesses pass. Most complete in under 1 second; the slowest (`verify_transfer_fee_bounds`, `verify_treasury_rate_monotonic`) take 30-55 seconds due to larger SAT formula complexity.
 
 ## Constants Reference
 

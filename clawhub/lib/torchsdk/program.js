@@ -167,27 +167,27 @@ const orderTokensForRaydium = (tokenA, tokenB) => {
 exports.orderTokensForRaydium = orderTokensForRaydium;
 // Raydium authority PDA
 const getRaydiumAuthorityPda = () => {
-    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('vault_and_lp_mint_auth_seed')], constants_1.RAYDIUM_CPMM_PROGRAM);
+    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('vault_and_lp_mint_auth_seed')], (0, constants_1.getRaydiumCpmmProgram)());
 };
 exports.getRaydiumAuthorityPda = getRaydiumAuthorityPda;
 // Raydium pool state PDA
 const getRaydiumPoolStatePda = (ammConfig, token0Mint, token1Mint) => {
-    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('pool'), ammConfig.toBuffer(), token0Mint.toBuffer(), token1Mint.toBuffer()], constants_1.RAYDIUM_CPMM_PROGRAM);
+    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('pool'), ammConfig.toBuffer(), token0Mint.toBuffer(), token1Mint.toBuffer()], (0, constants_1.getRaydiumCpmmProgram)());
 };
 exports.getRaydiumPoolStatePda = getRaydiumPoolStatePda;
 // Raydium LP mint PDA
 const getRaydiumLpMintPda = (poolState) => {
-    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('pool_lp_mint'), poolState.toBuffer()], constants_1.RAYDIUM_CPMM_PROGRAM);
+    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('pool_lp_mint'), poolState.toBuffer()], (0, constants_1.getRaydiumCpmmProgram)());
 };
 exports.getRaydiumLpMintPda = getRaydiumLpMintPda;
 // Raydium pool vault PDA
 const getRaydiumVaultPda = (poolState, tokenMint) => {
-    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('pool_vault'), poolState.toBuffer(), tokenMint.toBuffer()], constants_1.RAYDIUM_CPMM_PROGRAM);
+    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('pool_vault'), poolState.toBuffer(), tokenMint.toBuffer()], (0, constants_1.getRaydiumCpmmProgram)());
 };
 exports.getRaydiumVaultPda = getRaydiumVaultPda;
 // Raydium observation state PDA
 const getRaydiumObservationPda = (poolState) => {
-    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('observation'), poolState.toBuffer()], constants_1.RAYDIUM_CPMM_PROGRAM);
+    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from('observation'), poolState.toBuffer()], (0, constants_1.getRaydiumCpmmProgram)());
 };
 exports.getRaydiumObservationPda = getRaydiumObservationPda;
 // Get all Raydium accounts needed for migration
@@ -195,7 +195,7 @@ const getRaydiumMigrationAccounts = (tokenMint) => {
     const { token0, token1, isToken0First } = (0, exports.orderTokensForRaydium)(constants_1.WSOL_MINT, tokenMint);
     const isWsolToken0 = isToken0First;
     const [raydiumAuthority] = (0, exports.getRaydiumAuthorityPda)();
-    const [poolState] = (0, exports.getRaydiumPoolStatePda)(constants_1.RAYDIUM_AMM_CONFIG, token0, token1);
+    const [poolState] = (0, exports.getRaydiumPoolStatePda)((0, constants_1.getRaydiumAmmConfig)(), token0, token1);
     const [lpMint] = (0, exports.getRaydiumLpMintPda)(poolState);
     const [token0Vault] = (0, exports.getRaydiumVaultPda)(poolState, token0);
     const [token1Vault] = (0, exports.getRaydiumVaultPda)(poolState, token1);

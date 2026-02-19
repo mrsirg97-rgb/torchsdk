@@ -16,22 +16,38 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.6.8
+
+- **Permissionless DEX Migration (V26)** — New `buildMigrateTransaction` builds the two-step migration (fund WSOL + migrate to Raydium) in a single transaction. Anyone can trigger migration for bonding-complete tokens — payer covers rent (~0.02 SOL), treasury pays 0.15 SOL Raydium pool fee.
+- **Pool Account Validation (V27)** — Tightened Raydium pool validation: AMM config constrained to known program constant, pool state ownership verified against Raydium CPMM program ID. Closes account substitution vector.
+- **Update Authority (V28)** — New `update_authority` admin instruction for transferring protocol authority. Immediate, authority-only.
+- **Lending `sol_balance` Bug Fix** — Treasury `sol_balance` now correctly decremented on borrow and incremented on repay/liquidation. Critical accounting fix.
+- **Lending Utilization Cap** — `getLendingInfo` now returns actual borrowable amount: `(sol_balance * 50%) - total_sol_lent`, matching on-chain enforcement.
+- **Live Raydium Pool Price** — `getToken()` fetches live pool vault balances for migrated tokens instead of frozen bonding curve virtual reserves.
+- **Dynamic Network Detection** — SDK evaluates network at call time via `globalThis.__TORCH_NETWORK__` (browser runtime) or `process.env.TORCH_NETWORK` (Node.js). Raydium addresses switch automatically between mainnet and devnet.
+- **Pre-migration Buyback Removed** — Simplified protocol: only post-migration DEX buyback remains.
+- **35 Kani Proof Harnesses** — Including V25 supply conservation, V26 SOL wrapping conservation, lending lifecycle with interest.
+- **IDL updated to v3.6.0** (35 instructions).
+
+### v3.5.1
+
+- **V25 Pump-Style Token Distribution** — New virtual reserve model: IVS = bonding_target/8 (6.25-25 SOL), IVT = 900M tokens, ~81x multiplier across all tiers. Reverted V24 per-tier treasury fees to flat 20%→5% for all tiers.
+
+### v3.4.0
+
+- **Tiered Fee Structure (V24)** — Dynamic treasury SOL rate per-tier. Legacy tokens get Torch rates. `calculateTokensOut` accepts optional `bondingTarget` parameter.
+
 ### v3.3.0
 
-- **Tiered Bonding Curves (V23)** — Creators choose a graduation target at token creation: Spark (50 SOL), Flame (100 SOL), or Torch (200 SOL, default). Same formula, same virtual reserves, different graduation points. New optional `sol_target` parameter on `buildCreateTokenTransaction`.
-- **Security: `harvest_fees` hardened (V3.2.1)** — Fixed critical vulnerability where `treasury_token_account` was unconstrained. Added Anchor `associated_token` constraints. Independent auditor verified the fix.
-- **Raydium pool validation confirmed** — Oracle manipulation report reviewed and dismissed; `validate_pool_accounts()` already validates pool ownership, vaults, and mints. Auditor gave green flag.
-- **Kani proofs updated** — Treasury rate proofs now formally verify for all tier targets (50/100/200 SOL). 20/20 harnesses passing.
+- **Tiered Bonding Curves (V23)** — Creators choose a graduation target at token creation: Spark (50 SOL), Flame (100 SOL), or Torch (200 SOL, default). New optional `sol_target` parameter on `buildCreateTokenTransaction`.
+- **Security: `harvest_fees` hardened (V3.2.1)** — Fixed critical vulnerability where `treasury_token_account` was unconstrained. Independent auditor verified.
+- **Kani proofs updated** — 20/20 harnesses passing for all tiers.
 
 ### v3.2.4
 
-- **Metadata fetch timeout** — `fetchWithFallback` now enforces a 10s timeout via AbortController (prevents DoS from slow creator-controlled metadata URIs)
-- **Explicit slippage validation** — `slippage_bps` outside 10–1000 now throws instead of silently clamping
-- **IDL-derived discriminator** — LoanPosition discriminator derived from Anchor IDL instead of hardcoded bytes
-
-### v3.2.3
-
-Documentation-only (whitepaper, audit, ClawHub spec compliance). No code changes from v3.2.0.
+- **Metadata fetch timeout** — 10s AbortController in `fetchWithFallback`
+- **Explicit slippage validation** — throws on out-of-range instead of silent clamping
+- **IDL-derived discriminator** — LoanPosition discriminator from Anchor IDL
 
 ## What's New in v3.2.0
 
@@ -102,6 +118,7 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 | `buildDirectBuyTransaction(connection, params)` | Buy tokens (buyer pays directly, no vault) |
 | `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve (vault-routed) |
 | `buildVaultSwapTransaction(connection, params)` | Buy/sell migrated tokens on Raydium DEX (vault-routed) |
+| `buildMigrateTransaction(connection, params)` | Migrate bonding-complete token to Raydium DEX (permissionless) |
 | `buildCreateTokenTransaction(connection, params)` | Launch a new token |
 | `buildStarTransaction(connection, params)` | Star a token (0.05 SOL, vault-routed) |
 
@@ -275,9 +292,26 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 { mint: string, borrower: string, sol_amount: number, vault?: string }
 { mint: string, liquidator: string, borrower: string, vault?: string }
 
+// Migrate (permissionless — anyone can trigger for bonding-complete tokens)
+{ mint: string, payer: string }
+
 // Rewards (optional vault routing)
 { user: string, vault?: string }                                       // claim protocol rewards
 ```
+
+## Network Configuration
+
+The SDK detects the network at runtime. No rebuild needed to switch between mainnet and devnet.
+
+```typescript
+// Browser: set before SDK calls (e.g., in a network switcher)
+(globalThis as any).__TORCH_NETWORK__ = 'devnet'
+
+// Node.js: set via environment variable
+// TORCH_NETWORK=devnet npx tsx your-script.ts
+```
+
+The SDK checks `globalThis.__TORCH_NETWORK__` first (for browser runtime switching), then falls back to `process.env.TORCH_NETWORK`. When set to `'devnet'`, all Raydium addresses automatically switch to devnet versions.
 
 ## Vault Safety Model
 
@@ -307,7 +341,9 @@ npx tsx tests/test_e2e.ts
 
 Expected output: `RESULTS: 32 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), Raydium migration, borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
+
+A separate devnet E2E test (`tests/test_devnet_e2e.ts`) validates the full lifecycle against Solana devnet with `TORCH_NETWORK=devnet`.
 
 ## License
 

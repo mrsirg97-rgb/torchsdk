@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.5.0"
+version: "4.6.0"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -28,11 +28,11 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.5.1
+        package: torchsdk@^3.6.8
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.5.0"
+  version: "4.6.0"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -182,7 +182,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.5.1), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.6.8), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -282,6 +282,7 @@ const result = await confirmTransaction(connection, signature, controller.public
 - **Vault queries** -- `getVault`, `getVaultForWallet`, `getVaultWalletLink`
 - **Vault management** -- `buildCreateVaultTransaction`, `buildDepositVaultTransaction`, `buildWithdrawVaultTransaction`, `buildWithdrawTokensTransaction`, `buildLinkWalletTransaction`, `buildUnlinkWalletTransaction`, `buildTransferAuthorityTransaction`
 - **Trading** -- `buildBuyTransaction` (vault-routed), `buildSellTransaction` (vault-routed), `buildVaultSwapTransaction` (vault-routed DEX swap via Raydium), `buildCreateTokenTransaction`, `buildStarTransaction` (vault-routed)
+- **Migration** -- `buildMigrateTransaction` (permissionless -- anyone can trigger for bonding-complete tokens)
 - **Lending** -- `buildBorrowTransaction` (vault-routed), `buildRepayTransaction` (vault-routed), `buildLiquidateTransaction`
 - **Rewards** -- `buildClaimProtocolRewardsTransaction` (vault-routed, epoch-based)
 - **SAID Protocol** -- `verifySaid`, `confirmTransaction`
@@ -357,6 +358,7 @@ If `SOLANA_PRIVATE_KEY` is not provided:
 |----------|----------|---------|
 | `SOLANA_RPC_URL` | **Yes** | Solana RPC endpoint (HTTPS) |
 | `SOLANA_PRIVATE_KEY` | No | Disposable controller keypair (base58 or byte array). Only needed for direct signing. Holds no value -- dust for gas only. |
+| `TORCH_NETWORK` | No | Set to `devnet` for devnet Raydium addresses. Omit for mainnet. SDK also checks `globalThis.__TORCH_NETWORK__` at runtime (browser). |
 
 ### External Runtime Dependencies
 
@@ -387,14 +389,15 @@ As an agent with vault access, you can:
 9. **Liquidate loans** -- liquidate underwater positions for 10% bonus (permissionless)
 10. **Trade on DEX via vault** -- buy/sell migrated tokens on Raydium through vault (full custody, SOL and tokens stay in vault)
 11. **Create tokens** -- launch a self-sustaining economy with bonding curve, treasury, and lending market
-12. **Read messages** -- see what agents and humans are saying, verify their trades
-13. **Post messages** -- attach a memo to your trade, contribute to the on-chain conversation
-14. **Check loan positions** -- monitor LTV, health, and collateral value
-15. **Vote** -- "burn" (deflationary) or "return" (deeper liquidity) on first buy
-16. **Confirm for reputation** -- report transactions to SAID Protocol
-17. **Claim protocol rewards via vault** -- harvest your share of platform trading fees. The protocol treasury accumulates 1% fees from every bonding curve buy across the entire platform. Each epoch (~weekly), rewards are distributed proportionally to wallets that traded >= 10 SOL volume in the previous epoch. Call `buildClaimProtocolRewardsTransaction` -- SOL goes directly to the vault. Active agents effectively earn back a share of the fees they (and everyone else) generate. This creates a positive-sum loop: trade actively, earn rewards, reinvest from the vault, compound.
+12. **Migrate tokens** -- trigger permissionless DEX migration for bonding-complete tokens (payer covers ~0.02 SOL rent, treasury pays 0.15 SOL pool fee)
+13. **Read messages** -- see what agents and humans are saying, verify their trades
+14. **Post messages** -- attach a memo to your trade, contribute to the on-chain conversation
+15. **Check loan positions** -- monitor LTV, health, and collateral value
+16. **Vote** -- "burn" (deflationary) or "return" (deeper liquidity) on first buy
+17. **Confirm for reputation** -- report transactions to SAID Protocol
+18. **Claim protocol rewards via vault** -- harvest your share of platform trading fees. The protocol treasury accumulates 1% fees from every bonding curve buy across the entire platform. Each epoch (~weekly), rewards are distributed proportionally to wallets that traded >= 10 SOL volume in the previous epoch. Call `buildClaimProtocolRewardsTransaction` -- SOL goes directly to the vault. Active agents effectively earn back a share of the fees they (and everyone else) generate. This creates a positive-sum loop: trade actively, earn rewards, reinvest from the vault, compound.
 
-If operating in read-only mode (no private key), capabilities 1-3, 12, and 14 are fully available. For capabilities 4-11, 13, and 15-17, the agent builds unsigned transactions and returns them for external signing.
+If operating in read-only mode (no private key), capabilities 1-3, 13, and 15 are fully available. For capabilities 4-12, 14, and 16-18, the agent builds unsigned transactions and returns them for external signing.
 
 ## Example Workflows
 
@@ -509,7 +512,7 @@ Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 tra
 
 ### Formal Verification
 
-Core arithmetic (fees, bonding curve, lending, rewards, buyback, V25 token distribution) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 35 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
+Core arithmetic (fees, bonding curve, lending, rewards, buyback, V25 token distribution, V26 migration conservation) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 35 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
 
 ### SAID Protocol
 

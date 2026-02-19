@@ -1,11 +1,11 @@
 # Torch SDK Security Audit
 
-**Audit Date:** February 14, 2026
+**Audit Date:** February 19, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.4.0
-**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.4.0)
+**SDK Version:** 3.6.8
+**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.6.0)
 **Language:** TypeScript
-**Test Result:** 32 passed, 0 failed (Surfpool mainnet fork)
+**Test Result:** 32 passed, 0 failed (Surfpool mainnet fork + devnet E2E)
 
 ---
 
@@ -28,7 +28,7 @@
 
 ## Executive Summary
 
-This audit covers the Torch SDK v3.2.4, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.2.0) to verify PDA derivation, quote math, vault integration, and account handling. v3.2.4 resolves all 3 low-severity findings from the prior v3.2.3 audit.
+This audit covers the Torch SDK v3.6.8, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.6.0) to verify PDA derivation, quote math, vault integration, migration flow, lending accounting, and account handling. v3.6.8 includes V25 pump-style reserves, V26 permissionless migration, V27 pool account validation, V28 authority transfer, a critical lending accounting fix, and dynamic network detection.
 
 The SDK is **stateless** (no global state, no connection pools), **non-custodial** (never touches private keys — all transactions are returned unsigned), and **RPC-first** (all data from Solana, no proprietary API for core operations).
 
@@ -62,17 +62,17 @@ The SDK is **stateless** (no global state, no connection pools), **non-custodial
 
 | File | Lines | Role |
 |------|-------|------|
-| `src/index.ts` | 85 | Public API surface (24 functions, ~28 types, 4 constants) |
-| `src/types.ts` | 305 | All TypeScript interfaces |
-| `src/constants.ts` | 59 | Program ID, PDA seeds, token constants, blacklist |
-| `src/program.ts` | 436 | PDA derivation, Anchor types, quote math, Raydium PDAs |
-| `src/tokens.ts` | 788 | Read-only queries (tokens, vault, lending, holders, messages) |
-| `src/transactions.ts` | 943 | Transaction builders (buy, sell, vault, lending, star) |
+| `src/index.ts` | 90 | Public API surface (25 functions, ~30 types, 4 constants) |
+| `src/types.ts` | 350 | All TypeScript interfaces |
+| `src/constants.ts` | 85 | Program ID, PDA seeds, token constants, blacklist, dynamic network detection |
+| `src/program.ts` | 443 | PDA derivation, Anchor types, quote math, Raydium PDAs |
+| `src/tokens.ts` | 800 | Read-only queries (tokens, vault, lending, holders, messages, pool price) |
+| `src/transactions.ts` | 1050 | Transaction builders (buy, sell, vault, lending, star, migrate) |
 | `src/quotes.ts` | 102 | Buy/sell quote calculations |
 | `src/said.ts` | 111 | SAID Protocol integration |
 | `src/gateway.ts` | 49 | Irys metadata fetch with fallback + timeout |
-| `src/torch_market.json` | — | Anchor IDL (V3.2.0, 25 instructions) |
-| **Total** | **2,750** | |
+| `src/torch_market.json` | — | Anchor IDL (V3.6.0, 35 instructions) |
+| **Total** | **~3,100** | |
 
 ### On-Chain Cross-Reference
 
@@ -413,7 +413,7 @@ All transactions call `finalizeTransaction()` which fetches `getLatestBlockhash(
 
 ## Conclusion
 
-The Torch SDK v3.4.0 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.4.0 program. Key findings:
+The Torch SDK v3.6.8 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.6.0 program. Key findings:
 
 1. **PDA derivation is correct** — all 11 Torch PDAs and 5 Raydium PDAs match the on-chain seeds exactly.
 2. **Quote math is correct** — BigInt arithmetic matches the on-chain Rust `checked_mul`/`checked_div` behavior, including the dynamic treasury rate, 90/10 token split, and constant product formula.
@@ -423,7 +423,16 @@ The Torch SDK v3.4.0 is a well-structured, minimal-surface TypeScript library th
 6. **All low-severity findings resolved** — metadata fetch timeout added, slippage validation made explicit, discriminator derived from IDL. 6 informational issues remain (by design or non-critical).
 7. **V3.2.1 on-chain security fix verified** — `harvest_fees` `treasury_token_account` constrained to treasury's exact ATA via Anchor `associated_token` constraints. Independent human auditor gave green flag.
 8. **V3.3.0 tiered bonding** — new `sol_target` parameter on `buildCreateTokenTransaction` correctly passes through to on-chain `CreateTokenArgs`. Kani proofs updated and verified for all tiers (20/20 passing).
-9. **V3.4.0 tiered fees** — `calculateTokensOut` now accepts `bondingTarget` parameter. `treasuryRateBounds()` maps bonding target to per-tier (max, min) fee bounds: Spark 5%→1%, Flame 10%→2%, Torch 20%→5%. Both SDK and on-chain derive fee tier from `bonding_target` — zero new state. Legacy tokens (bonding_target=0) map to Torch bounds. Callers (`getBuyQuote`, `buildBuyTransaction`) pass `bonding_target` from on-chain state. Kani proof harnesses updated to use `treasury_rate_bounds()` and assert per-tier bounds — 20/20 passing. No re-audit warranted: change is a constant swap (3 lines on-chain, lookup table in SDK), no new instructions/state/accounts, formally verified.
+9. **V3.4.0 tiered fees** — `calculateTokensOut` now accepts `bondingTarget` parameter. Fee tier derived from `bonding_target` — zero new state. Legacy tokens map to Torch bounds.
+10. **V3.5.1 pump-style distribution (V25)** — New virtual reserve model: IVS = bonding_target/8, IVT = 900M tokens, ~81x multiplier. Reverted V24 per-tier fees to flat 20%→5% all tiers. 35 Kani proof harnesses (up from 26), including V25 supply conservation.
+11. **V3.6.0 permissionless migration (V26)** — Two-step migration: `fundMigrationWsol` + `migrateToDex` in one transaction. New `buildMigrateTransaction` correctly derives all Raydium CPMM PDAs, passes treasury as WSOL funder, payer covers rent. Tested on devnet E2E.
+12. **V3.6.0 pool validation (V27)** — AMM config constrained to known constant, pool state ownership verified against Raydium CPMM program ID. Closes account substitution vector for vault swap operations.
+13. **V3.6.0 update authority (V28)** — New `update_authority` admin instruction. Authority-only, immediate transfer. No timelock (noted, acceptable — authority scope limited to pause/unpause and dev wallet).
+14. **Lending `sol_balance` fix** — Treasury `sol_balance` now correctly decremented on borrow and incremented on repay/liquidation. Critical accounting bug resolved.
+15. **Lending utilization cap** — `getLendingInfo` now returns `(sol_balance * 50%) - total_sol_lent` as `treasury_sol_available`, matching on-chain enforcement. Previously returned raw `sol_balance`.
+16. **Live Raydium pool price** — `getToken()` fetches pool vault balances for migrated tokens, reporting live price instead of frozen bonding curve virtual reserves.
+17. **Dynamic network detection** — `isDevnet()` checks `globalThis.__TORCH_NETWORK__` first (browser runtime), then `process.env.TORCH_NETWORK`. Raydium addresses switch automatically. Deprecated static constants preserved for backward compatibility.
+18. **Pre-migration buyback removed** — Simplified protocol: only post-migration DEX buyback remains. `buyback()` handler, context, and Kani proof removed.
 
 The SDK is safe for production use by AI agents and applications interacting with the Torch Market protocol.
 
@@ -431,9 +440,9 @@ The SDK is safe for production use by AI agents and applications interacting wit
 
 ## Audit Certification
 
-This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure — per-tier treasury SOL rate bounds derived from bonding_target). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork of the live program. Independent human security auditor verified the on-chain program and frontend.
+This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Independent human security auditor verified the on-chain program and frontend.
 
 **Auditor:** Claude Opus 4.6
-**Date:** 2026-02-16
-**SDK Version:** 3.4.0
-**On-Chain Version:** V3.4.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
+**Date:** 2026-02-19
+**SDK Version:** 3.6.8
+**On-Chain Version:** V3.6.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)

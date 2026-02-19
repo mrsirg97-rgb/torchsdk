@@ -131,17 +131,27 @@ const filterAndSort = (tokens, params) => {
     const limit = Math.min(params.limit || 50, 100);
     return filtered.slice(offset, offset + limit);
 };
-const buildTokenDetail = (mint, bc, treasury, metadata, holdersCount, solPriceUsd, saidVerification, warnings) => {
+const buildTokenDetail = (mint, bc, treasury, metadata, holdersCount, solPriceUsd, saidVerification, warnings, poolPrice) => {
     const virtualSol = BigInt(bc.virtual_sol_reserves.toString());
     const virtualTokens = BigInt(bc.virtual_token_reserves.toString());
     const realSol = BigInt(bc.real_sol_reserves.toString());
     const realTokens = BigInt(bc.real_token_reserves.toString());
     const voteVault = BigInt(bc.vote_vault_balance.toString());
     const burned = BigInt(bc.permanently_burned_tokens?.toString() || '0');
-    const price = (0, program_1.calculatePrice)(virtualSol, virtualTokens);
-    const priceInSol = (price * constants_1.TOKEN_MULTIPLIER) / constants_1.LAMPORTS_PER_SOL;
+    let priceInSol;
+    let marketCapSol;
     const circulating = constants_1.TOTAL_SUPPLY - realTokens - voteVault;
-    const marketCapSol = (priceInSol * Number(circulating)) / constants_1.TOKEN_MULTIPLIER;
+    if (bc.migrated && poolPrice && poolPrice.tokenReserves > 0) {
+        // Use live Raydium pool price for migrated tokens
+        priceInSol = poolPrice.solReserves / poolPrice.tokenReserves;
+        marketCapSol = priceInSol * (Number(circulating) / constants_1.TOKEN_MULTIPLIER);
+    }
+    else {
+        // Use bonding curve virtual reserves for pre-migration tokens
+        const price = (0, program_1.calculatePrice)(virtualSol, virtualTokens);
+        priceInSol = (price * constants_1.TOKEN_MULTIPLIER) / constants_1.LAMPORTS_PER_SOL;
+        marketCapSol = (priceInSol * Number(circulating)) / constants_1.TOKEN_MULTIPLIER;
+    }
     const treasurySol = treasury ? Number(treasury.sol_balance.toString()) / constants_1.LAMPORTS_PER_SOL : 0;
     const treasuryTokens = treasury ? Number(treasury.tokens_held.toString()) / constants_1.TOKEN_MULTIPLIER : 0;
     const boughtBack = treasury ? Number(treasury.total_bought_back.toString()) / constants_1.TOKEN_MULTIPLIER : 0;
@@ -275,7 +285,29 @@ const getToken = async (connection, mintStr) => {
     catch (e) {
         warnings.push(`SOL price fetch failed: ${e instanceof Error ? e.message : String(e)}`);
     }
-    return buildTokenDetail(mintStr, bondingCurve, treasury, metadata, holdersCount, solPriceUsd, undefined, warnings);
+    // Fetch live pool price for migrated tokens
+    let poolPrice;
+    if (bondingCurve.migrated) {
+        try {
+            const raydium = (0, program_1.getRaydiumMigrationAccounts)(mint);
+            const [vault0Info, vault1Info] = await Promise.all([
+                connection.getTokenAccountBalance(raydium.token0Vault),
+                connection.getTokenAccountBalance(raydium.token1Vault),
+            ]);
+            const vault0Amount = Number(vault0Info.value.amount);
+            const vault1Amount = Number(vault1Info.value.amount);
+            if (raydium.isWsolToken0) {
+                poolPrice = { solReserves: vault0Amount, tokenReserves: vault1Amount };
+            }
+            else {
+                poolPrice = { solReserves: vault1Amount, tokenReserves: vault0Amount };
+            }
+        }
+        catch (e) {
+            warnings.push(`Pool price fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+    return buildTokenDetail(mintStr, bondingCurve, treasury, metadata, holdersCount, solPriceUsd, undefined, warnings, poolPrice);
 };
 exports.getToken = getToken;
 /**
@@ -399,6 +431,7 @@ const INTEREST_RATE_BPS = 200; // 2% per epoch
 const MAX_LTV_BPS = 5000; // 50%
 const LIQUIDATION_THRESHOLD_BPS = 6500; // 65%
 const LIQUIDATION_BONUS_BPS = 1000; // 10%
+const LENDING_UTILIZATION_CAP_BPS = 5000; // 50%
 /**
  * Get lending info for a migrated token.
  *
@@ -425,9 +458,10 @@ const getLendingInfo = async (connection, mintStr) => {
         // Derive discriminator from IDL rather than hardcoding
         const coder = new anchor_1.BorshCoder(torch_market_json_1.default);
         const loanDiscriminator = coder.accounts.accountDiscriminator('LoanPosition');
+        const bs58 = await Promise.resolve().then(() => __importStar(require('bs58')));
         const accounts = await connection.getProgramAccounts(constants_1.PROGRAM_ID, {
             filters: [
-                { memcmp: { offset: 0, bytes: loanDiscriminator.toString('base64') } },
+                { memcmp: { offset: 0, bytes: bs58.default.encode(loanDiscriminator) } },
                 { memcmp: { offset: 8 + 32, bytes: mint.toBase58() } }, // mint at offset 40
             ],
             dataSlice: { offset: 8 + 32 + 32, length: 16 }, // collateral_amount + borrowed_amount
@@ -458,7 +492,7 @@ const getLendingInfo = async (connection, mintStr) => {
         liquidation_bonus_bps: LIQUIDATION_BONUS_BPS,
         total_sol_lent: totalSolLent,
         active_loans: activeLoans,
-        treasury_sol_available: treasurySol,
+        treasury_sol_available: Math.max(0, Math.floor(treasurySol * LENDING_UTILIZATION_CAP_BPS / 10000) - (totalSolLent ?? 0)),
         ...(warnings.length > 0 ? { warnings } : {}),
     };
 };

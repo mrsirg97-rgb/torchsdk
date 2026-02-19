@@ -9,7 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildVaultSwapTransaction = exports.buildWithdrawTokensTransaction = exports.buildClaimProtocolRewardsTransaction = exports.buildLiquidateTransaction = exports.buildRepayTransaction = exports.buildBorrowTransaction = exports.buildTransferAuthorityTransaction = exports.buildUnlinkWalletTransaction = exports.buildLinkWalletTransaction = exports.buildWithdrawVaultTransaction = exports.buildDepositVaultTransaction = exports.buildCreateVaultTransaction = exports.buildStarTransaction = exports.buildCreateTokenTransaction = exports.buildSellTransaction = exports.buildDirectBuyTransaction = exports.buildBuyTransaction = void 0;
+exports.buildVaultSwapTransaction = exports.buildMigrateTransaction = exports.buildWithdrawTokensTransaction = exports.buildClaimProtocolRewardsTransaction = exports.buildLiquidateTransaction = exports.buildRepayTransaction = exports.buildBorrowTransaction = exports.buildTransferAuthorityTransaction = exports.buildUnlinkWalletTransaction = exports.buildLinkWalletTransaction = exports.buildWithdrawVaultTransaction = exports.buildDepositVaultTransaction = exports.buildCreateVaultTransaction = exports.buildStarTransaction = exports.buildCreateTokenTransaction = exports.buildSellTransaction = exports.buildDirectBuyTransaction = exports.buildBuyTransaction = void 0;
 const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
 const anchor_1 = require("@coral-xyz/anchor");
@@ -909,6 +909,103 @@ exports.buildWithdrawTokensTransaction = buildWithdrawTokensTransaction;
 // ============================================================================
 // Vault Swap (V19)
 // ============================================================================
+// ============================================================================
+// Migration (V26)
+// ============================================================================
+/**
+ * Build an unsigned migration transaction.
+ *
+ * Permissionless — anyone can call once bonding completes and vote is finalized.
+ * Combines fund_migration_wsol + migrate_to_dex in a single transaction.
+ * Creates a Raydium CPMM pool with locked liquidity (LP tokens burned).
+ *
+ * Payer pays rent for new accounts (~0.02 SOL). Treasury pays 0.15 SOL Raydium fee.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Migration parameters (mint, payer)
+ * @returns Unsigned transaction and descriptive message
+ */
+const buildMigrateTransaction = async (connection, params) => {
+    const { mint: mintStr, payer: payerStr } = params;
+    const mint = new web3_js_1.PublicKey(mintStr);
+    const payer = new web3_js_1.PublicKey(payerStr);
+    // Derive PDAs
+    const [bondingCurvePda] = (0, program_1.getBondingCurvePda)(mint);
+    const [globalConfigPda] = (0, program_1.getGlobalConfigPda)();
+    const [treasuryPda] = (0, program_1.getTokenTreasuryPda)(mint);
+    const treasuryTokenAccount = (0, program_1.getTreasuryTokenAccount)(mint, treasuryPda);
+    // Token vault = bonding curve's Token-2022 ATA
+    const tokenVault = (0, spl_token_1.getAssociatedTokenAddressSync)(mint, bondingCurvePda, true, spl_token_1.TOKEN_2022_PROGRAM_ID);
+    // Bonding curve's WSOL ATA (SPL Token, not Token-2022)
+    const bcWsol = (0, spl_token_1.getAssociatedTokenAddressSync)(constants_1.WSOL_MINT, bondingCurvePda, true, spl_token_1.TOKEN_PROGRAM_ID);
+    // Payer's WSOL ATA
+    const payerWsol = (0, spl_token_1.getAssociatedTokenAddressSync)(constants_1.WSOL_MINT, payer, false, spl_token_1.TOKEN_PROGRAM_ID);
+    // Payer's token ATA (Token-2022)
+    const payerToken = (0, spl_token_1.getAssociatedTokenAddressSync)(mint, payer, false, spl_token_1.TOKEN_2022_PROGRAM_ID);
+    // Raydium accounts
+    const raydium = (0, program_1.getRaydiumMigrationAccounts)(mint);
+    const payerLpToken = (0, spl_token_1.getAssociatedTokenAddressSync)(raydium.lpMint, payer, false, spl_token_1.TOKEN_PROGRAM_ID);
+    const tx = new web3_js_1.Transaction();
+    // Compute budget — migration is heavy
+    tx.add(web3_js_1.ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
+    // Create ATAs: bc_wsol, payer_wsol, payer_token
+    tx.add((0, spl_token_1.createAssociatedTokenAccountIdempotentInstruction)(payer, bcWsol, bondingCurvePda, constants_1.WSOL_MINT, spl_token_1.TOKEN_PROGRAM_ID, spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID), (0, spl_token_1.createAssociatedTokenAccountIdempotentInstruction)(payer, payerWsol, payer, constants_1.WSOL_MINT, spl_token_1.TOKEN_PROGRAM_ID, spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID), (0, spl_token_1.createAssociatedTokenAccountIdempotentInstruction)(payer, payerToken, payer, mint, spl_token_1.TOKEN_2022_PROGRAM_ID, spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID));
+    // Build program instructions
+    const provider = makeDummyProvider(connection, payer);
+    const program = new anchor_1.Program(torch_market_json_1.default, provider);
+    // Step 1: Fund bonding curve's WSOL ATA (direct lamport manipulation, no CPI)
+    const fundIx = await program.methods
+        .fundMigrationWsol()
+        .accounts({
+        payer,
+        mint,
+        bondingCurve: bondingCurvePda,
+        bcWsol,
+    })
+        .instruction();
+    // Step 2: Migrate to DEX (all CPI-based)
+    const migrateIx = await program.methods
+        .migrateToDex()
+        .accounts({
+        payer,
+        globalConfig: globalConfigPda,
+        mint,
+        bondingCurve: bondingCurvePda,
+        treasury: treasuryPda,
+        tokenVault,
+        treasuryTokenAccount,
+        bcWsol,
+        payerWsol,
+        payerToken,
+        raydiumProgram: (0, constants_1.getRaydiumCpmmProgram)(),
+        ammConfig: (0, constants_1.getRaydiumAmmConfig)(),
+        raydiumAuthority: raydium.raydiumAuthority,
+        poolState: raydium.poolState,
+        wsolMint: constants_1.WSOL_MINT,
+        token0Vault: raydium.token0Vault,
+        token1Vault: raydium.token1Vault,
+        lpMint: raydium.lpMint,
+        payerLpToken,
+        observationState: raydium.observationState,
+        createPoolFee: (0, constants_1.getRaydiumFeeReceiver)(),
+        tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
+        token2022Program: spl_token_1.TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: web3_js_1.SystemProgram.programId,
+        rent: web3_js_1.SYSVAR_RENT_PUBKEY,
+    })
+        .instruction();
+    tx.add(fundIx, migrateIx);
+    await finalizeTransaction(connection, tx, payer);
+    return {
+        transaction: tx,
+        message: `Migrate token ${mintStr.slice(0, 8)}... to Raydium DEX`,
+    };
+};
+exports.buildMigrateTransaction = buildMigrateTransaction;
+// ============================================================================
+// Vault Swap (V19)
+// ============================================================================
 /**
  * Build an unsigned vault-routed DEX swap transaction.
  *
@@ -965,9 +1062,9 @@ const buildVaultSwapTransaction = async (connection, params) => {
         bondingCurve: bondingCurvePda,
         vaultTokenAccount,
         vaultWsolAccount,
-        raydiumProgram: constants_1.RAYDIUM_CPMM_PROGRAM,
+        raydiumProgram: (0, constants_1.getRaydiumCpmmProgram)(),
         raydiumAuthority: raydium.raydiumAuthority,
-        ammConfig: constants_1.RAYDIUM_AMM_CONFIG,
+        ammConfig: (0, constants_1.getRaydiumAmmConfig)(),
         poolState: raydium.poolState,
         poolTokenVault0: raydium.token0Vault,
         poolTokenVault1: raydium.token1Vault,
