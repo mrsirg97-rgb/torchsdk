@@ -548,6 +548,7 @@ const INTEREST_RATE_BPS = 200 // 2% per epoch
 const MAX_LTV_BPS = 5000 // 50%
 const LIQUIDATION_THRESHOLD_BPS = 6500 // 65%
 const LIQUIDATION_BONUS_BPS = 1000 // 10%
+const LENDING_UTILIZATION_CAP_BPS = 5000 // 50%
 
 /**
  * Get lending info for a migrated token.
@@ -616,7 +617,7 @@ export const getLendingInfo = async (
     liquidation_bonus_bps: LIQUIDATION_BONUS_BPS,
     total_sol_lent: totalSolLent,
     active_loans: activeLoans,
-    treasury_sol_available: treasurySol,
+    treasury_sol_available: Math.max(0, Math.floor(treasurySol * LENDING_UTILIZATION_CAP_BPS / 10000) - (totalSolLent ?? 0)),
     ...(warnings.length > 0 ? { warnings } : {}),
   }
 }
