@@ -14,9 +14,9 @@ import {
   COLLATERAL_VAULT_SEED,
   TORCH_VAULT_SEED,
   VAULT_WALLET_LINK_SEED,
-  RAYDIUM_CPMM_PROGRAM,
+  getRaydiumCpmmProgram,
   WSOL_MINT,
-  RAYDIUM_AMM_CONFIG,
+  getRaydiumAmmConfig,
   TOKEN_2022_PROGRAM_ID,
 } from './constants'
 import { getAssociatedTokenAddressSync } from '@solana/spl-token'
@@ -361,7 +361,7 @@ export const orderTokensForRaydium = (
 export const getRaydiumAuthorityPda = (): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('vault_and_lp_mint_auth_seed')],
-    RAYDIUM_CPMM_PROGRAM,
+    getRaydiumCpmmProgram(),
   )
 }
 
@@ -373,7 +373,7 @@ export const getRaydiumPoolStatePda = (
 ): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('pool'), ammConfig.toBuffer(), token0Mint.toBuffer(), token1Mint.toBuffer()],
-    RAYDIUM_CPMM_PROGRAM,
+    getRaydiumCpmmProgram(),
   )
 }
 
@@ -381,7 +381,7 @@ export const getRaydiumPoolStatePda = (
 export const getRaydiumLpMintPda = (poolState: PublicKey): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('pool_lp_mint'), poolState.toBuffer()],
-    RAYDIUM_CPMM_PROGRAM,
+    getRaydiumCpmmProgram(),
   )
 }
 
@@ -392,7 +392,7 @@ export const getRaydiumVaultPda = (
 ): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('pool_vault'), poolState.toBuffer(), tokenMint.toBuffer()],
-    RAYDIUM_CPMM_PROGRAM,
+    getRaydiumCpmmProgram(),
   )
 }
 
@@ -400,7 +400,7 @@ export const getRaydiumVaultPda = (
 export const getRaydiumObservationPda = (poolState: PublicKey): [PublicKey, number] => {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('observation'), poolState.toBuffer()],
-    RAYDIUM_CPMM_PROGRAM,
+    getRaydiumCpmmProgram(),
   )
 }
 
@@ -422,7 +422,7 @@ export const getRaydiumMigrationAccounts = (
   const isWsolToken0 = isToken0First
 
   const [raydiumAuthority] = getRaydiumAuthorityPda()
-  const [poolState] = getRaydiumPoolStatePda(RAYDIUM_AMM_CONFIG, token0, token1)
+  const [poolState] = getRaydiumPoolStatePda(getRaydiumAmmConfig(), token0, token1)
   const [lpMint] = getRaydiumLpMintPda(poolState)
   const [token0Vault] = getRaydiumVaultPda(poolState, token0)
   const [token1Vault] = getRaydiumVaultPda(poolState, token1)

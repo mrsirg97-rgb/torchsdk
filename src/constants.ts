@@ -3,32 +3,38 @@ import { PublicKey } from '@solana/web3.js'
 // Program ID - Mainnet/Devnet (deployed program)
 export const PROGRAM_ID = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
 
-// Network detection: set TORCH_NETWORK=devnet to use devnet Raydium addresses
-const IS_DEVNET = typeof process !== 'undefined' && process.env?.TORCH_NETWORK === 'devnet'
+// Network detection: evaluated at call time so env can be set dynamically
+const isDevnet = () => typeof process !== 'undefined' && process.env?.TORCH_NETWORK === 'devnet'
 
 // Raydium CPMM Program (different on mainnet vs devnet)
-export const RAYDIUM_CPMM_PROGRAM = new PublicKey(
-  IS_DEVNET
+export const getRaydiumCpmmProgram = () => new PublicKey(
+  isDevnet()
     ? 'CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW'
     : 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C'
 )
+/** @deprecated Use getRaydiumCpmmProgram() for dynamic network support */
+export const RAYDIUM_CPMM_PROGRAM = getRaydiumCpmmProgram()
 
 // WSOL Mint (same on all networks)
 export const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
 
 // Raydium AMM Config (different on mainnet vs devnet)
-export const RAYDIUM_AMM_CONFIG = new PublicKey(
-  IS_DEVNET
+export const getRaydiumAmmConfig = () => new PublicKey(
+  isDevnet()
     ? '9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6'
     : 'D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2'
 )
+/** @deprecated Use getRaydiumAmmConfig() for dynamic network support */
+export const RAYDIUM_AMM_CONFIG = getRaydiumAmmConfig()
 
 // Raydium Fee Receiver (different on mainnet vs devnet)
-export const RAYDIUM_FEE_RECEIVER = new PublicKey(
-  IS_DEVNET
+export const getRaydiumFeeReceiver = () => new PublicKey(
+  isDevnet()
     ? 'G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2'
     : 'DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8'
 )
+/** @deprecated Use getRaydiumFeeReceiver() for dynamic network support */
+export const RAYDIUM_FEE_RECEIVER = getRaydiumFeeReceiver()
 
 // SPL Memo Program
 export const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')

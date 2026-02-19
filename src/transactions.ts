@@ -41,7 +41,7 @@ import {
   calculateSolOut,
   GlobalConfig,
 } from './program'
-import { PROGRAM_ID, MEMO_PROGRAM_ID, WSOL_MINT, RAYDIUM_AMM_CONFIG, RAYDIUM_CPMM_PROGRAM, RAYDIUM_FEE_RECEIVER } from './constants'
+import { PROGRAM_ID, MEMO_PROGRAM_ID, WSOL_MINT, getRaydiumAmmConfig, getRaydiumCpmmProgram, getRaydiumFeeReceiver } from './constants'
 import { fetchTokenRaw } from './tokens'
 import {
   BuyParams,
@@ -1401,8 +1401,8 @@ export const buildMigrateTransaction = async (
       bcWsol,
       payerWsol,
       payerToken,
-      raydiumProgram: RAYDIUM_CPMM_PROGRAM,
-      ammConfig: RAYDIUM_AMM_CONFIG,
+      raydiumProgram: getRaydiumCpmmProgram(),
+      ammConfig: getRaydiumAmmConfig(),
       raydiumAuthority: raydium.raydiumAuthority,
       poolState: raydium.poolState,
       wsolMint: WSOL_MINT,
@@ -1411,7 +1411,7 @@ export const buildMigrateTransaction = async (
       lpMint: raydium.lpMint,
       payerLpToken,
       observationState: raydium.observationState,
-      createPoolFee: RAYDIUM_FEE_RECEIVER,
+      createPoolFee: getRaydiumFeeReceiver(),
       tokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1535,9 +1535,9 @@ export const buildVaultSwapTransaction = async (
       bondingCurve: bondingCurvePda,
       vaultTokenAccount,
       vaultWsolAccount,
-      raydiumProgram: RAYDIUM_CPMM_PROGRAM,
+      raydiumProgram: getRaydiumCpmmProgram(),
       raydiumAuthority: raydium.raydiumAuthority,
-      ammConfig: RAYDIUM_AMM_CONFIG,
+      ammConfig: getRaydiumAmmConfig(),
       poolState: raydium.poolState,
       poolTokenVault0: raydium.token0Vault,
       poolTokenVault1: raydium.token1Vault,

@@ -171,6 +171,7 @@ const buildTokenDetail = (
   solPriceUsd?: number,
   saidVerification?: SaidVerification | null,
   warnings?: string[],
+  poolPrice?: { solReserves: number; tokenReserves: number },
 ): TokenDetail => {
   const virtualSol = BigInt(bc.virtual_sol_reserves.toString())
   const virtualTokens = BigInt(bc.virtual_token_reserves.toString())
@@ -179,10 +180,20 @@ const buildTokenDetail = (
   const voteVault = BigInt(bc.vote_vault_balance.toString())
   const burned = BigInt(bc.permanently_burned_tokens?.toString() || '0')
 
-  const price = calculatePrice(virtualSol, virtualTokens)
-  const priceInSol = (price * TOKEN_MULTIPLIER) / LAMPORTS_PER_SOL
+  let priceInSol: number
+  let marketCapSol: number
   const circulating = TOTAL_SUPPLY - realTokens - voteVault
-  const marketCapSol = (priceInSol * Number(circulating)) / TOKEN_MULTIPLIER
+
+  if (bc.migrated && poolPrice && poolPrice.tokenReserves > 0) {
+    // Use live Raydium pool price for migrated tokens
+    priceInSol = poolPrice.solReserves / poolPrice.tokenReserves
+    marketCapSol = priceInSol * (Number(circulating) / TOKEN_MULTIPLIER)
+  } else {
+    // Use bonding curve virtual reserves for pre-migration tokens
+    const price = calculatePrice(virtualSol, virtualTokens)
+    priceInSol = (price * TOKEN_MULTIPLIER) / LAMPORTS_PER_SOL
+    marketCapSol = (priceInSol * Number(circulating)) / TOKEN_MULTIPLIER
+  }
 
   const treasurySol = treasury ? Number(treasury.sol_balance.toString()) / LAMPORTS_PER_SOL : 0
   const treasuryTokens = treasury ? Number(treasury.tokens_held.toString()) / TOKEN_MULTIPLIER : 0
@@ -348,7 +359,28 @@ export const getToken = async (connection: Connection, mintStr: string): Promise
     warnings.push(`SOL price fetch failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  return buildTokenDetail(mintStr, bondingCurve, treasury, metadata, holdersCount, solPriceUsd, undefined, warnings)
+  // Fetch live pool price for migrated tokens
+  let poolPrice: { solReserves: number; tokenReserves: number } | undefined
+  if (bondingCurve.migrated) {
+    try {
+      const raydium = getRaydiumMigrationAccounts(mint)
+      const [vault0Info, vault1Info] = await Promise.all([
+        connection.getTokenAccountBalance(raydium.token0Vault),
+        connection.getTokenAccountBalance(raydium.token1Vault),
+      ])
+      const vault0Amount = Number(vault0Info.value.amount)
+      const vault1Amount = Number(vault1Info.value.amount)
+      if (raydium.isWsolToken0) {
+        poolPrice = { solReserves: vault0Amount, tokenReserves: vault1Amount }
+      } else {
+        poolPrice = { solReserves: vault1Amount, tokenReserves: vault0Amount }
+      }
+    } catch (e) {
+      warnings.push(`Pool price fetch failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  return buildTokenDetail(mintStr, bondingCurve, treasury, metadata, holdersCount, solPriceUsd, undefined, warnings, poolPrice)
 }
 
 /**
