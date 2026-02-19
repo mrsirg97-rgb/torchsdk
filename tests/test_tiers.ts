@@ -260,7 +260,6 @@ const main = async () => {
         ASSOCIATED_TOKEN_PROGRAM_ID: ATP,
         getAssociatedTokenAddressSync,
         createAssociatedTokenAccountIdempotentInstruction,
-        createSyncNativeInstruction,
       } = require('@solana/spl-token')
 
       const idl = require('../dist/torch_market.json')
@@ -297,69 +296,42 @@ const main = async () => {
       const [vault0] = PublicKey.findProgramAddressSync([Buffer.from('pool_vault'), poolState.toBuffer(), token0.toBuffer()], RAYDIUM_CPMM)
       const [vault1] = PublicKey.findProgramAddressSync([Buffer.from('pool_vault'), poolState.toBuffer(), token1.toBuffer()], RAYDIUM_CPMM)
 
+      const bcWsol = getAssociatedTokenAddressSync(WSOL_MINT, bondingCurvePda, true, TOKEN_PROGRAM_ID)
       const payerWsol = getAssociatedTokenAddressSync(WSOL_MINT, wallet.publicKey)
       const [payerToken] = PublicKey.findProgramAddressSync([wallet.publicKey.toBuffer(), T22.toBuffer(), mintPk.toBuffer()], ATP)
       const payerLp = getAssociatedTokenAddressSync(lpMint, wallet.publicKey)
 
-      // Load the deploy wallet (global_config authority)
-      const DEPLOY_WALLET_PATH = path.join(os.homedir(), 'Projects/burnfun/torch_market/keys/mainnet-deploy-wallet.json')
-      const deployWallet = Keypair.fromSecretKey(
-        Uint8Array.from(JSON.parse(fs.readFileSync(DEPLOY_WALLET_PATH, 'utf-8'))),
-      )
-      const deployProvider = new anchor.AnchorProvider(connection, {
-        publicKey: deployWallet.publicKey,
-        signTransaction: async (t: Transaction) => { t.partialSign(deployWallet); return t },
-        signAllTransactions: async (ts: Transaction[]) => { ts.forEach(t => t.partialSign(deployWallet)); return ts },
-      }, {})
-      const deployProgram = new anchor.Program(idl, deployProvider)
-
-      // Step 1: prepareMigration — authority withdraws SOL from bonding curve
+      // [V26] Permissionless migration — no authority needed
       const bcData = await program.account.bondingCurve.fetch(bondingCurvePda)
-      const solReserves = Number(bcData.realSolReserves)
-      log(`  Step 1: prepareMigration (withdrawing ${(solReserves / LAMPORTS_PER_SOL).toFixed(2)} SOL from bonding curve)...`)
 
-      await deployProgram.methods
-        .prepareMigration()
-        .accounts({
-          authority: deployWallet.publicKey,
-          globalConfig,
-          mint: mintPk,
-          bondingCurve: bondingCurvePda,
-        })
-        .rpc()
-      ok('prepareMigration', `${(solReserves / LAMPORTS_PER_SOL).toFixed(2)} SOL withdrawn to deploy wallet`)
-
-      // Transfer withdrawn SOL from deploy wallet to test wallet for WSOL wrapping
-      const transferTx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: deployWallet.publicKey,
-          toPubkey: wallet.publicKey,
-          lamports: solReserves,
-        }),
-      )
-      await deployProvider.sendAndConfirm(transferTx)
-
-      // Step 2: Wrap withdrawn SOL to WSOL + setup token accounts
-      log('  Step 2: Wrapping SOL to WSOL...')
+      // Setup: create bc_wsol ATA + payer WSOL ATA + payer token ATA
+      log('  Step 1: Creating ATAs (bc_wsol + payer WSOL + payer token)...')
       const setupTx = new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey, bcWsol, bondingCurvePda, WSOL_MINT, TOKEN_PROGRAM_ID, ATP,
+        ),
         createAssociatedTokenAccountIdempotentInstruction(
           wallet.publicKey, payerWsol, wallet.publicKey, WSOL_MINT, TOKEN_PROGRAM_ID, ATP,
         ),
         createAssociatedTokenAccountIdempotentInstruction(
           wallet.publicKey, payerToken, wallet.publicKey, mintPk, T22, ATP,
         ),
-        SystemProgram.transfer({
-          fromPubkey: wallet.publicKey,
-          toPubkey: payerWsol,
-          lamports: solReserves,
-        }),
-        createSyncNativeInstruction(payerWsol, TOKEN_PROGRAM_ID),
       )
       await provider.sendAndConfirm(setupTx)
 
-      // Step 3: migrateToDex — create Raydium pool (no SOL fronting needed)
-      log('  Step 3: migrateToDex...')
+      // Step 2: fund_migration_wsol + migrateToDex in same transaction
+      log('  Step 2: fundMigrationWsol + migrateToDex (permissionless)...')
       const { ComputeBudgetProgram } = require('@solana/web3.js')
+      const fundIx = await program.methods
+        .fundMigrationWsol()
+        .accounts({
+          payer: wallet.publicKey,
+          mint: mintPk,
+          bondingCurve: bondingCurvePda,
+          bcWsol,
+        })
+        .instruction()
+
       const migrateIx = await program.methods
         .migrateToDex()
         .accounts({
@@ -370,6 +342,7 @@ const main = async () => {
           treasury: treasuryPda,
           tokenVault: bcAta,
           treasuryTokenAccount: treasuryAta,
+          bcWsol,
           payerWsol,
           payerToken,
           raydiumProgram: RAYDIUM_CPMM,
@@ -393,10 +366,11 @@ const main = async () => {
 
       const migrateTx = new Transaction()
         .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+        .add(fundIx)
         .add(migrateIx)
       await provider.sendAndConfirm(migrateTx)
 
-      ok('Migrate to DEX', 'Raydium pool created for Spark token (via prepareMigration — no SOL fronting)')
+      ok('Migrate to DEX', 'Raydium pool created for Spark token (V26 permissionless — program wraps SOL internally)')
 
       // V25: Post-migration token distribution breakdown
       try {

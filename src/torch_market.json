@@ -2,7 +2,7 @@
   "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
   "metadata": {
     "name": "torch_market",
-    "version": "3.5.1",
+    "version": "3.6.0",
     "spec": "0.1.0",
     "description": "torch.market"
   },
@@ -272,19 +272,19 @@
         {
           "name": "pool_state",
           "docs": [
-            "Raydium pool state for price calculation"
+            "[V27] Raydium pool state — constrained via PDA derivation"
           ]
         },
         {
           "name": "token_vault_0",
           "docs": [
-            "Pool token vault 0 (for reading reserves)"
+            "[V27] Pool token vault 0 — constrained via PDA derivation"
           ]
         },
         {
           "name": "token_vault_1",
           "docs": [
-            "Pool token vault 1 (for reading reserves)"
+            "[V27] Pool token vault 1 — constrained via PDA derivation"
           ]
         },
         {
@@ -923,159 +923,6 @@
       ]
     },
     {
-      "name": "buyback",
-      "docs": [
-        "[V2] Execute a buyback using treasury SOL (pre-migration, on bonding curve)."
-      ],
-      "discriminator": [
-        106,
-        117,
-        64,
-        30,
-        56,
-        69,
-        7,
-        45
-      ],
-      "accounts": [
-        {
-          "name": "payer",
-          "docs": [
-            "Anyone can trigger a buyback (permissionless)"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "mint",
-          "writable": true
-        },
-        {
-          "name": "bonding_curve",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  98,
-                  111,
-                  110,
-                  100,
-                  105,
-                  110,
-                  103,
-                  95,
-                  99,
-                  117,
-                  114,
-                  118,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ]
-          }
-        },
-        {
-          "name": "token_vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "bonding_curve"
-              },
-              {
-                "kind": "account",
-                "path": "token_program"
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
-        },
-        {
-          "name": "token_treasury",
-          "docs": [
-            "Per-token treasury with SOL for buybacks"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  114,
-                  101,
-                  97,
-                  115,
-                  117,
-                  114,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ]
-          }
-        },
-        {
-          "name": "token_program"
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "claim_protocol_rewards",
       "docs": [
         "[V11] Claim protocol rewards.",
@@ -1670,7 +1517,7 @@
         {
           "name": "treasury_wsol",
           "docs": [
-            "Treasury's WSOL account for swapping"
+            "[V27] Treasury's WSOL account — constrained as treasury's WSOL ATA"
           ],
           "writable": true
         },
@@ -1736,7 +1583,7 @@
         },
         {
           "name": "raydium_program",
-          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+          "address": "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
         },
         {
           "name": "raydium_authority"
@@ -1746,26 +1593,26 @@
           "docs": [
             "Raydium AMM config — constrained to prevent pool substitution attacks"
           ],
-          "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
+          "address": "9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6"
         },
         {
           "name": "pool_state",
           "docs": [
-            "Raydium pool state"
+            "[V27] Raydium pool state — constrained via PDA derivation"
           ],
           "writable": true
         },
         {
           "name": "input_vault",
           "docs": [
-            "Pool's input vault (WSOL vault)"
+            "[V27] Pool's input vault (WSOL vault) — constrained via PDA derivation"
           ],
           "writable": true
         },
         {
           "name": "output_vault",
           "docs": [
-            "Pool's output vault (token vault)"
+            "[V27] Pool's output vault (token vault) — constrained via PDA derivation"
           ],
           "writable": true
         },
@@ -1779,7 +1626,7 @@
         {
           "name": "observation_state",
           "docs": [
-            "Raydium observation state"
+            "[V27] Raydium observation state — constrained via PDA derivation"
           ],
           "writable": true
         },
@@ -1800,6 +1647,80 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "fund_migration_wsol",
+      "docs": [
+        "[V26] Fund bonding curve's WSOL ATA with bonding curve SOL.",
+        "Must be called BEFORE migrate_to_dex in the same transaction.",
+        "Isolates direct lamport manipulation from CPIs to avoid runtime balance errors."
+      ],
+      "discriminator": [
+        143,
+        163,
+        2,
+        0,
+        85,
+        235,
+        44,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Anyone can trigger (permissionless)"
+          ],
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Token mint being migrated"
+          ]
+        },
+        {
+          "name": "bonding_curve",
+          "docs": [
+            "Bonding curve — SOL source"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "bc_wsol",
+          "docs": [
+            "Bonding curve's WSOL ATA (lamport destination — protocol controlled)"
+          ],
+          "writable": true
+        }
+      ],
+      "args": []
     },
     {
       "name": "fund_vault_wsol",
@@ -2515,19 +2436,19 @@
         {
           "name": "pool_state",
           "docs": [
-            "Raydium pool state for price calculation"
+            "[V27] Raydium pool state — constrained via PDA derivation"
           ]
         },
         {
           "name": "token_vault_0",
           "docs": [
-            "Pool token vault 0"
+            "[V27] Pool token vault 0 — constrained via PDA derivation"
           ]
         },
         {
           "name": "token_vault_1",
           "docs": [
-            "Pool token vault 1"
+            "[V27] Pool token vault 1 — constrained via PDA derivation"
           ]
         },
         {
@@ -2648,7 +2569,9 @@
     {
       "name": "migrate_to_dex",
       "docs": [
-        "[V5] Migrate bonded token to Raydium CPMM DEX.",
+        "[V26] Migrate bonded token to Raydium CPMM DEX.",
+        "Permissionless — anyone can call once bonding completes.",
+        "bc_wsol must be pre-funded via fund_migration_wsol.",
         "Creates a Raydium pool with locked liquidity (LP tokens burned)."
       ],
       "discriminator": [
@@ -2887,9 +2810,17 @@
           }
         },
         {
+          "name": "bc_wsol",
+          "docs": [
+            "[V26] Bonding curve's WSOL ATA — pre-funded by fund_migration_wsol.",
+            "Closed to payer_wsol at start of migration (CPI, no direct lamport manipulation)."
+          ],
+          "writable": true
+        },
+        {
           "name": "payer_wsol",
           "docs": [
-            "Payer's WSOL account (created for migration, funded with bonding curve SOL)"
+            "Payer's WSOL account — receives SOL from bc_wsol close, used by Raydium."
           ],
           "writable": true
         },
@@ -2902,7 +2833,7 @@
         },
         {
           "name": "raydium_program",
-          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+          "address": "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
         },
         {
           "name": "amm_config",
@@ -2988,89 +2919,6 @@
         {
           "name": "rent",
           "address": "SysvarRent111111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "prepare_migration",
-      "docs": [
-        "[V25] Withdraw bonding curve SOL to authority before migration.",
-        "Authority-only. Call this, wrap SOL to WSOL, then call migrate_to_dex."
-      ],
-      "discriminator": [
-        59,
-        118,
-        102,
-        18,
-        9,
-        133,
-        23,
-        172
-      ],
-      "accounts": [
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "global_config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  103,
-                  108,
-                  111,
-                  98,
-                  97,
-                  108,
-                  95,
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "mint"
-        },
-        {
-          "name": "bonding_curve",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  98,
-                  111,
-                  110,
-                  100,
-                  105,
-                  110,
-                  103,
-                  95,
-                  99,
-                  117,
-                  114,
-                  118,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ]
-          }
         }
       ],
       "args": []
@@ -4487,7 +4335,7 @@
         },
         {
           "name": "raydium_program",
-          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+          "address": "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
         },
         {
           "name": "raydium_authority"
@@ -4497,33 +4345,33 @@
           "docs": [
             "Raydium AMM config — constrained to prevent pool substitution attacks"
           ],
-          "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
+          "address": "9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6"
         },
         {
           "name": "pool_state",
           "docs": [
-            "Raydium pool state"
+            "[V27] Raydium pool state — constrained via PDA derivation"
           ],
           "writable": true
         },
         {
           "name": "pool_token_vault_0",
           "docs": [
-            "Pool token vault 0"
+            "[V27] Pool token vault 0 — constrained via PDA derivation"
           ],
           "writable": true
         },
         {
           "name": "pool_token_vault_1",
           "docs": [
-            "Pool token vault 1"
+            "[V27] Pool token vault 1 — constrained via PDA derivation"
           ],
           "writable": true
         },
         {
           "name": "observation_state",
           "docs": [
-            "Raydium observation state"
+            "[V27] Raydium observation state — constrained via PDA derivation"
           ],
           "writable": true
         },
