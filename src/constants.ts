@@ -3,16 +3,25 @@ import { PublicKey } from '@solana/web3.js'
 // Program ID - Mainnet/Devnet (deployed program)
 export const PROGRAM_ID = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
 
-// Raydium CPMM Program
-// Note: Same address on mainnet and devnet - Raydium deploys to same program ID
-export const RAYDIUM_CPMM_PROGRAM = new PublicKey('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C')
+// Network detection: set TORCH_NETWORK=devnet to use devnet Raydium addresses
+const IS_DEVNET = typeof process !== 'undefined' && process.env?.TORCH_NETWORK === 'devnet'
+
+// Raydium CPMM Program (different on mainnet vs devnet)
+export const RAYDIUM_CPMM_PROGRAM = new PublicKey(
+  IS_DEVNET
+    ? 'CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW'
+    : 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C'
+)
 
 // WSOL Mint (same on all networks)
 export const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
 
-// Raydium AMM Config (0.25% fee tier - standard)
-// Note: This config PDA exists on both mainnet and devnet
-export const RAYDIUM_AMM_CONFIG = new PublicKey('D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2')
+// Raydium AMM Config (different on mainnet vs devnet)
+export const RAYDIUM_AMM_CONFIG = new PublicKey(
+  IS_DEVNET
+    ? '9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6'
+    : 'D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2'
+)
 
 // SPL Memo Program
 export const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')

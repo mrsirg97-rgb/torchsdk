@@ -59,9 +59,10 @@ const DEVNET_RPC = 'https://api.devnet.solana.com'
 const WALLET_PATH = path.join(os.homedir(), '.config/solana/id.json')
 
 const PROGRAM_ID = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
-const RAYDIUM_CPMM = new PublicKey('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C')
-const RAYDIUM_AMM_CONFIG = new PublicKey('D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2')
-const RAYDIUM_FEE_RECEIVER = new PublicKey('DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8')
+// Devnet Raydium CPMM addresses
+const RAYDIUM_CPMM = new PublicKey('CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW')
+const RAYDIUM_AMM_CONFIG = new PublicKey('9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6')
+const RAYDIUM_FEE_RECEIVER = new PublicKey('G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2')
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
 
 // Spark tier: 50 SOL target, 0.1 SOL per buy (stays under 2% wallet cap)

@@ -550,9 +550,10 @@ export const getLendingInfo = async (
     // Derive discriminator from IDL rather than hardcoding
     const coder = new BorshCoder(idl as Idl)
     const loanDiscriminator = coder.accounts.accountDiscriminator('LoanPosition')
+    const bs58 = await import('bs58')
     const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
       filters: [
-        { memcmp: { offset: 0, bytes: loanDiscriminator.toString('base64') } },
+        { memcmp: { offset: 0, bytes: bs58.default.encode(loanDiscriminator) } },
         { memcmp: { offset: 8 + 32, bytes: mint.toBase58() } }, // mint at offset 40
       ],
       dataSlice: { offset: 8 + 32 + 32, length: 16 }, // collateral_amount + borrowed_amount
