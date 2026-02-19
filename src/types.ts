@@ -243,6 +243,17 @@ export interface StarParams {
 }
 
 // ============================================================================
+// Migration Params (V26)
+// ============================================================================
+
+export interface MigrateParams {
+  /** Token mint address */
+  mint: string
+  /** Wallet signing the transaction. Pays rent for new accounts (~0.02 SOL). Treasury pays the 0.15 SOL Raydium fee. */
+  payer: string
+}
+
+// ============================================================================
 // Vault Swap Params (V19)
 // ============================================================================
 

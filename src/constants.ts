@@ -23,6 +23,13 @@ export const RAYDIUM_AMM_CONFIG = new PublicKey(
     : 'D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2'
 )
 
+// Raydium Fee Receiver (different on mainnet vs devnet)
+export const RAYDIUM_FEE_RECEIVER = new PublicKey(
+  IS_DEVNET
+    ? 'G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2'
+    : 'DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8'
+)
+
 // SPL Memo Program
 export const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
 

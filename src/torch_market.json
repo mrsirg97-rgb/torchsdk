@@ -1583,7 +1583,7 @@
         },
         {
           "name": "raydium_program",
-          "address": "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
         },
         {
           "name": "raydium_authority"
@@ -1593,7 +1593,7 @@
           "docs": [
             "Raydium AMM config — constrained to prevent pool substitution attacks"
           ],
-          "address": "9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6"
+          "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
         },
         {
           "name": "pool_state",
@@ -2833,7 +2833,7 @@
         },
         {
           "name": "raydium_program",
-          "address": "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
         },
         {
           "name": "amm_config",
@@ -4335,7 +4335,7 @@
         },
         {
           "name": "raydium_program",
-          "address": "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW"
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
         },
         {
           "name": "raydium_authority"
@@ -4345,7 +4345,7 @@
           "docs": [
             "Raydium AMM config — constrained to prevent pool substitution attacks"
           ],
-          "address": "9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6"
+          "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
         },
         {
           "name": "pool_state",

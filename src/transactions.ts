@@ -12,6 +12,7 @@ import {
   TransactionInstruction,
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
+  ComputeBudgetProgram,
   Keypair,
 } from '@solana/web3.js'
 import {
@@ -40,7 +41,7 @@ import {
   calculateSolOut,
   GlobalConfig,
 } from './program'
-import { PROGRAM_ID, MEMO_PROGRAM_ID, WSOL_MINT, RAYDIUM_AMM_CONFIG, RAYDIUM_CPMM_PROGRAM } from './constants'
+import { PROGRAM_ID, MEMO_PROGRAM_ID, WSOL_MINT, RAYDIUM_AMM_CONFIG, RAYDIUM_CPMM_PROGRAM, RAYDIUM_FEE_RECEIVER } from './constants'
 import { fetchTokenRaw } from './tokens'
 import {
   BuyParams,
@@ -48,6 +49,7 @@ import {
   SellParams,
   CreateTokenParams,
   StarParams,
+  MigrateParams,
   BorrowParams,
   RepayParams,
   LiquidateParams,
@@ -1287,6 +1289,143 @@ export const buildWithdrawTokensTransaction = async (
   return {
     transaction: tx,
     message: `Withdraw ${params.amount} tokens from vault to ${params.destination.slice(0, 8)}...`,
+  }
+}
+
+// ============================================================================
+// Vault Swap (V19)
+// ============================================================================
+
+// ============================================================================
+// Migration (V26)
+// ============================================================================
+
+/**
+ * Build an unsigned migration transaction.
+ *
+ * Permissionless — anyone can call once bonding completes and vote is finalized.
+ * Combines fund_migration_wsol + migrate_to_dex in a single transaction.
+ * Creates a Raydium CPMM pool with locked liquidity (LP tokens burned).
+ *
+ * Payer pays rent for new accounts (~0.02 SOL). Treasury pays 0.15 SOL Raydium fee.
+ *
+ * @param connection - Solana RPC connection
+ * @param params - Migration parameters (mint, payer)
+ * @returns Unsigned transaction and descriptive message
+ */
+export const buildMigrateTransaction = async (
+  connection: Connection,
+  params: MigrateParams,
+): Promise<TransactionResult> => {
+  const { mint: mintStr, payer: payerStr } = params
+
+  const mint = new PublicKey(mintStr)
+  const payer = new PublicKey(payerStr)
+
+  // Derive PDAs
+  const [bondingCurvePda] = getBondingCurvePda(mint)
+  const [globalConfigPda] = getGlobalConfigPda()
+  const [treasuryPda] = getTokenTreasuryPda(mint)
+  const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
+
+  // Token vault = bonding curve's Token-2022 ATA
+  const tokenVault = getAssociatedTokenAddressSync(
+    mint,
+    bondingCurvePda,
+    true,
+    TOKEN_2022_PROGRAM_ID,
+  )
+
+  // Bonding curve's WSOL ATA (SPL Token, not Token-2022)
+  const bcWsol = getAssociatedTokenAddressSync(
+    WSOL_MINT,
+    bondingCurvePda,
+    true,
+    TOKEN_PROGRAM_ID,
+  )
+
+  // Payer's WSOL ATA
+  const payerWsol = getAssociatedTokenAddressSync(WSOL_MINT, payer, false, TOKEN_PROGRAM_ID)
+
+  // Payer's token ATA (Token-2022)
+  const payerToken = getAssociatedTokenAddressSync(mint, payer, false, TOKEN_2022_PROGRAM_ID)
+
+  // Raydium accounts
+  const raydium = getRaydiumMigrationAccounts(mint)
+  const payerLpToken = getAssociatedTokenAddressSync(raydium.lpMint, payer, false, TOKEN_PROGRAM_ID)
+
+  const tx = new Transaction()
+
+  // Compute budget — migration is heavy
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+
+  // Create ATAs: bc_wsol, payer_wsol, payer_token
+  tx.add(
+    createAssociatedTokenAccountIdempotentInstruction(
+      payer, bcWsol, bondingCurvePda, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
+    createAssociatedTokenAccountIdempotentInstruction(
+      payer, payerWsol, payer, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
+    createAssociatedTokenAccountIdempotentInstruction(
+      payer, payerToken, payer, mint, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
+  )
+
+  // Build program instructions
+  const provider = makeDummyProvider(connection, payer)
+  const program = new Program(idl as unknown, provider)
+
+  // Step 1: Fund bonding curve's WSOL ATA (direct lamport manipulation, no CPI)
+  const fundIx = await program.methods
+    .fundMigrationWsol()
+    .accounts({
+      payer,
+      mint,
+      bondingCurve: bondingCurvePda,
+      bcWsol,
+    } as any)
+    .instruction()
+
+  // Step 2: Migrate to DEX (all CPI-based)
+  const migrateIx = await program.methods
+    .migrateToDex()
+    .accounts({
+      payer,
+      globalConfig: globalConfigPda,
+      mint,
+      bondingCurve: bondingCurvePda,
+      treasury: treasuryPda,
+      tokenVault,
+      treasuryTokenAccount,
+      bcWsol,
+      payerWsol,
+      payerToken,
+      raydiumProgram: RAYDIUM_CPMM_PROGRAM,
+      ammConfig: RAYDIUM_AMM_CONFIG,
+      raydiumAuthority: raydium.raydiumAuthority,
+      poolState: raydium.poolState,
+      wsolMint: WSOL_MINT,
+      token0Vault: raydium.token0Vault,
+      token1Vault: raydium.token1Vault,
+      lpMint: raydium.lpMint,
+      payerLpToken,
+      observationState: raydium.observationState,
+      createPoolFee: RAYDIUM_FEE_RECEIVER,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+    } as any)
+    .instruction()
+
+  tx.add(fundIx, migrateIx)
+  await finalizeTransaction(connection, tx, payer)
+
+  return {
+    transaction: tx,
+    message: `Migrate token ${mintStr.slice(0, 8)}... to Raydium DEX`,
   }
 }
 

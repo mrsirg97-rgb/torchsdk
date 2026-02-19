@@ -19,23 +19,19 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
-  SYSVAR_RENT_PUBKEY,
   Transaction,
   ComputeBudgetProgram,
 } from '@solana/web3.js'
 import {
-  TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
-  createAssociatedTokenAccountIdempotentInstruction,
 } from '@solana/spl-token'
-import { Program, AnchorProvider } from '@coral-xyz/anchor'
 import {
   buildCreateTokenTransaction,
   buildDirectBuyTransaction,
   buildBuyTransaction,
   buildSellTransaction,
+  buildMigrateTransaction,
   buildBorrowTransaction,
   buildRepayTransaction,
   buildCreateVaultTransaction,
@@ -45,8 +41,7 @@ import {
   getVault,
 } from '../src/index'
 import { fetchTokenRaw } from '../src/tokens'
-import { getTorchVaultPda } from '../src/program'
-import idl from '../src/torch_market.json'
+import { getTorchVaultPda, getRaydiumMigrationAccounts } from '../src/program'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
@@ -57,13 +52,6 @@ import * as os from 'os'
 
 const DEVNET_RPC = 'https://api.devnet.solana.com'
 const WALLET_PATH = path.join(os.homedir(), '.config/solana/id.json')
-
-const PROGRAM_ID = new PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT')
-// Devnet Raydium CPMM addresses
-const RAYDIUM_CPMM = new PublicKey('CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW')
-const RAYDIUM_AMM_CONFIG = new PublicKey('9zSzfkYy6awexsHvmggeH36pfVUdDGyCcwmjT3AQPBj6')
-const RAYDIUM_FEE_RECEIVER = new PublicKey('G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2')
-const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
 
 // Spark tier: 50 SOL target, 0.1 SOL per buy (stays under 2% wallet cap)
 const BONDING_TARGET = 50_000_000_000 // 50 SOL in lamports
@@ -97,15 +85,6 @@ const signAndSend = async (
   })
   await connection.confirmTransaction(sig, 'confirmed')
   return sig
-}
-
-const makeProvider = (connection: Connection, wallet: Keypair): AnchorProvider => {
-  const w = {
-    publicKey: wallet.publicKey,
-    signTransaction: async (t: Transaction) => { t.partialSign(wallet); return t },
-    signAllTransactions: async (ts: Transaction[]) => { ts.forEach(t => t.partialSign(wallet)); return ts },
-  }
-  return new AnchorProvider(connection, w as any, {})
 }
 
 // ============================================================================
@@ -364,135 +343,14 @@ const main = async () => {
   // ==================================================================
   log('\n[6] Migrate to Raydium DEX (V26 permissionless)')
   try {
-    const provider = makeProvider(connection, wallet)
-    const program = new Program(idl as any, provider)
-
     const mintPk = new PublicKey(mint)
-    const [globalConfig] = PublicKey.findProgramAddressSync(
-      [Buffer.from('global_config')],
-      PROGRAM_ID,
-    )
-    const [bondingCurvePda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('bonding_curve'), mintPk.toBuffer()],
-      PROGRAM_ID,
-    )
-    const [treasuryPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('treasury'), mintPk.toBuffer()],
-      PROGRAM_ID,
-    )
 
-    // Token vault ATAs
-    const [bcAta] = PublicKey.findProgramAddressSync(
-      [bondingCurvePda.toBuffer(), TOKEN_2022_PROGRAM_ID.toBuffer(), mintPk.toBuffer()],
-      ASSOCIATED_TOKEN_PROGRAM_ID,
-    )
-    const [treasuryAta] = PublicKey.findProgramAddressSync(
-      [treasuryPda.toBuffer(), TOKEN_2022_PROGRAM_ID.toBuffer(), mintPk.toBuffer()],
-      ASSOCIATED_TOKEN_PROGRAM_ID,
-    )
-
-    // Raydium PDAs
-    const isWsolToken0 = WSOL_MINT.toBuffer().compare(mintPk.toBuffer()) < 0
-    const token0 = isWsolToken0 ? WSOL_MINT : mintPk
-    const token1 = isWsolToken0 ? mintPk : WSOL_MINT
-    const [raydiumAuth] = PublicKey.findProgramAddressSync(
-      [Buffer.from('vault_and_lp_mint_auth_seed')],
-      RAYDIUM_CPMM,
-    )
-    const [poolState] = PublicKey.findProgramAddressSync(
-      [Buffer.from('pool'), RAYDIUM_AMM_CONFIG.toBuffer(), token0.toBuffer(), token1.toBuffer()],
-      RAYDIUM_CPMM,
-    )
-    const [lpMint] = PublicKey.findProgramAddressSync(
-      [Buffer.from('pool_lp_mint'), poolState.toBuffer()],
-      RAYDIUM_CPMM,
-    )
-    const [obs] = PublicKey.findProgramAddressSync(
-      [Buffer.from('observation'), poolState.toBuffer()],
-      RAYDIUM_CPMM,
-    )
-    const [vault0] = PublicKey.findProgramAddressSync(
-      [Buffer.from('pool_vault'), poolState.toBuffer(), token0.toBuffer()],
-      RAYDIUM_CPMM,
-    )
-    const [vault1] = PublicKey.findProgramAddressSync(
-      [Buffer.from('pool_vault'), poolState.toBuffer(), token1.toBuffer()],
-      RAYDIUM_CPMM,
-    )
-
-    const payerWsol = getAssociatedTokenAddressSync(WSOL_MINT, wallet.publicKey)
-    const [payerToken] = PublicKey.findProgramAddressSync(
-      [wallet.publicKey.toBuffer(), TOKEN_2022_PROGRAM_ID.toBuffer(), mintPk.toBuffer()],
-      ASSOCIATED_TOKEN_PROGRAM_ID,
-    )
-    const payerLp = getAssociatedTokenAddressSync(lpMint, wallet.publicKey)
-
-    // [V26] Create bc_wsol (bonding curve's WSOL ATA) + payer ATAs
-    const bcWsol = getAssociatedTokenAddressSync(WSOL_MINT, bondingCurvePda, true, TOKEN_PROGRAM_ID)
-    log('  Creating bc_wsol + payer ATAs...')
-    const setupTx = new Transaction().add(
-      createAssociatedTokenAccountIdempotentInstruction(
-        wallet.publicKey, bcWsol, bondingCurvePda, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-      ),
-      createAssociatedTokenAccountIdempotentInstruction(
-        wallet.publicKey, payerWsol, wallet.publicKey, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-      ),
-      createAssociatedTokenAccountIdempotentInstruction(
-        wallet.publicKey, payerToken, wallet.publicKey, mintPk, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-      ),
-    )
-    await provider.sendAndConfirm(setupTx)
-    await sleep(500)
-
-    // Fund bc_wsol with bonding curve SOL, then migrate
-    log('  Calling fundMigrationWsol + migrateToDex...')
-    const fundIx = await program.methods
-      .fundMigrationWsol()
-      .accounts({
-        payer: wallet.publicKey,
-        mint: mintPk,
-        bondingCurve: bondingCurvePda,
-        bcWsol,
-      } as any)
-      .instruction()
-
-    const migrateIx = await program.methods
-      .migrateToDex()
-      .accounts({
-        payer: wallet.publicKey,
-        globalConfig,
-        mint: mintPk,
-        bondingCurve: bondingCurvePda,
-        treasury: treasuryPda,
-        tokenVault: bcAta,
-        treasuryTokenAccount: treasuryAta,
-        bcWsol,
-        payerWsol,
-        payerToken,
-        raydiumProgram: RAYDIUM_CPMM,
-        ammConfig: RAYDIUM_AMM_CONFIG,
-        raydiumAuthority: raydiumAuth,
-        poolState,
-        wsolMint: WSOL_MINT,
-        token0Vault: vault0,
-        token1Vault: vault1,
-        lpMint,
-        payerLpToken: payerLp,
-        observationState: obs,
-        createPoolFee: RAYDIUM_FEE_RECEIVER,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
-      } as any)
-      .instruction()
-
-    const migrateTx = new Transaction()
-      .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-      .add(fundIx)
-      .add(migrateIx)
-    await provider.sendAndConfirm(migrateTx)
+    // Migrate using SDK
+    const migrateResult = await buildMigrateTransaction(connection, {
+      mint,
+      payer: walletAddr,
+    })
+    await signAndSend(connection, wallet, migrateResult.transaction)
 
     ok('Migrate to DEX', 'Raydium pool created (V26 permissionless)')
 
@@ -504,6 +362,12 @@ const main = async () => {
     } else {
       fail('Migration verified', { message: `status=${detail.status}, expected migrated` })
     }
+
+    // Derive Raydium vault addresses for post-migration verification
+    const raydium = getRaydiumMigrationAccounts(mintPk)
+    const isWsolToken0 = raydium.isWsolToken0
+    const vault0 = raydium.token0Vault
+    const vault1 = raydium.token1Vault
 
     // Post-migration distribution snapshot
     try {
