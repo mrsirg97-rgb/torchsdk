@@ -57,6 +57,8 @@ import {
   LiquidateParams,
   ClaimProtocolRewardsParams,
   VaultSwapParams,
+  AutoBuybackParams,
+  HarvestFeesParams,
   CreateVaultParams,
   DepositVaultParams,
   WithdrawVaultParams,
@@ -1568,5 +1570,139 @@ export const buildVaultSwapTransaction = async (
   return {
     transaction: tx,
     message: `${direction} ${amountLabel} via vault DEX swap`,
+  }
+}
+
+// ============================================================================
+// Treasury Cranks
+// ============================================================================
+
+/**
+ * Build an unsigned auto-buyback transaction.
+ *
+ * Permissionless crank — triggers a treasury buyback on Raydium when the pool
+ * price has dropped below the treasury's ratio threshold. Burns bought tokens.
+ */
+export const buildAutoBuybackTransaction = async (
+  connection: Connection,
+  params: AutoBuybackParams,
+): Promise<TransactionResult> => {
+  const { mint: mintStr, payer: payerStr, minimum_amount_out = 1 } = params
+
+  const mint = new PublicKey(mintStr)
+  const payer = new PublicKey(payerStr)
+
+  const [bondingCurvePda] = getBondingCurvePda(mint)
+  const [treasuryPda] = getTokenTreasuryPda(mint)
+  const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
+
+  // Treasury's WSOL ATA (SPL Token)
+  const treasuryWsol = getAssociatedTokenAddressSync(
+    WSOL_MINT,
+    treasuryPda,
+    true,
+    TOKEN_PROGRAM_ID,
+  )
+
+  // Raydium pool accounts
+  const raydium = getRaydiumMigrationAccounts(mint)
+  // For buyback: input = WSOL (SOL side), output = token
+  const inputVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault
+  const outputVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault
+
+  const tx = new Transaction()
+
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+
+  // Create treasury WSOL ATA if needed
+  tx.add(
+    createAssociatedTokenAccountIdempotentInstruction(
+      payer,
+      treasuryWsol,
+      treasuryPda,
+      WSOL_MINT,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
+  )
+
+  const provider = makeDummyProvider(connection, payer)
+  const program = new Program(idl as unknown, provider)
+
+  const buybackIx = await program.methods
+    .executeAutoBuyback(new BN(minimum_amount_out.toString()))
+    .accounts({
+      payer,
+      mint,
+      bondingCurve: bondingCurvePda,
+      treasury: treasuryPda,
+      treasuryWsol,
+      treasuryToken: treasuryTokenAccount,
+      raydiumProgram: getRaydiumCpmmProgram(),
+      raydiumAuthority: raydium.raydiumAuthority,
+      ammConfig: getRaydiumAmmConfig(),
+      poolState: raydium.poolState,
+      inputVault,
+      outputVault,
+      wsolMint: WSOL_MINT,
+      observationState: raydium.observationState,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .instruction()
+
+  tx.add(buybackIx)
+  await finalizeTransaction(connection, tx, payer)
+
+  return {
+    transaction: tx,
+    message: `Auto-buyback for ${mintStr.slice(0, 8)}...`,
+  }
+}
+
+/**
+ * Build an unsigned harvest-fees transaction.
+ *
+ * Permissionless crank — harvests accumulated Token-2022 transfer fees
+ * from the treasury's token account into the treasury's balance.
+ */
+export const buildHarvestFeesTransaction = async (
+  connection: Connection,
+  params: HarvestFeesParams,
+): Promise<TransactionResult> => {
+  const { mint: mintStr, payer: payerStr } = params
+
+  const mint = new PublicKey(mintStr)
+  const payer = new PublicKey(payerStr)
+
+  const [bondingCurvePda] = getBondingCurvePda(mint)
+  const [treasuryPda] = getTokenTreasuryPda(mint)
+  const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
+
+  const provider = makeDummyProvider(connection, payer)
+  const program = new Program(idl as unknown, provider)
+
+  const tx = new Transaction()
+
+  const harvestIx = await program.methods
+    .harvestFees()
+    .accounts({
+      payer,
+      mint,
+      bondingCurve: bondingCurvePda,
+      tokenTreasury: treasuryPda,
+      treasuryTokenAccount,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+    } as any)
+    .instruction()
+
+  tx.add(harvestIx)
+  await finalizeTransaction(connection, tx, payer)
+
+  return {
+    transaction: tx,
+    message: `Harvest transfer fees for ${mintStr.slice(0, 8)}...`,
   }
 }

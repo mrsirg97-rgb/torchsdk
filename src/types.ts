@@ -273,6 +273,26 @@ export interface VaultSwapParams {
 }
 
 // ============================================================================
+// Treasury Crank Params
+// ============================================================================
+
+export interface AutoBuybackParams {
+  /** Token mint address */
+  mint: string
+  /** Payer wallet (permissionless — anyone can trigger) */
+  payer: string
+  /** Minimum tokens out from the swap (slippage protection, default 1) */
+  minimum_amount_out?: number
+}
+
+export interface HarvestFeesParams {
+  /** Token mint address */
+  mint: string
+  /** Payer wallet (permissionless — anyone can trigger) */
+  payer: string
+}
+
+// ============================================================================
 // Transaction Results
 // ============================================================================
 

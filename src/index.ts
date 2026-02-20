@@ -46,6 +46,8 @@ export {
   buildTransferAuthorityTransaction,
   buildWithdrawTokensTransaction,
   buildVaultSwapTransaction,
+  buildAutoBuybackTransaction,
+  buildHarvestFeesTransaction,
 } from './transactions'
 
 // Ephemeral Agent
@@ -96,6 +98,8 @@ export type {
   TransferAuthorityParams,
   WithdrawTokensParams,
   VaultSwapParams,
+  AutoBuybackParams,
+  HarvestFeesParams,
 } from './types'
 
 // Constants (for advanced usage)

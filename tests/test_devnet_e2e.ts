@@ -1,17 +1,21 @@
 /**
  * Devnet Full E2E Test
  *
- * Creates a Spark token (50 SOL target), bonds to completion, migrates to
- * Raydium DEX (V26 permissionless), then continues with vault swap + lending.
+ * Creates a Spark token (50 SOL target), bonds to completion with many small
+ * buys, migrates to Raydium DEX (V26 permissionless), then hammers the pool
+ * with 200 SOL of post-migration buys/sells and extended lending.
  *
  * Run:
  *   npx tsx tests/test_devnet_e2e.ts
  *
  * Requirements:
- *   - Devnet wallet (~/.config/solana/id.json) with ~70 SOL
+ *   - Devnet wallet (~/.config/solana/id.json) with ~320 SOL
  *   - Torch Market program deployed to devnet
  *   - Raydium CPMM program on devnet
  */
+
+// Must be set before any torchsdk imports so getRaydiumCpmmProgram() etc. resolve to devnet addresses
+process.env.TORCH_NETWORK = 'devnet'
 
 import {
   Connection,
@@ -53,9 +57,13 @@ import * as os from 'os'
 const DEVNET_RPC = 'https://api.devnet.solana.com'
 const WALLET_PATH = path.join(os.homedir(), '.config/solana/id.json')
 
-// Spark tier: 50 SOL target, 0.5 SOL per buy (stays under 2% wallet cap)
+// Spark tier: 50 SOL target, 0.2 SOL per buy (smaller buys, more buyers)
 const BONDING_TARGET = 50_000_000_000 // 50 SOL in lamports
-const BUY_AMOUNT = Math.floor(0.5 * LAMPORTS_PER_SOL)
+const BUY_AMOUNT = Math.floor(0.2 * LAMPORTS_PER_SOL)
+
+// Post-migration config: 200 SOL of buys on Raydium pool
+const POST_MIG_TOTAL_SOL = 200 * LAMPORTS_PER_SOL
+const POST_MIG_BUY_SIZE = 2 * LAMPORTS_PER_SOL // 2 SOL per swap
 
 // ============================================================================
 // Helpers
@@ -104,8 +112,8 @@ const main = async () => {
   const balance = await connection.getBalance(wallet.publicKey)
   log(`Balance: ${(balance / LAMPORTS_PER_SOL).toFixed(2)} SOL`)
 
-  if (balance < 60 * LAMPORTS_PER_SOL) {
-    console.error('Need at least ~60 SOL on devnet. Airdrop or fund the wallet.')
+  if (balance < 320 * LAMPORTS_PER_SOL) {
+    console.error('Need at least ~320 SOL on devnet. Airdrop or fund the wallet.')
     process.exit(1)
   }
 
@@ -196,7 +204,7 @@ const main = async () => {
   // ==================================================================
   log('\n[4] Bond to completion (50 SOL target)')
 
-  const NUM_BUYERS = 150
+  const NUM_BUYERS = 350
   const fundPerWallet = BUY_AMOUNT + Math.floor(0.05 * LAMPORTS_PER_SOL)
   const buyers: Keypair[] = []
   for (let i = 0; i < NUM_BUYERS; i++) buyers.push(Keypair.generate())
@@ -406,37 +414,95 @@ const main = async () => {
     await sleep(15000)
 
     // ==================================================================
-    // 7. Vault Swap Buy (SOL → Token via Raydium)
+    // 7. Deposit vault SOL for post-migration trading (200+ SOL)
     // ==================================================================
-    log('\n[7] Vault Swap Buy (SOL → Token via Raydium)')
+    log('\n[7] Deposit vault SOL for post-migration trading')
     try {
-      const vaultBefore = await getVault(connection, walletAddr)
-      const buySwapResult = await buildVaultSwapTransaction(connection, {
-        mint,
-        signer: walletAddr,
+      const depositResult = await buildDepositVaultTransaction(connection, {
+        depositor: walletAddr,
         vault_creator: walletAddr,
-        amount_in: 100_000_000, // 0.1 SOL
-        minimum_amount_out: 1,
-        is_buy: true,
+        amount_sol: POST_MIG_TOTAL_SOL + 10 * LAMPORTS_PER_SOL, // 210 SOL (200 + buffer)
       })
-      buySwapResult.transaction.instructions.unshift(
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-      )
-      const buySig = await signAndSend(connection, wallet, buySwapResult.transaction)
-      const vaultAfter = await getVault(connection, walletAddr)
-      const spent = (vaultBefore?.sol_balance || 0) - (vaultAfter?.sol_balance || 0)
-      ok('Vault swap buy', `vault_spent=${spent.toFixed(4)} SOL sig=${buySig.slice(0, 8)}...`)
+      const sig = await signAndSend(connection, wallet, depositResult.transaction)
+      ok('Deposit vault (post-mig)', `210 SOL sig=${sig.slice(0, 8)}...`)
     } catch (e: any) {
-      fail('Vault swap buy', e)
-      if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+      fail('Deposit vault (post-mig)', e)
     }
 
     await sleep(500)
 
     // ==================================================================
-    // 8. Vault Swap Sell (Token → SOL via Raydium)
+    // 8. Post-migration buys — 200 SOL via vault swap (2 SOL × 100)
     // ==================================================================
-    log('\n[8] Vault Swap Sell (Token → SOL via Raydium)')
+    log('\n[8] Post-migration buys — 200 SOL via vault swap (2 SOL × 100)')
+    const numPostBuys = Math.ceil(POST_MIG_TOTAL_SOL / POST_MIG_BUY_SIZE)
+    let postBuyCount = 0
+    let postBuyFails = 0
+    let totalSolSpentOnBuys = 0
+
+    for (let i = 0; i < numPostBuys; i++) {
+      try {
+        const buySwapResult = await buildVaultSwapTransaction(connection, {
+          mint,
+          signer: walletAddr,
+          vault_creator: walletAddr,
+          amount_in: POST_MIG_BUY_SIZE,
+          minimum_amount_out: 1,
+          is_buy: true,
+        })
+        buySwapResult.transaction.instructions.unshift(
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+        )
+        await signAndSend(connection, wallet, buySwapResult.transaction)
+        postBuyCount++
+        totalSolSpentOnBuys += POST_MIG_BUY_SIZE
+
+        if ((i + 1) % 20 === 0) {
+          const spent = totalSolSpentOnBuys / LAMPORTS_PER_SOL
+          log(`  Buy ${i + 1}/${numPostBuys}: ${spent.toFixed(1)} SOL spent so far`)
+        }
+      } catch (e: any) {
+        postBuyFails++
+        if (postBuyFails <= 3) {
+          log(`  Buy ${i + 1} failed: ${(e.message || '').substring(0, 80)}`)
+          if (e.logs) console.error('  Logs:', e.logs.slice(-3).join('\n        '))
+        }
+        await sleep(1000)
+      }
+      await sleep(200)
+    }
+
+    if (postBuyCount > 0) {
+      ok('Post-migration buys', `${postBuyCount}/${numPostBuys} succeeded, ${(totalSolSpentOnBuys / LAMPORTS_PER_SOL).toFixed(1)} SOL spent`)
+    } else {
+      fail('Post-migration buys', { message: 'all buys failed' })
+    }
+
+    // Pool price snapshot after 200 SOL of buys
+    try {
+      const tokenVault = isWsolToken0 ? vault1 : vault0
+      const solVault = isWsolToken0 ? vault0 : vault1
+      const poolTokenBal = await connection.getTokenAccountBalance(tokenVault)
+      const poolSolBal = await connection.getTokenAccountBalance(solVault)
+      const poolTokens = Number(poolTokenBal.value.amount) / 1e6
+      const poolSol = Number(poolSolBal.value.amount) / LAMPORTS_PER_SOL
+      const pricePerToken = poolTokens > 0 ? poolSol / poolTokens : 0
+      const tokensPerSol = poolSol > 0 ? poolTokens / poolSol : 0
+
+      log(`\n  ┌─── Pool State After 200 SOL Buys ────────────────────────┐`)
+      log(`  │  Pool SOL:         ${poolSol.toFixed(4).padStart(15)} SOL     │`)
+      log(`  │  Pool Tokens:      ${poolTokens.toFixed(0).padStart(15)} tokens  │`)
+      log(`  │  Price/Token:      ${pricePerToken.toFixed(10).padStart(15)} SOL     │`)
+      log(`  │  Tokens/SOL:       ${tokensPerSol.toFixed(2).padStart(15)} tokens  │`)
+      log(`  └────────────────────────────────────────────────────────────┘`)
+    } catch { /* non-critical */ }
+
+    await sleep(500)
+
+    // ==================================================================
+    // 9. Post-migration sells — sell back 20% of vault tokens
+    // ==================================================================
+    log('\n[9] Post-migration sells (20% of vault tokens)')
     try {
       const [vaultPda] = getTorchVaultPda(wallet.publicKey)
       const vaultAta = getAssociatedTokenAddressSync(
@@ -444,40 +510,57 @@ const main = async () => {
       )
       const tokenBal = await connection.getTokenAccountBalance(vaultAta)
       const totalTokens = Number(tokenBal.value.amount)
-      const sellAmount = Math.floor(totalTokens * 0.1) // sell 10%
-      log(`  Vault token balance: ${(totalTokens / 1e6).toFixed(0)} tokens, selling ${(sellAmount / 1e6).toFixed(0)}`)
+      const sellTotal = Math.floor(totalTokens * 0.2)
+      const SELL_BATCH = Math.floor(sellTotal / 5) // 5 sells of 4% each
+      log(`  Vault tokens: ${(totalTokens / 1e6).toFixed(0)}, selling ${(sellTotal / 1e6).toFixed(0)} in 5 batches`)
 
-      if (sellAmount < 1_000_000) {
-        ok('Vault swap sell', 'skipped — insufficient vault tokens')
+      let sellCount = 0
+      let totalSolReceived = 0
+
+      for (let i = 0; i < 5; i++) {
+        const sellAmount = i < 4 ? SELL_BATCH : sellTotal - SELL_BATCH * 4
+        if (sellAmount < 1_000_000) break
+
+        try {
+          const vaultBefore = await getVault(connection, walletAddr)
+          const sellSwapResult = await buildVaultSwapTransaction(connection, {
+            mint,
+            signer: walletAddr,
+            vault_creator: walletAddr,
+            amount_in: sellAmount,
+            minimum_amount_out: 1,
+            is_buy: false,
+          })
+          sellSwapResult.transaction.instructions.unshift(
+            ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+          )
+          await signAndSend(connection, wallet, sellSwapResult.transaction)
+          const vaultAfter = await getVault(connection, walletAddr)
+          const received = (vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)
+          totalSolReceived += received
+          sellCount++
+        } catch (e: any) {
+          log(`  Sell ${i + 1} failed: ${(e.message || '').substring(0, 80)}`)
+        }
+        await sleep(300)
+      }
+
+      if (sellCount > 0) {
+        ok('Post-migration sells', `${sellCount}/5 succeeded, received ${totalSolReceived.toFixed(4)} SOL`)
       } else {
-        const vaultBefore = await getVault(connection, walletAddr)
-        const sellSwapResult = await buildVaultSwapTransaction(connection, {
-          mint,
-          signer: walletAddr,
-          vault_creator: walletAddr,
-          amount_in: sellAmount,
-          minimum_amount_out: 1,
-          is_buy: false,
-        })
-        sellSwapResult.transaction.instructions.unshift(
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-        )
-        const sellSig = await signAndSend(connection, wallet, sellSwapResult.transaction)
-        const vaultAfter = await getVault(connection, walletAddr)
-        const received = (vaultAfter?.sol_balance || 0) - (vaultBefore?.sol_balance || 0)
-        ok('Vault swap sell', `vault_received=${received.toFixed(6)} SOL sig=${sellSig.slice(0, 8)}...`)
+        fail('Post-migration sells', { message: 'all sells failed' })
       }
     } catch (e: any) {
-      fail('Vault swap sell', e)
+      fail('Post-migration sells', e)
       if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
     }
 
     await sleep(500)
 
     // ==================================================================
-    // 9. Borrow via vault (collateral from vault ATA, SOL to vault)
+    // 10. Borrow via vault (post-migration lending)
     // ==================================================================
-    log('\n[9] Borrow via vault')
+    log('\n[10] Borrow via vault (post-migration)')
     try {
       const [vaultPda] = getTorchVaultPda(wallet.publicKey)
       const vaultAta = getAssociatedTokenAddressSync(
@@ -491,7 +574,7 @@ const main = async () => {
       const treasuryData = await fetchTokenRaw(connection, new PublicKey(mint))
       const treasurySol = Number(treasuryData?.treasury?.sol_balance || 0)
       const maxLendable = Math.floor(treasurySol * 0.5) // 50% utilization cap
-      const borrowAmount = Math.min(100_000_000, Math.max(0, maxLendable - 1_000_000))
+      const borrowAmount = Math.min(1 * LAMPORTS_PER_SOL, Math.max(0, maxLendable - 1_000_000)) // up to 1 SOL
       log(`  Treasury SOL: ${(treasurySol / LAMPORTS_PER_SOL).toFixed(4)}, max lendable: ${(maxLendable / LAMPORTS_PER_SOL).toFixed(4)}, borrowing: ${(borrowAmount / LAMPORTS_PER_SOL).toFixed(4)}`)
 
       if (borrowAmount < 100_000_000) {
@@ -514,20 +597,63 @@ const main = async () => {
         await sleep(500)
 
         // ==============================================================
-        // 10. Repay via vault
+        // 11. Repay via vault
         // ==============================================================
-        log('\n[10] Repay via vault')
+        log('\n[11] Repay via vault')
         try {
           const repayResult = await buildRepayTransaction(connection, {
             mint,
             borrower: walletAddr,
-            sol_amount: 200_000_000, // 0.2 SOL (overpay to fully close)
+            sol_amount: borrowAmount + 100_000_000, // overpay to fully close
             vault: walletAddr,
           })
           const repaySig = await signAndSend(connection, wallet, repayResult.transaction)
           ok('Vault repay', `${repayResult.message} sig=${repaySig.slice(0, 8)}...`)
         } catch (e: any) {
           fail('Vault repay', e)
+        }
+
+        await sleep(500)
+
+        // ==============================================================
+        // 12. Second borrow+repay cycle (extended lending)
+        // ==============================================================
+        log('\n[12] Second borrow+repay cycle')
+        try {
+          const tokenBal2 = await connection.getTokenAccountBalance(vaultAta)
+          const tokens2 = Number(tokenBal2.value.amount)
+          const treasuryData2 = await fetchTokenRaw(connection, new PublicKey(mint))
+          const treasurySol2 = Number(treasuryData2?.treasury?.sol_balance || 0)
+          const maxLendable2 = Math.floor(treasurySol2 * 0.5)
+          const borrowAmount2 = Math.min(500_000_000, Math.max(0, maxLendable2 - 1_000_000)) // up to 0.5 SOL
+
+          if (borrowAmount2 < 100_000_000 || tokens2 < 10_000_000) {
+            ok('Second borrow', 'skipped — insufficient treasury or collateral')
+          } else {
+            const collateral2 = Math.floor(tokens2 * 0.4)
+            const borrowResult2 = await buildBorrowTransaction(connection, {
+              mint,
+              borrower: walletAddr,
+              collateral_amount: collateral2,
+              sol_to_borrow: borrowAmount2,
+              vault: walletAddr,
+            })
+            const bSig2 = await signAndSend(connection, wallet, borrowResult2.transaction)
+            ok('Second borrow', `${borrowResult2.message} sig=${bSig2.slice(0, 8)}...`)
+
+            await sleep(500)
+
+            const repayResult2 = await buildRepayTransaction(connection, {
+              mint,
+              borrower: walletAddr,
+              sol_amount: borrowAmount2 + 100_000_000,
+              vault: walletAddr,
+            })
+            const rSig2 = await signAndSend(connection, wallet, repayResult2.transaction)
+            ok('Second repay', `${repayResult2.message} sig=${rSig2.slice(0, 8)}...`)
+          }
+        } catch (e: any) {
+          fail('Second borrow+repay', e)
         }
       }
     } catch (e: any) {
