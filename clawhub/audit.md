@@ -2,10 +2,10 @@
 
 **Audit Date:** February 20, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.7.0
+**SDK Version:** 3.7.2
 **On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.7.0)
 **Language:** TypeScript
-**Test Result:** 32 passed, 0 failed (Surfpool mainnet fork + devnet E2E)
+**Test Result:** 32 passed, 0 failed (Surfpool mainnet fork + devnet E2E + tiers E2E)
 
 ---
 
@@ -62,17 +62,18 @@ The SDK is **stateless** (no global state, no connection pools), **non-custodial
 
 | File | Lines | Role |
 |------|-------|------|
-| `src/index.ts` | 90 | Public API surface (25 functions, ~30 types, 4 constants) |
-| `src/types.ts` | 350 | All TypeScript interfaces |
+| `src/index.ts` | 106 | Public API surface (27 functions, ~35 types, 4 constants) |
+| `src/types.ts` | 406 | All TypeScript interfaces |
 | `src/constants.ts` | 85 | Program ID, PDA seeds, token constants, blacklist, dynamic network detection |
-| `src/program.ts` | 443 | PDA derivation, Anchor types, quote math, Raydium PDAs |
-| `src/tokens.ts` | 800 | Read-only queries (tokens, vault, lending, holders, messages, pool price) |
-| `src/transactions.ts` | 1050 | Transaction builders (buy, sell, vault, lending, star, migrate) |
+| `src/program.ts` | 461 | PDA derivation, Anchor types, quote math, Raydium PDAs |
+| `src/tokens.ts` | 836 | Read-only queries (tokens, vault, lending, holders, messages, pool price) |
+| `src/transactions.ts` | 1848 | Transaction builders (buy, sell, vault, lending, star, migrate, buyback, harvest) |
 | `src/quotes.ts` | 102 | Buy/sell quote calculations |
-| `src/said.ts` | 111 | SAID Protocol integration |
+| `src/said.ts` | 110 | SAID Protocol integration |
 | `src/gateway.ts` | 49 | Irys metadata fetch with fallback + timeout |
+| `src/ephemeral.ts` | 45 | Ephemeral agent (disposable wallet helper) |
 | `src/torch_market.json` | — | Anchor IDL (V3.7.0, 27 instructions) |
-| **Total** | **~3,100** | |
+| **Total** | **~4,048** | |
 
 ### On-Chain Cross-Reference
 

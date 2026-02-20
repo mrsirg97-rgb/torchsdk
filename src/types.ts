@@ -290,6 +290,9 @@ export interface HarvestFeesParams {
   mint: string
   /** Payer wallet (permissionless — anyone can trigger) */
   payer: string
+  /** Optional list of token account addresses to harvest from.
+   *  If omitted, the SDK auto-discovers accounts with withheld fees. */
+  sources?: string[]
 }
 
 // ============================================================================

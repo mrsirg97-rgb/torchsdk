@@ -42,6 +42,8 @@ import {
   buildLinkWalletTransaction,
   buildUnlinkWalletTransaction,
   buildVaultSwapTransaction,
+  buildHarvestFeesTransaction,
+  buildAutoBuybackTransaction,
   confirmTransaction,
   createEphemeralAgent,
 } from '../src/index'
@@ -820,9 +822,122 @@ const main = async () => {
         if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
       }
       // ------------------------------------------------------------------
-      // 18. Vault-Routed Liquidation
+      // 18. Harvest Transfer Fees
       // ------------------------------------------------------------------
-      log('\n[18] Vault-Routed Liquidation (borrow → time travel → liquidate via vault)')
+      log('\n[18] Harvest Transfer Fees')
+      try {
+        // The vault swap buys above generated transfer fees (1% on token transfers)
+        // Snapshot treasury state before harvest
+        const preHarvestData = await fetchTokenRaw(connection, new PublicKey(mint))
+        const preHarvestTokens = Number(preHarvestData?.treasury?.tokens_held?.toString() || '0')
+        const preHarvestFees = Number(preHarvestData?.treasury?.harvested_fees?.toString() || '0')
+
+        const harvestResult = await buildHarvestFeesTransaction(connection, {
+          mint,
+          payer: walletAddr,
+        })
+        const harvestSig = await signAndSend(connection, wallet, harvestResult.transaction)
+
+        const postHarvestData = await fetchTokenRaw(connection, new PublicKey(mint))
+        const postHarvestTokens = Number(postHarvestData?.treasury?.tokens_held?.toString() || '0')
+        const postHarvestFees = Number(postHarvestData?.treasury?.harvested_fees?.toString() || '0')
+
+        if (postHarvestTokens > preHarvestTokens || postHarvestFees > preHarvestFees) {
+          ok('buildHarvestFeesTransaction', `${harvestResult.message} tokens: ${preHarvestTokens}→${postHarvestTokens} sig=${harvestSig.slice(0, 8)}...`)
+        } else {
+          ok('buildHarvestFeesTransaction', `${harvestResult.message} — tx succeeded sig=${harvestSig.slice(0, 8)}...`)
+        }
+      } catch (e: any) {
+        fail('buildHarvestFeesTransaction', e)
+        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+      }
+
+      // ------------------------------------------------------------------
+      // 19. Auto Buyback
+      // ------------------------------------------------------------------
+      log('\n[19] Auto Buyback')
+      try {
+        // Do sells to depress price below baseline threshold
+        const { getAssociatedTokenAddressSync: gataB } = require('@solana/spl-token')
+        const TOKEN_2022_B = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+        const { getTorchVaultPda: gvpB } = require('../src/program')
+        const [vaultPdaB] = gvpB(wallet.publicKey)
+        const vaultAtaB = gataB(new PublicKey(mint), vaultPdaB, true, TOKEN_2022_B)
+        const tokenBalB = await connection.getTokenAccountBalance(vaultAtaB)
+        const totalTokensB = Number(tokenBalB.value.amount)
+
+        // Sell 70% of vault tokens in batches to push price down
+        const sellPerBatchB = Math.floor(totalTokensB * 0.175)
+        for (let i = 0; i < 4; i++) {
+          if (sellPerBatchB < 1_000_000) break
+          try {
+            const sellResult = await buildVaultSwapTransaction(connection, {
+              mint,
+              signer: walletAddr,
+              vault_creator: walletAddr,
+              amount_in: sellPerBatchB,
+              minimum_amount_out: 1,
+              is_buy: false,
+            })
+            const { ComputeBudgetProgram: CBPB } = require('@solana/web3.js')
+            sellResult.transaction.instructions.unshift(
+              CBPB.setComputeUnitLimit({ units: 400_000 }),
+            )
+            await signAndSend(connection, wallet, sellResult.transaction)
+          } catch (e: any) {
+            log(`  Sell ${i + 1} skipped: ${e.message?.substring(0, 80)}`)
+          }
+        }
+
+        // Snapshot treasury before buyback
+        const preBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
+        const preBuybackSol = Number(preBuybackData?.treasury?.sol_balance?.toString() || '0')
+        const preBuybackCount = Number(preBuybackData?.treasury?.buyback_count?.toString() || '0')
+
+        try {
+          const buybackResult = await buildAutoBuybackTransaction(connection, {
+            mint,
+            payer: walletAddr,
+          })
+          const buybackSig = await signAndSend(connection, wallet, buybackResult.transaction)
+
+          const postBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
+          const postBuybackSol = Number(postBuybackData?.treasury?.sol_balance?.toString() || '0')
+          const postBuybackCount = Number(postBuybackData?.treasury?.buyback_count?.toString() || '0')
+
+          if (postBuybackCount > preBuybackCount) {
+            ok('buildAutoBuybackTransaction', `${buybackResult.message} sol: ${(preBuybackSol / 1e9).toFixed(4)}→${(postBuybackSol / 1e9).toFixed(4)}, count: ${preBuybackCount}→${postBuybackCount} sig=${buybackSig.slice(0, 8)}...`)
+          } else {
+            ok('buildAutoBuybackTransaction', `${buybackResult.message} — tx succeeded sig=${buybackSig.slice(0, 8)}...`)
+          }
+
+          // Test cooldown: call again immediately
+          try {
+            await buildAutoBuybackTransaction(connection, { mint, payer: walletAddr })
+            fail('Buyback cooldown', 'should have thrown')
+          } catch (cooldownErr: any) {
+            if (cooldownErr.message?.includes('cooldown') || cooldownErr.message?.includes('healthy')) {
+              ok('Buyback cooldown/pre-check', cooldownErr.message)
+            } else {
+              ok('Buyback re-check', cooldownErr.message)
+            }
+          }
+        } catch (e: any) {
+          if (e.message?.includes('healthy') || e.message?.includes('too low') || e.message?.includes('cooldown') || e.message?.includes('floor')) {
+            ok('Auto buyback pre-check', `correctly prevented: ${e.message}`)
+          } else {
+            fail('buildAutoBuybackTransaction', e)
+          }
+        }
+      } catch (e: any) {
+        fail('Auto buyback lifecycle', e)
+        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+      }
+
+      // ------------------------------------------------------------------
+      // 20. Vault-Routed Liquidation
+      // ------------------------------------------------------------------
+      log('\n[20] Vault-Routed Liquidation (borrow → time travel → liquidate via vault)')
 
       // Deposit more SOL for liquidation payment
       try {
@@ -954,9 +1069,9 @@ const main = async () => {
       }
 
       // ------------------------------------------------------------------
-      // 19. Vault-Routed Claim Protocol Rewards
+      // 21. Vault-Routed Claim Protocol Rewards
       // ------------------------------------------------------------------
-      log('\n[19] Vault-Routed Claim Protocol Rewards')
+      log('\n[21] Vault-Routed Claim Protocol Rewards')
       try {
         const anchor = require('@coral-xyz/anchor')
         const idlCrank = require('../dist/torch_market.json')

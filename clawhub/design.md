@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.0.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.2.
 
 ## Overview
 
@@ -34,6 +34,8 @@ The SDK is designed for AI agent integration. The core safety primitive is the *
 │  getVaultForWallet()     │  │  buildRepayTransaction()   │
 │  getVaultWalletLink()    │  │  buildLiquidateTransaction │
 │                          │  │  buildClaimProtocolRewardsTx│
+│                          │  │  buildAutoBuybackTx()      │
+│                          │  │  buildHarvestFeesTx()      │
 │                          │  │  buildCreateVaultTx()      │
 │                          │  │  buildDepositVaultTx()     │
 │                          │  │  buildWithdrawVaultTx()    │
@@ -68,10 +70,11 @@ src/
 ├── constants.ts        Program ID, PDA seeds, token constants, blacklist, dynamic network
 ├── program.ts          Anchor IDL, PDA derivation, on-chain types, math
 ├── tokens.ts           Read-only queries (tokens, holders, vault, lending, pool price)
-├── transactions.ts     Transaction builders (buy, sell, vault, lending, migrate)
+├── transactions.ts     Transaction builders (buy, sell, vault, lending, migrate, buyback, harvest)
 ├── quotes.ts           Buy/sell quote calculations (no RPC write)
 ├── said.ts             SAID Protocol integration (verify, confirm)
 ├── gateway.ts          Irys metadata fetch with fallback
+├── ephemeral.ts        Ephemeral agent (disposable wallet helper)
 └── torch_market.json   Anchor IDL (v3.7.0, 27 instructions)
 ```
 
@@ -238,6 +241,11 @@ CREATE → BONDING → COMPLETE → MIGRATE → DEX TRADING
 - `buildRepayTransaction` — repay SOL debt, recover collateral
 - `buildLiquidateTransaction` — liquidate underwater positions (permissionless)
 
+### Treasury Cranks (Permissionless)
+
+- `buildAutoBuybackTransaction` — trigger treasury buyback when pool price < 80% of migration baseline. Full client-side pre-checks (migration, baseline, cooldown, supply floor, price threshold, dust). Buys tokens with treasury SOL on Raydium and burns them.
+- `buildHarvestFeesTransaction` — harvest accumulated Token-2022 transfer fees from token accounts into the treasury. Auto-discovers source accounts with withheld fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. Falls back gracefully if RPC doesn't support discovery. Optional `sources` param for explicit accounts.
+
 ### Community Features
 
 - `buildStarTransaction` — star a token (0.05 SOL, sybil-resistant)
@@ -391,9 +399,11 @@ The SDK includes a comprehensive end-to-end test that runs against a Surfpool ma
 | Vault Swap Buy | Vault-routed Raydium buy (SOL → tokens via DEX) |
 | Vault Swap Sell | Vault-routed Raydium sell (tokens → SOL via DEX) |
 | Withdraw Tokens | Authority withdraws tokens from vault ATA |
+| Harvest Fees | Auto-discovery of token accounts with withheld fees, treasury balance increase |
+| Auto Buyback | Pre-check validation (price, cooldown, supply floor), buyback execution, cooldown enforcement |
 | Protocol Rewards | Vault-routed epoch reward claim (fee-funded, 10 SOL min volume) |
 
-Expected result: **32 passed, 0 failed**
+Expected result: **32 passed, 0 failed** (mainnet fork). Tiers test covers harvest + buyback across Spark/Flame/Torch.
 
 ---
 

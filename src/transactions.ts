@@ -21,6 +21,8 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  unpackAccount,
+  getTransferFeeAmount,
 } from '@solana/spl-token'
 import { BN, Program, AnchorProvider, Wallet } from '@coral-xyz/anchor'
 import {
@@ -1577,11 +1579,19 @@ export const buildVaultSwapTransaction = async (
 // Treasury Cranks
 // ============================================================================
 
+// Auto-buyback constants (must match the on-chain program)
+const SUPPLY_FLOOR = BigInt('500000000000000') // 500M tokens at 6 decimals
+const MIN_BUYBACK_AMOUNT = BigInt('10000000') // 0.01 SOL in lamports
+const RATIO_PRECISION = BigInt('1000000000') // 1e9
+
 /**
  * Build an unsigned auto-buyback transaction.
  *
  * Permissionless crank — triggers a treasury buyback on Raydium when the pool
  * price has dropped below the treasury's ratio threshold. Burns bought tokens.
+ *
+ * Pre-checks all on-chain conditions and throws descriptive errors so the
+ * caller (e.g. frontend) knows exactly why a buyback can't fire.
  */
 export const buildAutoBuybackTransaction = async (
   connection: Connection,
@@ -1592,6 +1602,85 @@ export const buildAutoBuybackTransaction = async (
   const mint = new PublicKey(mintStr)
   const payer = new PublicKey(payerStr)
 
+  // Fetch on-chain state for pre-checks
+  const tokenData = await fetchTokenRaw(connection, mint)
+  if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
+  const { bondingCurve, treasury } = tokenData
+
+  // Pre-check 1: Token must be migrated
+  if (!bondingCurve.migrated) {
+    throw new Error('Token not yet migrated')
+  }
+
+  // Pre-check 2: Baseline must be initialized
+  if (!treasury || !treasury.baseline_initialized) {
+    throw new Error('Buyback baseline not initialized')
+  }
+
+  // Pre-check 3: Cooldown check
+  const currentSlot = await connection.getSlot('confirmed')
+  const lastBuybackSlot = BigInt(treasury.last_buyback_slot.toString())
+  const minInterval = BigInt(treasury.min_buyback_interval_slots.toString())
+  const nextBuybackSlot = lastBuybackSlot + minInterval
+  if (BigInt(currentSlot) < nextBuybackSlot) {
+    const slotsRemaining = Number(nextBuybackSlot - BigInt(currentSlot))
+    throw new Error(`Buyback cooldown: ${slotsRemaining} slots remaining`)
+  }
+
+  // Pre-check 4: Supply floor
+  const mintInfo = await connection.getTokenSupply(mint, 'confirmed')
+  const currentSupply = BigInt(mintInfo.value.amount)
+  if (currentSupply <= SUPPLY_FLOOR) {
+    throw new Error('Supply at floor — buybacks paused')
+  }
+
+  // Raydium pool accounts
+  const raydium = getRaydiumMigrationAccounts(mint)
+
+  // Pre-check 5: Price check — read pool vault balances
+  const solVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault
+  const tokenVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault
+  const [solVaultInfo, tokenVaultInfo] = await Promise.all([
+    connection.getTokenAccountBalance(solVault),
+    connection.getTokenAccountBalance(tokenVault),
+  ])
+  const poolSol = BigInt(solVaultInfo.value.amount)
+  const poolTokens = BigInt(tokenVaultInfo.value.amount)
+
+  const baselineSol = BigInt(treasury.baseline_sol_reserves.toString())
+  const baselineTokens = BigInt(treasury.baseline_token_reserves.toString())
+  const thresholdBps = BigInt(treasury.ratio_threshold_bps)
+
+  if (poolTokens > BigInt(0) && baselineTokens > BigInt(0)) {
+    const currentRatio = (poolSol * RATIO_PRECISION) / poolTokens
+    const baselineRatio = (baselineSol * RATIO_PRECISION) / baselineTokens
+    const thresholdRatio = (baselineRatio * thresholdBps) / BigInt(10000)
+
+    if (currentRatio >= thresholdRatio) {
+      const currentPct = Number((currentRatio * BigInt(10000)) / baselineRatio) / 100
+      const thresholdPct = Number(thresholdBps) / 100
+      throw new Error(
+        `Price is healthy — no buyback needed (current: ${currentPct.toFixed(1)}% of baseline, threshold: ${thresholdPct.toFixed(1)}%)`,
+      )
+    }
+  }
+
+  // Pre-check 6: Dust check — compute buyback_amount
+  const treasurySolBalance = BigInt(treasury.sol_balance.toString())
+  const reserveRatioBps = BigInt(treasury.reserve_ratio_bps)
+  const buybackPercentBps = BigInt(treasury.buyback_percent_bps)
+
+  const availableSol = (treasurySolBalance * (BigInt(10000) - reserveRatioBps)) / BigInt(10000)
+  const buybackAmount = (availableSol * buybackPercentBps) / BigInt(10000)
+
+  if (buybackAmount < MIN_BUYBACK_AMOUNT) {
+    const availableSolNum = Number(availableSol) / 1e9
+    throw new Error(
+      `Treasury SOL too low for buyback (available: ${availableSolNum.toFixed(4)} SOL, need >= 0.01 SOL after reserves)`,
+    )
+  }
+
+  // All pre-checks passed — build the transaction
   const [bondingCurvePda] = getBondingCurvePda(mint)
   const [treasuryPda] = getTokenTreasuryPda(mint)
   const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
@@ -1604,8 +1693,6 @@ export const buildAutoBuybackTransaction = async (
     TOKEN_PROGRAM_ID,
   )
 
-  // Raydium pool accounts
-  const raydium = getRaydiumMigrationAccounts(mint)
   // For buyback: input = WSOL (SOL side), output = token
   const inputVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault
   const outputVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault
@@ -1655,9 +1742,10 @@ export const buildAutoBuybackTransaction = async (
   tx.add(buybackIx)
   await finalizeTransaction(connection, tx, payer)
 
+  const buybackSol = Number(buybackAmount) / 1e9
   return {
     transaction: tx,
-    message: `Auto-buyback for ${mintStr.slice(0, 8)}...`,
+    message: `Auto-buyback ${buybackSol.toFixed(4)} SOL for ${mintStr.slice(0, 8)}...`,
   }
 }
 
@@ -1665,13 +1753,17 @@ export const buildAutoBuybackTransaction = async (
  * Build an unsigned harvest-fees transaction.
  *
  * Permissionless crank — harvests accumulated Token-2022 transfer fees
- * from the treasury's token account into the treasury's balance.
+ * from token accounts into the mint, then withdraws from the mint into
+ * the treasury's token account.
+ *
+ * If `params.sources` is provided, uses those accounts directly.
+ * Otherwise auto-discovers token accounts with withheld fees.
  */
 export const buildHarvestFeesTransaction = async (
   connection: Connection,
   params: HarvestFeesParams,
 ): Promise<TransactionResult> => {
-  const { mint: mintStr, payer: payerStr } = params
+  const { mint: mintStr, payer: payerStr, sources: sourcesStr } = params
 
   const mint = new PublicKey(mintStr)
   const payer = new PublicKey(payerStr)
@@ -1680,10 +1772,51 @@ export const buildHarvestFeesTransaction = async (
   const [treasuryPda] = getTokenTreasuryPda(mint)
   const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
 
+  // Discover source accounts with withheld transfer fees
+  let sourceAccounts: PublicKey[]
+
+  if (sourcesStr && sourcesStr.length > 0) {
+    sourceAccounts = sourcesStr.map((s) => new PublicKey(s))
+  } else {
+    // Auto-discover: fetch largest token accounts and filter to those with withheld > 0
+    try {
+      const largestAccounts = await connection.getTokenLargestAccounts(mint, 'confirmed')
+      const addresses = largestAccounts.value.map((a) => a.address)
+
+      if (addresses.length > 0) {
+        const accountInfos = await connection.getMultipleAccountsInfo(addresses)
+        sourceAccounts = []
+
+        for (let i = 0; i < addresses.length; i++) {
+          const info = accountInfos[i]
+          if (!info) continue
+          try {
+            const account = unpackAccount(addresses[i], info, TOKEN_2022_PROGRAM_ID)
+            const feeAmount = getTransferFeeAmount(account)
+            if (feeAmount && feeAmount.withheldAmount > BigInt(0)) {
+              sourceAccounts.push(addresses[i])
+            }
+          } catch {
+            // Not a Token-2022 account or can't decode — skip
+          }
+        }
+      } else {
+        sourceAccounts = []
+      }
+    } catch {
+      // RPC doesn't support getTokenLargestAccounts — proceed without source accounts
+      sourceAccounts = []
+    }
+  }
+
   const provider = makeDummyProvider(connection, payer)
   const program = new Program(idl as unknown, provider)
 
   const tx = new Transaction()
+
+  // Scale compute budget: base 200k + 20k per source account (Token-2022 harvest CPI is expensive)
+  const computeUnits = 200_000 + 20_000 * sourceAccounts.length
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }))
 
   const harvestIx = await program.methods
     .harvestFees()
@@ -1696,6 +1829,13 @@ export const buildHarvestFeesTransaction = async (
       token2022Program: TOKEN_2022_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
     } as any)
+    .remainingAccounts(
+      sourceAccounts.map((pubkey) => ({
+        pubkey,
+        isSigner: false,
+        isWritable: true,
+      })),
+    )
     .instruction()
 
   tx.add(harvestIx)
@@ -1703,6 +1843,6 @@ export const buildHarvestFeesTransaction = async (
 
   return {
     transaction: tx,
-    message: `Harvest transfer fees for ${mintStr.slice(0, 8)}...`,
+    message: `Harvest transfer fees for ${mintStr.slice(0, 8)}... (${sourceAccounts.length} source accounts)`,
   }
 }

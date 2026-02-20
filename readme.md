@@ -16,6 +16,18 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.2
+
+- **Auto-Buyback Client-Side Pre-Checks** — `buildAutoBuybackTransaction` now validates all on-chain conditions before building the transaction. Pre-checks: migration status, baseline initialization, cooldown interval, supply floor (500M), price vs baseline threshold (80%), and minimum buyback amount (0.01 SOL). Throws descriptive errors so callers know exactly why a buyback can't fire (e.g. `"Buyback cooldown: 142 slots remaining"`, `"Price is healthy — no buyback needed (current: 95.2% of baseline, threshold: 80.0%)"`). Return message now includes the actual SOL buyback amount.
+- **Harvest Fees Auto-Discovery** — `buildHarvestFeesTransaction` auto-discovers token accounts with withheld Token-2022 transfer fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. New optional `sources` field on `HarvestFeesParams` for explicit source accounts. Compute budget scales dynamically (base 200k + 20k per source account). Source accounts passed as `remainingAccounts` to the on-chain program. Graceful fallback if RPC doesn't support `getTokenLargestAccounts` (e.g. Surfpool local validators).
+- **E2E Test Coverage** — New test sections for harvest fees and auto-buyback across all three test suites (mainnet fork, devnet, tiers). Buyback tests include cooldown verification. Harvest tests validate treasury token balance changes.
+
+### v3.7.1
+
+- **`buildAutoBuybackTransaction`** — New SDK function for permissionless treasury buybacks on Raydium. Triggers when pool price drops below the treasury's ratio threshold. Buys tokens with treasury SOL and burns them.
+- **`buildHarvestFeesTransaction`** — New SDK function for permissionless Token-2022 transfer fee harvesting. Collects accumulated 1% transfer fees from token accounts into the treasury.
+- **New types** — `AutoBuybackParams`, `HarvestFeesParams` exported.
+
 ### v3.7.0
 
 - **`update_authority` Removed (V28)** — The `update_authority` admin instruction has been removed from the on-chain program. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
@@ -149,6 +161,13 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 | `buildRepayTransaction(connection, params)` | Repay SOL debt (vault-routed) |
 | `buildLiquidateTransaction(connection, params)` | Liquidate underwater position (vault-routed) |
 | `buildClaimProtocolRewardsTransaction(connection, params)` | Claim protocol trading rewards (vault-routed) |
+
+#### Treasury Cranks (Permissionless)
+
+| Function | Description |
+|----------|-------------|
+| `buildAutoBuybackTransaction(connection, params)` | Trigger treasury buyback when price < 80% of baseline. Pre-checks all conditions client-side. |
+| `buildHarvestFeesTransaction(connection, params)` | Harvest Token-2022 transfer fees into treasury. Auto-discovers source accounts or accepts explicit list. |
 
 ### SAID Protocol
 
@@ -348,9 +367,9 @@ npx tsx tests/test_e2e.ts
 
 Expected output: `RESULTS: 32 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), harvest transfer fees (auto-discovery), auto-buyback (pre-checks + cooldown verification), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
 
-A separate devnet E2E test (`tests/test_devnet_e2e.ts`) validates the full lifecycle against Solana devnet with `TORCH_NETWORK=devnet`.
+A separate devnet E2E test (`tests/test_devnet_e2e.ts`) validates the full lifecycle against Solana devnet with `TORCH_NETWORK=devnet`. A tiers test (`tests/test_tiers.ts`) validates the full lifecycle across all three graduation tiers (Spark/Flame/Torch) including harvest and buyback.
 
 ## License
 

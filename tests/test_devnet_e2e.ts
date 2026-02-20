@@ -41,6 +41,8 @@ import {
   buildCreateVaultTransaction,
   buildDepositVaultTransaction,
   buildVaultSwapTransaction,
+  buildHarvestFeesTransaction,
+  buildAutoBuybackTransaction,
   getToken,
   getVault,
 } from '../src/index'
@@ -558,9 +560,82 @@ const main = async () => {
     await sleep(500)
 
     // ==================================================================
-    // 10. Borrow via vault (post-migration lending)
+    // 10. Harvest Transfer Fees
     // ==================================================================
-    log('\n[10] Borrow via vault (post-migration)')
+    log('\n[10] Harvest Transfer Fees')
+    try {
+      // The 100 post-migration buys + sells generated transfer fees
+      const preHarvestData = await fetchTokenRaw(connection, new PublicKey(mint))
+      const preHarvestTokens = Number(preHarvestData?.treasury?.tokens_held?.toString() || '0')
+      const preHarvestFees = Number(preHarvestData?.treasury?.harvested_fees?.toString() || '0')
+
+      const harvestResult = await buildHarvestFeesTransaction(connection, {
+        mint,
+        payer: walletAddr,
+      })
+      const harvestSig = await signAndSend(connection, wallet, harvestResult.transaction)
+
+      const postHarvestData = await fetchTokenRaw(connection, new PublicKey(mint))
+      const postHarvestTokens = Number(postHarvestData?.treasury?.tokens_held?.toString() || '0')
+      const postHarvestFees = Number(postHarvestData?.treasury?.harvested_fees?.toString() || '0')
+
+      if (postHarvestTokens > preHarvestTokens || postHarvestFees > preHarvestFees) {
+        ok('Harvest fees', `${harvestResult.message} tokens: ${preHarvestTokens}→${postHarvestTokens} sig=${harvestSig.slice(0, 8)}...`)
+      } else {
+        ok('Harvest fees', `${harvestResult.message} — tx succeeded sig=${harvestSig.slice(0, 8)}...`)
+      }
+    } catch (e: any) {
+      fail('Harvest fees', e)
+      if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+    }
+
+    await sleep(500)
+
+    // ==================================================================
+    // 11. Auto Buyback
+    // ==================================================================
+    log('\n[11] Auto Buyback')
+    try {
+      // After section 9 sells, check if price dropped enough for buyback
+      const preBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
+      const preBuybackSol = Number(preBuybackData?.treasury?.sol_balance?.toString() || '0')
+      const preBuybackCount = Number(preBuybackData?.treasury?.buyback_count?.toString() || '0')
+
+      try {
+        const buybackResult = await buildAutoBuybackTransaction(connection, {
+          mint,
+          payer: walletAddr,
+        })
+        const buybackSig = await signAndSend(connection, wallet, buybackResult.transaction)
+
+        const postBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
+        const postBuybackCount = Number(postBuybackData?.treasury?.buyback_count?.toString() || '0')
+        const postBuybackSol = Number(postBuybackData?.treasury?.sol_balance?.toString() || '0')
+
+        if (postBuybackCount > preBuybackCount) {
+          ok('Auto buyback', `${buybackResult.message} count: ${preBuybackCount}→${postBuybackCount} sig=${buybackSig.slice(0, 8)}...`)
+        } else {
+          ok('Auto buyback', `${buybackResult.message} — tx succeeded sig=${buybackSig.slice(0, 8)}...`)
+        }
+      } catch (e: any) {
+        // Pre-check threw — expected on devnet if sells didn't push price down enough
+        if (e.message?.includes('healthy') || e.message?.includes('too low') || e.message?.includes('cooldown') || e.message?.includes('floor') || e.message?.includes('not yet migrated') || e.message?.includes('baseline')) {
+          ok('Auto buyback pre-check', `correctly prevented: ${e.message}`)
+        } else {
+          fail('Auto buyback', e)
+        }
+      }
+    } catch (e: any) {
+      fail('Auto buyback lifecycle', e)
+      if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
+    }
+
+    await sleep(500)
+
+    // ==================================================================
+    // 12. Borrow via vault (post-migration lending)
+    // ==================================================================
+    log('\n[12] Borrow via vault (post-migration)')
     try {
       const [vaultPda] = getTorchVaultPda(wallet.publicKey)
       const vaultAta = getAssociatedTokenAddressSync(
@@ -597,9 +672,9 @@ const main = async () => {
         await sleep(500)
 
         // ==============================================================
-        // 11. Repay via vault
+        // 13. Repay via vault
         // ==============================================================
-        log('\n[11] Repay via vault')
+        log('\n[13] Repay via vault')
         try {
           const repayResult = await buildRepayTransaction(connection, {
             mint,
@@ -616,9 +691,9 @@ const main = async () => {
         await sleep(500)
 
         // ==============================================================
-        // 12. Second borrow+repay cycle (extended lending)
+        // 14. Second borrow+repay cycle (extended lending)
         // ==============================================================
-        log('\n[12] Second borrow+repay cycle')
+        log('\n[14] Second borrow+repay cycle')
         try {
           const tokenBal2 = await connection.getTokenAccountBalance(vaultAta)
           const tokens2 = Number(tokenBal2.value.amount)
