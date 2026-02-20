@@ -2,7 +2,7 @@
     "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
     "metadata": {
         "name": "torch_market",
-        "version": "3.6.0",
+        "version": "3.7.0",
         "spec": "0.1.0",
         "description": "torch.market"
     },
@@ -1114,6 +1114,41 @@
                     }
                 },
                 {
+                    "name": "treasury_lock",
+                    "docs": [
+                        "Required account (not optional) to prevent griefing:",
+                        "- data_len > 0: V27 token (PDA initialized), revival threshold = 3BT/8",
+                        "- data_len == 0: legacy token (PDA not initialized), revival threshold = BT/8",
+                        "Passing the wrong address fails seeds check. Can't skip or fake."
+                    ],
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    116,
+                                    114,
+                                    101,
+                                    97,
+                                    115,
+                                    117,
+                                    114,
+                                    121,
+                                    95,
+                                    108,
+                                    111,
+                                    99,
+                                    107
+                                ]
+                            },
+                            {
+                                "kind": "account",
+                                "path": "mint"
+                            }
+                        ]
+                    }
+                },
+                {
                     "name": "system_program",
                     "address": "11111111111111111111111111111111"
                 }
@@ -1239,6 +1274,51 @@
                     "name": "treasury_token_account",
                     "docs": [
                         "then buyback tokens post-migration. Created via CPI."
+                    ],
+                    "writable": true
+                },
+                {
+                    "name": "treasury_lock",
+                    "docs": [
+                        "[V27] Treasury lock PDA — owns the locked token ATA (250M).",
+                        "Initialized at token creation. Also serves as type discriminator",
+                        "for V27 vs legacy tokens in revival handler."
+                    ],
+                    "writable": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    116,
+                                    114,
+                                    101,
+                                    97,
+                                    115,
+                                    117,
+                                    114,
+                                    121,
+                                    95,
+                                    108,
+                                    111,
+                                    99,
+                                    107
+                                ]
+                            },
+                            {
+                                "kind": "account",
+                                "path": "mint"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "treasury_lock_token_account",
+                    "docs": [
+                        "Created via CPI to associated token program (same pattern as token_vault",
+                        "and treasury_token_account above). Address validated by CPI: the associated",
+                        "token program derives the correct ATA from (treasury_lock PDA, mint, Token-2022)",
+                        "and rejects mismatched addresses. mint_to CPI further validates mint authority."
                     ],
                     "writable": true
                 },
@@ -4715,6 +4795,19 @@
             ]
         },
         {
+            "name": "TreasuryLock",
+            "discriminator": [
+                175,
+                131,
+                81,
+                135,
+                154,
+                50,
+                12,
+                139
+            ]
+        },
+        {
             "name": "UserPosition",
             "discriminator": [
                 251,
@@ -6162,6 +6255,41 @@
                             "Max percentage of treasury SOL that can be lent (default: 5000 = 50%)"
                         ],
                         "type": "u16"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "TreasuryLock",
+            "docs": [
+                "[V27] Treasury lock for new tokens. Owns the locked token ATA (250M).",
+                "",
+                "Every new token gets a TreasuryLock PDA that holds 25% of supply in a",
+                "community-governed reserve. The lock PDA owns a Token-2022 ATA containing",
+                "the locked tokens. No instruction can withdraw — release logic is deferred",
+                "to a future governance mechanism.",
+                "",
+                "Also serves as a type discriminator: its existence tells the revival handler",
+                "to use V27 thresholds (IVS = 3BT/8) instead of legacy V25 thresholds (IVS = BT/8).",
+                "",
+                "Seeds: [\"treasury_lock\", mint.key()]"
+            ],
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "mint",
+                        "docs": [
+                            "Token mint this lock belongs to"
+                        ],
+                        "type": "pubkey"
+                    },
+                    {
+                        "name": "bump",
+                        "docs": [
+                            "PDA bump"
+                        ],
+                        "type": "u8"
                     }
                 ]
             }

@@ -53,9 +53,9 @@ import * as os from 'os'
 const DEVNET_RPC = 'https://api.devnet.solana.com'
 const WALLET_PATH = path.join(os.homedir(), '.config/solana/id.json')
 
-// Spark tier: 50 SOL target, 0.1 SOL per buy (stays under 2% wallet cap)
+// Spark tier: 50 SOL target, 0.5 SOL per buy (stays under 2% wallet cap)
 const BONDING_TARGET = 50_000_000_000 // 50 SOL in lamports
-const BUY_AMOUNT = Math.floor(0.1 * LAMPORTS_PER_SOL)
+const BUY_AMOUNT = Math.floor(0.5 * LAMPORTS_PER_SOL)
 
 // ============================================================================
 // Helpers
@@ -196,8 +196,8 @@ const main = async () => {
   // ==================================================================
   log('\n[4] Bond to completion (50 SOL target)')
 
-  const NUM_BUYERS = 700
-  const fundPerWallet = BUY_AMOUNT + Math.floor(0.01 * LAMPORTS_PER_SOL)
+  const NUM_BUYERS = 150
+  const fundPerWallet = BUY_AMOUNT + Math.floor(0.05 * LAMPORTS_PER_SOL)
   const buyers: Keypair[] = []
   for (let i = 0; i < NUM_BUYERS; i++) buyers.push(Keypair.generate())
 
@@ -376,18 +376,21 @@ const main = async () => {
       const tr = postMigData!.treasury!
 
       const TOTAL_SUPPLY = 1_000_000_000
+      const TREASURY_LOCK = 250_000_000  // V27: 250M locked
+      const CURVE_SUPPLY = 750_000_000   // V27: 750M for curve + pool
       const tokenVaultPost = isWsolToken0 ? vault1 : vault0
       const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
       const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
       const voteVault = Number(bc.vote_vault_balance.toString()) / 1e6
       const excessBurned = Number(bc.permanently_burned_tokens.toString()) / 1e6
-      const tokensSold = TOTAL_SUPPLY - poolTokens - voteVault - excessBurned
+      const tokensSold = CURVE_SUPPLY - poolTokens - voteVault - excessBurned
       const treasurySol = Number(tr.sol_balance.toString()) / LAMPORTS_PER_SOL
       const poolSolBal = await connection.getTokenAccountBalance(isWsolToken0 ? vault0 : vault1)
       const poolSol = Number(poolSolBal.value.amount) / LAMPORTS_PER_SOL
 
-      log(`\n  ┌─── Post-Migration Distribution ──────────────────────────┐`)
+      log(`\n  ┌─── V27 Post-Migration Distribution ─────────────────────┐`)
       log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
+      log(`  │  Treasury Lock:    ${TREASURY_LOCK.toLocaleString().padStart(15)} tokens  │`)
       log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
       log(`  │  Vote Vault:       ${voteVault.toFixed(0).padStart(15)} tokens  │`)
       log(`  │  Pool Tokens:      ${poolTokens.toFixed(0).padStart(15)} tokens  │`)

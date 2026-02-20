@@ -263,12 +263,12 @@ const main = async () => {
   log('\n[8] Buy Token (via vault)')
   try {
     const vaultBefore = await getVault(connection, walletAddr)
-    // V25: 2 SOL at initial price would yield ~66M tokens (over 20M wallet cap).
-    // 0.5 SOL yields ~17M tokens — under cap and enough for borrow tests.
+    // V27: 2 SOL at initial price would yield ~20M tokens (near 2% wallet cap).
+    // 0.5 SOL yields ~5M tokens — under cap and enough for borrow tests.
     const result = await buildBuyTransaction(connection, {
       mint,
       buyer: walletAddr,
-      amount_sol: 500_000_000, // 0.5 SOL (V25: stays under 2% wallet cap)
+      amount_sol: 500_000_000, // 0.5 SOL (V27: stays under 2% wallet cap)
       slippage_bps: 500,
       // No vote — wallet already voted on direct buy above
       vault: walletAddr,
@@ -479,10 +479,10 @@ const main = async () => {
   log('\n[15] Full Lifecycle: Bond → Migrate → Borrow → Repay')
   log('  Bonding to 200 SOL using multiple wallets (2% wallet cap)...')
 
-  // V25: With IVS=25 SOL and IVT=900M, max buy at initial price ≈ 0.57 SOL
-  // before hitting the 2% wallet cap (20M tokens). Use 0.5 SOL buys with many wallets.
-  const NUM_BUYERS = 500
-  const BUY_AMOUNT = Math.floor(0.5 * LAMPORTS_PER_SOL) // 0.5 SOL per buy
+  // V27: With IVS=75 SOL and IVT=756.25M, max buy at initial price ≈ 2 SOL
+  // before hitting the 2% wallet cap (20M tokens). Use 1.5 SOL buys for faster bonding.
+  const NUM_BUYERS = 200
+  const BUY_AMOUNT = Math.floor(1.5 * LAMPORTS_PER_SOL) // 1.5 SOL per buy
   const buyers: Keypair[] = []
   for (let i = 0; i < NUM_BUYERS; i++) buyers.push(Keypair.generate())
 
@@ -594,39 +594,42 @@ const main = async () => {
       const vault0 = raydium.token0Vault
       const vault1 = raydium.token1Vault
 
-      // V25: Post-migration token distribution breakdown
+      // V27: Post-migration token distribution breakdown
       try {
         const postMigData = await fetchTokenRaw(connection, mintPk)
         const bc = postMigData!.bondingCurve
         const tr = postMigData!.treasury!
 
         const TOTAL_SUPPLY = 1_000_000_000 // 1B tokens (display units)
+        const TREASURY_LOCK = 250_000_000  // 250M locked in treasury lock PDA
+        const CURVE_SUPPLY = 750_000_000   // 750M for curve + pool
         const tokenVaultPost = isWsolToken0 ? vault1 : vault0
         const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
         const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
         const voteVault = Number(bc.vote_vault_balance.toString()) / 1e6
         const excessBurned = Number(bc.permanently_burned_tokens.toString()) / 1e6
-        const tokensSold = TOTAL_SUPPLY - poolTokens - voteVault - excessBurned
+        const tokensSold = CURVE_SUPPLY - poolTokens - voteVault - excessBurned
         const treasurySol = Number(tr.sol_balance.toString()) / LAMPORTS_PER_SOL
         const poolSolBal2 = await connection.getTokenAccountBalance(isWsolToken0 ? vault0 : vault1)
         const poolSol2 = Number(poolSolBal2.value.amount) / LAMPORTS_PER_SOL
         const baselineSol = Number(tr.baseline_sol_reserves.toString()) / LAMPORTS_PER_SOL
         const baselineTokens = Number(tr.baseline_token_reserves.toString()) / 1e6
 
-        // Determine initial virtual reserves for this token's tier
+        // V27: Determine initial virtual reserves for this token's tier
         const bondingTarget = Number(bc.bonding_target.toString())
         let ivs = 30 // legacy default
         let ivt = 107_300_000 // legacy default
-        if (bondingTarget === 50_000_000_000) { ivs = 6.25; ivt = 900_000_000 }
-        else if (bondingTarget === 100_000_000_000) { ivs = 12.5; ivt = 900_000_000 }
-        else if (bondingTarget === 200_000_000_000) { ivs = 25; ivt = 900_000_000 }
+        if (bondingTarget === 50_000_000_000) { ivs = 18.75; ivt = 756_250_000 }
+        else if (bondingTarget === 100_000_000_000) { ivs = 37.5; ivt = 756_250_000 }
+        else if (bondingTarget === 200_000_000_000) { ivs = 75; ivt = 756_250_000 }
 
         const entryPrice = ivs / ivt
         const exitPrice = poolSol2 / poolTokens
         const multiplier = exitPrice / entryPrice
 
-        log(`\n  ┌─── Post-Migration Token Distribution ────────────────────┐`)
+        log(`\n  ┌─── V27 Post-Migration Token Distribution ─────────────────┐`)
         log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
+        log(`  │  Treasury Lock:    ${TREASURY_LOCK.toLocaleString().padStart(15)} tokens  │`)
         log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
         log(`  │  Vote Vault:       ${voteVault.toFixed(0).padStart(15)} tokens  │`)
         log(`  │  Pool Tokens:      ${poolTokens.toFixed(0).padStart(15)} tokens  │`)
@@ -640,8 +643,8 @@ const main = async () => {
         log(`  │  Entry Price:      ${entryPrice.toExponential(4).padStart(15)} SOL/tok │`)
         log(`  │  Exit Price:       ${exitPrice.toExponential(4).padStart(15)} SOL/tok │`)
         log(`  │  Multiplier:       ${multiplier.toFixed(1).padStart(15)}x        │`)
-        log(`  │  Sold %:           ${((tokensSold / TOTAL_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
-        log(`  │  Excess Burn %:    ${((excessBurned / TOTAL_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
+        log(`  │  Sold %:           ${((tokensSold / CURVE_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
+        log(`  │  Excess Burn %:    ${((excessBurned / CURVE_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
         log(`  └────────────────────────────────────────────────────────────┘`)
       } catch { /* non-critical */ }
 
@@ -997,7 +1000,7 @@ const main = async () => {
         ok('advance protocol epoch (prime)', 'epoch advanced')
 
         // Step 2: Generate >= 10 SOL volume via bonding curve buys
-        // V25: 3 SOL on a fresh token would yield ~96M tokens (over 20M wallet cap).
+        // V27: 3 SOL on a fresh token would yield ~30M tokens (over 20M wallet cap).
         // Use 0.5 SOL per buy across 20 tokens (10 SOL total) to stay under cap.
         const volNames = Array.from({ length: 20 }, (_, i) => `Vol ${String.fromCharCode(65 + i)}`)
         for (const vname of volNames) {

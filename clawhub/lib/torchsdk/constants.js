@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TOKEN_MULTIPLIER = exports.LAMPORTS_PER_SOL = exports.BLACKLISTED_MINTS = exports.TOKEN_DECIMALS = exports.TOTAL_SUPPLY = exports.VAULT_WALLET_LINK_SEED = exports.TORCH_VAULT_SEED = exports.COLLATERAL_VAULT_SEED = exports.LOAN_SEED = exports.STAR_RECORD_SEED = exports.USER_STATS_SEED = exports.PROTOCOL_TREASURY_SEED = exports.VOTE_SEED = exports.USER_POSITION_SEED = exports.TREASURY_SEED = exports.BONDING_CURVE_SEED = exports.GLOBAL_CONFIG_SEED = exports.TOKEN_2022_PROGRAM_ID = exports.MEMO_PROGRAM_ID = exports.RAYDIUM_FEE_RECEIVER = exports.getRaydiumFeeReceiver = exports.RAYDIUM_AMM_CONFIG = exports.getRaydiumAmmConfig = exports.WSOL_MINT = exports.RAYDIUM_CPMM_PROGRAM = exports.getRaydiumCpmmProgram = exports.PROGRAM_ID = void 0;
+exports.TOKEN_MULTIPLIER = exports.LAMPORTS_PER_SOL = exports.BLACKLISTED_MINTS = exports.TOKEN_DECIMALS = exports.TOTAL_SUPPLY = exports.TREASURY_LOCK_SEED = exports.VAULT_WALLET_LINK_SEED = exports.TORCH_VAULT_SEED = exports.COLLATERAL_VAULT_SEED = exports.LOAN_SEED = exports.STAR_RECORD_SEED = exports.USER_STATS_SEED = exports.PROTOCOL_TREASURY_SEED = exports.VOTE_SEED = exports.USER_POSITION_SEED = exports.TREASURY_SEED = exports.BONDING_CURVE_SEED = exports.GLOBAL_CONFIG_SEED = exports.TOKEN_2022_PROGRAM_ID = exports.MEMO_PROGRAM_ID = exports.RAYDIUM_FEE_RECEIVER = exports.getRaydiumFeeReceiver = exports.RAYDIUM_AMM_CONFIG = exports.getRaydiumAmmConfig = exports.WSOL_MINT = exports.RAYDIUM_CPMM_PROGRAM = exports.getRaydiumCpmmProgram = exports.PROGRAM_ID = void 0;
 const web3_js_1 = require("@solana/web3.js");
 // Program ID - Mainnet/Devnet (deployed program)
 exports.PROGRAM_ID = new web3_js_1.PublicKey('8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT');
@@ -50,6 +50,7 @@ exports.LOAN_SEED = 'loan';
 exports.COLLATERAL_VAULT_SEED = 'collateral_vault';
 exports.TORCH_VAULT_SEED = 'torch_vault'; // V2.0: Vault PDA
 exports.VAULT_WALLET_LINK_SEED = 'vault_wallet'; // V2.0: Wallet link PDA
+exports.TREASURY_LOCK_SEED = 'treasury_lock'; // V27: Treasury lock PDA
 // Token constants (must match the Rust program)
 exports.TOTAL_SUPPLY = BigInt('1000000000000000'); // 1B with 6 decimals
 exports.TOKEN_DECIMALS = 6;

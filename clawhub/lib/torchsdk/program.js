@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRaydiumMigrationAccounts = exports.getRaydiumObservationPda = exports.getRaydiumVaultPda = exports.getRaydiumLpMintPda = exports.getRaydiumPoolStatePda = exports.getRaydiumAuthorityPda = exports.orderTokensForRaydium = exports.calculateBondingProgress = exports.calculatePrice = exports.calculateSolOut = exports.calculateTokensOut = exports.getProgram = exports.getVaultWalletLinkPda = exports.getTorchVaultPda = exports.getCollateralVaultPda = exports.getLoanPositionPda = exports.getStarRecordPda = exports.getUserStatsPda = exports.getProtocolTreasuryPda = exports.getTokenTreasuryPda = exports.getVoteRecordPda = exports.getUserPositionPda = exports.getTreasuryTokenAccount = exports.getBondingCurvePda = exports.getGlobalConfigPda = exports.decodeString = exports.PROGRAM_ID = void 0;
+exports.getRaydiumMigrationAccounts = exports.getRaydiumObservationPda = exports.getRaydiumVaultPda = exports.getRaydiumLpMintPda = exports.getRaydiumPoolStatePda = exports.getRaydiumAuthorityPda = exports.orderTokensForRaydium = exports.calculateBondingProgress = exports.calculatePrice = exports.calculateSolOut = exports.calculateTokensOut = exports.getProgram = exports.getTreasuryLockTokenAccount = exports.getTreasuryLockPda = exports.getVaultWalletLinkPda = exports.getTorchVaultPda = exports.getCollateralVaultPda = exports.getLoanPositionPda = exports.getStarRecordPda = exports.getUserStatsPda = exports.getProtocolTreasuryPda = exports.getTokenTreasuryPda = exports.getVoteRecordPda = exports.getUserPositionPda = exports.getTreasuryTokenAccount = exports.getBondingCurvePda = exports.getGlobalConfigPda = exports.decodeString = exports.PROGRAM_ID = void 0;
 const anchor_1 = require("@coral-xyz/anchor");
 const web3_js_1 = require("@solana/web3.js");
 const constants_1 = require("./constants");
@@ -77,6 +77,17 @@ const getVaultWalletLinkPda = (wallet) => {
     return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from(constants_1.VAULT_WALLET_LINK_SEED), wallet.toBuffer()], constants_1.PROGRAM_ID);
 };
 exports.getVaultWalletLinkPda = getVaultWalletLinkPda;
+// V27: Treasury Lock PDA (per mint)
+const getTreasuryLockPda = (mint) => {
+    return web3_js_1.PublicKey.findProgramAddressSync([Buffer.from(constants_1.TREASURY_LOCK_SEED), mint.toBuffer()], constants_1.PROGRAM_ID);
+};
+exports.getTreasuryLockPda = getTreasuryLockPda;
+// V27: Treasury Lock's Token-2022 ATA
+const getTreasuryLockTokenAccount = (mint, treasuryLock) => {
+    return (0, spl_token_1.getAssociatedTokenAddressSync)(mint, treasuryLock, true, // allowOwnerOffCurve (PDA)
+    constants_1.TOKEN_2022_PROGRAM_ID);
+};
+exports.getTreasuryLockTokenAccount = getTreasuryLockTokenAccount;
 // Get program instance
 const getProgram = (provider) => {
     return new anchor_1.Program(torch_market_json_1.default, provider);

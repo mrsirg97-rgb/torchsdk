@@ -300,6 +300,9 @@ const buildCreateTokenTransaction = async (connection, params) => {
     const [treasury] = (0, program_1.getTokenTreasuryPda)(mint.publicKey);
     const bondingCurveTokenAccount = (0, spl_token_1.getAssociatedTokenAddressSync)(mint.publicKey, bondingCurve, true, spl_token_1.TOKEN_2022_PROGRAM_ID);
     const treasuryTokenAccount = (0, program_1.getTreasuryTokenAccount)(mint.publicKey, treasury);
+    // [V27] Treasury lock PDA and its token ATA
+    const [treasuryLock] = (0, program_1.getTreasuryLockPda)(mint.publicKey);
+    const treasuryLockTokenAccount = (0, program_1.getTreasuryLockTokenAccount)(mint.publicKey, treasuryLock);
     const tx = new web3_js_1.Transaction();
     const provider = makeDummyProvider(connection, creator);
     const program = new anchor_1.Program(torch_market_json_1.default, provider);
@@ -313,6 +316,8 @@ const buildCreateTokenTransaction = async (connection, params) => {
         tokenVault: bondingCurveTokenAccount,
         treasury,
         treasuryTokenAccount,
+        treasuryLock,
+        treasuryLockTokenAccount,
         token2022Program: spl_token_1.TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: web3_js_1.SystemProgram.programId,

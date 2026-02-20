@@ -33,16 +33,16 @@ const DEVNET_RPC = 'https://api.devnet.solana.com'
 const WALLET_PATH = path.join(os.homedir(), '.config/solana/id.json')
 const EXPECTED_WALLET = 'HLgJzzDmzhjZaspP1MgQJGyrV1tpKuYqXwCrnRRpTaYf'
 
-// V25 max buy per wallet at initial price by tier (stays under 2% wallet cap)
-// Spark: IVS=6.25 SOL, max ~0.14 SOL → use 0.1 SOL
-// Flame: IVS=12.5 SOL, max ~0.28 SOL → use 0.25 SOL
-// Torch: IVS=25 SOL, max ~0.57 SOL → use 0.5 SOL
+// V27 max buy per wallet at initial price by tier (stays under 2% wallet cap)
+// Spark: IVS=18.75 SOL, max ~0.5 SOL → use 0.4 SOL
+// Flame: IVS=37.5 SOL, max ~1.0 SOL → use 0.8 SOL
+// Torch: IVS=75 SOL, max ~2.0 SOL → use 1.5 SOL
 const TIER_CONFIG: Record<string, { buyLamports: number; label: string }> = {
-  '50000000000':  { buyLamports: Math.floor(0.1 * LAMPORTS_PER_SOL),  label: 'Spark (50 SOL)' },
-  '100000000000': { buyLamports: Math.floor(0.25 * LAMPORTS_PER_SOL), label: 'Flame (100 SOL)' },
-  '200000000000': { buyLamports: Math.floor(0.5 * LAMPORTS_PER_SOL),  label: 'Torch (200 SOL)' },
+  '50000000000':  { buyLamports: Math.floor(0.4 * LAMPORTS_PER_SOL),  label: 'Spark (50 SOL)' },
+  '100000000000': { buyLamports: Math.floor(0.8 * LAMPORTS_PER_SOL),  label: 'Flame (100 SOL)' },
+  '200000000000': { buyLamports: Math.floor(1.5 * LAMPORTS_PER_SOL),  label: 'Torch (200 SOL)' },
 }
-// Legacy (pre-V25) or unknown targets
+// Legacy (pre-V27) or unknown targets
 const DEFAULT_TIER = { buyLamports: Math.floor(0.5 * LAMPORTS_PER_SOL), label: 'Legacy/Unknown' }
 
 // ============================================================================

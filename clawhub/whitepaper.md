@@ -294,7 +294,8 @@ The reclaimed SOL joins the protocol treasury and is distributed to active trade
 A reclaimed token can be **revived** if the community believes in it. Anyone can contribute SOL to a reclaimed token:
 
 ```
-Revival threshold: IVS (6.25 SOL Spark, 12.5 SOL Flame, 25 SOL Torch)
+Revival threshold (V27): 3BT/8 (18.75 SOL Spark, 37.5 SOL Flame, 75 SOL Torch)
+Legacy tokens: BT/8 (6.25 SOL Spark, 12.5 SOL Flame, 25 SOL Torch)
 ```
 
 Contributors are patrons — they do NOT receive tokens for their contribution. They're simply signaling belief that the token deserves another chance. Once the revival threshold is reached:
@@ -395,6 +396,218 @@ The plugin wraps the SDK with typed actions (buy, sell, create, vote, lend, mess
 
 ---
 
+## 12. Protocol Architecture
+
+The on-chain program is a directed graph of economic relationships. PDA seeds define the edges, handlers define the legal traversals. The topology enforces correctness — relationships between accounts are guaranteed by the Solana runtime, not by application logic.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                          TORCH MARKET PROTOCOL v3.7.0                                │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
+│  │                           PROTOCOL LAYER                                     │    │
+│  │  ┌─────────────────┐  ┌──────────────────────────────────────┐              │    │
+│  │  │  GlobalConfig   │  │        ProtocolTreasury               │              │    │
+│  │  │  (authority,    │  │  (1% fees + reclaimed SOL,            │              │    │
+│  │  │   settings)     │  │   1500 SOL floor, epoch rewards)      │              │    │
+│  │  └─────────────────┘  └──────────────────────────────────────┘              │    │
+│  └─────────────────────────────────────────────────────────────────────────────┘    │
+│                                       │                                              │
+│                                       ▼                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
+│  │                           PER-TOKEN LAYER                                    │    │
+│  │                                                                              │    │
+│  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │    │
+│  │  │    Token     │    │   Bonding    │    │   Treasury   │                   │    │
+│  │  │   (Mint)     │───▶│    Curve     │───▶│  (buybacks,  │                   │    │
+│  │  │  Token-2022  │    │  (pricing,   │    │   stars,     │                   │    │
+│  │  │  1% xfer fee │    │   voting)    │    │   lending)   │                   │    │
+│  │  └──────────────┘    └──────┬───────┘    └──────────────┘                   │    │
+│  │                             │                                                │    │
+│  │         ┌───────────────────┼───────────────────┐                           │    │
+│  │         ▼                   ▼                   ▼                           │    │
+│  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │    │
+│  │  │  Token Vault │    │  Treasury's  │    │  Raydium     │                   │    │
+│  │  │  (tradeable  │    │  Token Acct  │    │  CPMM Pool   │                   │    │
+│  │  │   supply)    │    │  (vote vault)│    │  (post-grad) │                   │    │
+│  │  └──────────────┘    └──────────────┘    └──────────────┘                   │    │
+│  └─────────────────────────────────────────────────────────────────────────────┘    │
+│                                       │                                              │
+│                                       ▼                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
+│  │                            USER LAYER                                        │    │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │    │
+│  │  │  UserPosition   │  │   UserStats     │  │   StarRecord    │              │    │
+│  │  │  (per-token     │  │  (platform-wide │  │  (per-token     │              │    │
+│  │  │   holdings,     │  │   volume,       │  │   appreciation) │              │    │
+│  │  │   vote)         │  │   rewards)      │  │                 │              │    │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘              │    │
+│  └─────────────────────────────────────────────────────────────────────────────┘    │
+│                                       │                                              │
+│                                       ▼                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
+│  │                    VAULT LAYER (V3.1.0 — Full Custody)                       │    │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │    │
+│  │  │   TorchVault    │  │VaultWalletLink  │  │  Vault ATAs     │              │    │
+│  │  │  (per-creator   │◀─│  (per-wallet    │  │  (per-mint      │              │    │
+│  │  │   SOL + token   │  │   reverse       │  │   token accts   │              │    │
+│  │  │   full custody) │  │   pointer)      │  │   owned by PDA) │              │    │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘              │    │
+│  └─────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                      │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│  INSTRUCTION HANDLERS (27 total)                                                     │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐      │
+│  │ admin  │ │ token  │ │ market │ │treasury│ │ dex    │ │rewards │ │reclaim │      │
+│  │        │ │        │ │        │ │/lending│ │migrate │ │        │ │/revival│      │
+│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘      │
+│  ┌────────┐ ┌────────┐                                                               │
+│  │ vault  │ │  swap  │                                                               │
+│  │        │ │(V3.1.1)│                                                               │
+│  └────────┘ └────────┘                                                               │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### On-Chain Account Types
+
+The protocol uses 12 on-chain account types, all deterministic PDAs:
+
+| Account | PDA Seeds | Purpose |
+|---------|-----------|---------|
+| **GlobalConfig** | `["global_config"]` | Protocol-wide settings (authority, fees, pause flag) |
+| **BondingCurve** | `["bonding_curve", mint]` | Per-token pricing state, reserves, votes, bonding target |
+| **Treasury** | `["treasury", mint]` | Per-token treasury (SOL for buybacks, star balance, lending pool) |
+| **TreasuryLock** | `["treasury_lock", mint]` | [V27] Holds 250M locked tokens (25% of supply) |
+| **UserPosition** | `["user_position", bc, user]` | Per-user per-token holdings and vote |
+| **UserStats** | `["user_stats", user]` | Platform-wide volume and reward tracking |
+| **ProtocolTreasury** | `["protocol_treasury_v11"]` | Single treasury: fees + reclaims, 1500 SOL floor, epoch rewards |
+| **StarRecord** | `["star_record", user, mint]` | Prevents double-starring |
+| **LoanPosition** | `["loan", mint, user]` | Per-user per-token lending position |
+| **TorchVault** | `["torch_vault", creator]` | Per-creator full-custody SOL + token escrow |
+| **VaultWalletLink** | `["vault_wallet", wallet]` | Reverse pointer: wallet → vault (one link per wallet) |
+
+### Instruction Set
+
+The V3.7.0 program exposes 27 instructions across 9 handler domains:
+
+| Domain | Instructions |
+|--------|-------------|
+| **Admin** | `initialize`, `initialize_protocol_treasury`, `update_dev_wallet` |
+| **Token** | `create_token` |
+| **Market** | `buy`, `sell` |
+| **Treasury** | `harvest_fees` |
+| **Migration** | `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback` |
+| **Rewards** | `advance_protocol_epoch`, `claim_protocol_rewards`, `star_token` |
+| **Reclaim/Revival** | `reclaim_failed_token`, `contribute_revival` |
+| **Vault** | `create_vault`, `deposit_vault`, `withdraw_vault`, `link_wallet`, `unlink_wallet`, `transfer_authority`, `withdraw_tokens` |
+| **Swap** | `fund_vault_wsol`, `vault_swap` |
+| **Lending** | `borrow`, `repay`, `liquidate` |
+
+> **Note (V3.7.0):** `update_authority` was removed. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
+
+### Bonding Curve Formula
+
+The protocol uses a constant product bonding curve:
+
+```
+Buy:   tokens_out = (virtual_token_reserves × sol_in) / (virtual_sol_reserves + sol_in)
+Sell:  sol_out    = (virtual_sol_reserves × token_in) / (virtual_token_reserves + token_in)
+Price: price      = virtual_sol_reserves / virtual_token_reserves
+```
+
+**Tiered Virtual Reserves (V27):** Each tier has per-tier initial virtual reserves tuned for a consistent ~13.44x multiplier:
+
+| Tier | Target | IVS (3BT/8) | IVT | Curve Supply | Treasury Lock |
+|------|--------|-------------|-----|-------------|---------------|
+| **Spark** | 50 SOL | 18.75 SOL | 756.25M | 750M (75%) | 250M (25%) |
+| **Flame** | 100 SOL | 37.5 SOL | 756.25M | 750M (75%) | 250M (25%) |
+| **Torch** | 200 SOL | 75 SOL | 756.25M | 750M (75%) | 250M (25%) |
+
+### Fee Flow
+
+```
+                              BUYER'S SOL
+                                  │
+                                  ▼
+               ┌──────────────────────────────────────┐
+               │           TOTAL SOL INPUT            │
+               └──────────────────────────────────────┘
+                                  │
+           ┌──────────────────────┼──────────────────────┐
+           │                      │                      │
+           ▼                      ▼                      ▼
+    ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+    │  1% Protocol│       │ 1% Treasury │       │    98%      │
+    │    Fee      │       │    Fee      │       │  Remaining  │
+    └──────┬──────┘       └──────┬──────┘       └──────┬──────┘
+           │                     │                     │
+      ┌────┴────┐                │              ┌──────┴──────┐
+      │         │                │              │             │
+      ▼         ▼                ▼              ▼             ▼
+┌─────────┐ ┌─────────┐   ┌──────────┐   ┌───────────┐ ┌───────────┐
+│Protocol │ │  Dev    │   │  Token   │   │  Token   │ │  Bonding  │
+│Treasury │ │ Wallet  │   │ Treasury │   │ Treasury │ │   Curve   │
+│  (75%)  │ │  (25%)  │   │  (100%)  │   │(20%→5%)  │ │(80%→95%)  │
+└─────────┘ └─────────┘   └────┬─────┘   └───────────┘ └─────┬─────┘
+                               │                             │
+                               │                              ▼
+                               │                        ┌─────────────┐
+                               │                        │   TOKENS    │
+                               │                        │    OUT      │
+                               │                        └──────┬──────┘
+                               │                               │
+                               │                      ┌────────┴────────┐
+                               │                      │                 │
+                               ▼                      ▼                 ▼
+                        ┌─────────────┐        ┌─────────────┐   ┌───────────┐
+                        │  BUYBACKS   │        │   BUYER     │   │ COMMUNITY │
+                        │  (on dips)  │        │   (90%)     │   │ TREASURY  │
+                        └─────────────┘        └─────────────┘   │   (10%)   │
+                                                                 └─────┬─────┘
+                                                                       │
+                                                           ┌───────────┴───────────┐
+                                                           │      AT MIGRATION     │
+                                                           │    (based on vote)    │
+                                                           ├───────────────────────┤
+                                                           │ BURN → destroy tokens │
+                                                           │ RETURN → add to LP    │
+                                                           └───────────────────────┘
+```
+
+### Security Model
+
+**Access Control:**
+- **Authority-only:** `initialize`, `update_dev_wallet`
+- **Vault authority-only:** `withdraw_vault`, `link_wallet`, `unlink_wallet`, `transfer_authority`, `withdraw_tokens`
+- **Permissionless cranks:** `advance_protocol_epoch`, `harvest_fees`, `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback`, `reclaim_failed_token`, `liquidate`
+- **Permissionless deposits:** Anyone can deposit into any vault
+
+**Vault Security (V3.1.0 — Full Custody):**
+- One vault per creator (PDA uniqueness)
+- One link per wallet (PDA uniqueness)
+- Authority separation: `creator` (immutable seed) vs `authority` (transferable admin)
+- All value stays in vault — agent wallet never holds tokens or significant SOL
+- CPI ordering enforced: token CPIs before lamport manipulation in all vault paths
+- Compromised key safety: attacker gets dust, authority unlinks and re-links
+
+**Raydium Pool Validation (V27 — PDA-Based):**
+Pool accounts validated via PDA derivation constraints in Anchor contexts (`derive_pool_state`, `derive_pool_vault`, `derive_observation_state`). AMM config hardcoded to prevent fee-tier substitution. Oracle manipulation impossible — an attacker cannot derive a valid PDA pointing to a fake pool.
+
+### Formal Verification
+
+Core arithmetic is formally verified with [Kani](https://model-checking.github.io/kani/) — 36 proof harnesses, all passing, covering every possible input in constrained ranges. Proofs cover: fee calculations, bonding curve pricing, lending formulas (borrow/repay/liquidate lifecycle), reward distribution, auto-buyback, migration conservation, and V25/V27 token distribution. No SOL can be created from nothing, no tokens can be minted from thin air, and no fees can exceed their stated rates. See [VERIFICATION.md](https://torch.market/verification.md).
+
+### Security Audit History
+
+**V3.2.1 — `harvest_fees` Unconstrained Destination (CRITICAL, Fixed)**
+The `harvest_fees` instruction did not validate that `treasury_token_account` matched the treasury PDA's ATA. An attacker could substitute their own Token-2022 ATA and steal all accumulated transfer fees. Fixed with Anchor `associated_token` constraints. Independent auditor verified.
+
+**V3.2.1 — Oracle Manipulation via Unconstrained Raydium Pool (Non-Issue)**
+Pool accounts were reported as unconstrained. Assessment: `validate_pool_accounts()` already validates pool ownership, vault addresses, and mint composition. V27 further hardens this with PDA-based derivation constraints.
+
+---
+
 ## Token Lifecycle
 
 ```
@@ -442,7 +655,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Transfer Fee | 1% | Post-migration fee on all transfers |
 | Supply Floor | 500,000,000 | Minimum supply (buyback burns stop here) |
 | Inactivity Period | 7 days | Time before failed token can be reclaimed |
-| Revival Threshold | IVS per tier (6.25 / 12.5 / 25 SOL) | SOL needed to revive a reclaimed token |
+| Revival Threshold (V27) | 3BT/8 per tier (18.75 / 37.5 / 75 SOL) | SOL needed to revive a reclaimed token |
 | Voting Duration | ~24 hours | Time for community to vote on burn/return |
 | Epoch Duration | 7 days | Protocol reward distribution cycle |
 | Reward Eligibility | 10 SOL | Minimum epoch volume for protocol rewards |
@@ -453,6 +666,36 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Liquidation Bonus | 10% | Discount for liquidators on seized collateral |
 | Utilization Cap | 50% | Max fraction of treasury SOL available for loans |
 | Min Borrow | 0.1 SOL | Minimum borrow amount per loan |
+
+---
+
+## Version History
+
+| Version | Features |
+|---------|----------|
+| V1 | Basic bonding curve, buy/sell |
+| V2 | Treasury, buybacks, permanent burn split |
+| V3 | Token-2022 with transfer fees |
+| V4 | Failed token reclaim, platform rewards |
+| V5 | Raydium DEX migration |
+| V8 | Dev wallet split (25% of treasury fee) |
+| V9 | Auto-buyback on DEX price dips |
+| V10 | Simplified star system with auto-payout |
+| V11 | Protocol treasury with 1500 SOL reserve floor |
+| V12 | Token revival |
+| V2.2 | 10% tokens to community treasury, 90% to buyer |
+| V2.3 | Dynamic treasury SOL rate: 20%→5% decay |
+| V2.4 | Treasury lending: borrow SOL against token collateral |
+| V3.0.0 | **Torch Vault — Multi-Wallet Identity.** Per-creator SOL escrow with multi-wallet support. 6 new vault instructions. |
+| V3.1.0 | **Vault Full Custody.** Buy, sell, star, borrow, repay all vault-routed. New `withdraw_tokens` (authority-only). |
+| V3.1.1 | **Vault DEX Swap.** `fund_vault_wsol` + `vault_swap` for Raydium trading via vault. |
+| V3.2.0 | **Platform treasury merged into protocol treasury.** Single reward system. |
+| V3.2.1 | **Security: `harvest_fees` hardened.** Critical vulnerability fixed, auditor verified. |
+| V3.3.0 | **Tiered Bonding Curves.** Spark (50 SOL), Flame (100 SOL), Torch (200 SOL). |
+| V3.5.0 | **V25 Pump-Style Token Distribution.** IVS = BT/8, IVT = 900M tokens, ~81x multiplier. 35 Kani proofs. |
+| V3.6.0 | **V26 Permissionless Migration + Authority Revocation.** Mint and freeze authority revoked permanently at migration. |
+| V3.6.x | **V27 Treasury Lock + PDA Pool Validation.** 250M tokens locked at creation. IVS = 3BT/8, 13.44x multiplier. |
+| V3.7.0 | **V28 `update_authority` Removed.** Authority transfer via multisig tooling. 27 instructions. Minimal admin surface. |
 
 ---
 

@@ -36,6 +36,8 @@ import {
   getCollateralVaultPda,
   getTorchVaultPda,
   getVaultWalletLinkPda,
+  getTreasuryLockPda,
+  getTreasuryLockTokenAccount,
   getRaydiumMigrationAccounts,
   calculateTokensOut,
   calculateSolOut,
@@ -467,6 +469,9 @@ export const buildCreateTokenTransaction = async (
     TOKEN_2022_PROGRAM_ID,
   )
   const treasuryTokenAccount = getTreasuryTokenAccount(mint.publicKey, treasury)
+  // [V27] Treasury lock PDA and its token ATA
+  const [treasuryLock] = getTreasuryLockPda(mint.publicKey)
+  const treasuryLockTokenAccount = getTreasuryLockTokenAccount(mint.publicKey, treasuryLock)
 
   const tx = new Transaction()
 
@@ -483,6 +488,8 @@ export const buildCreateTokenTransaction = async (
       tokenVault: bondingCurveTokenAccount,
       treasury,
       treasuryTokenAccount,
+      treasuryLock,
+      treasuryLockTokenAccount,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,

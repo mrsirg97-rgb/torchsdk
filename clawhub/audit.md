@@ -1,9 +1,9 @@
 # Torch SDK Security Audit
 
-**Audit Date:** February 19, 2026
+**Audit Date:** February 20, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.6.8
-**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.6.0)
+**SDK Version:** 3.7.0
+**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.7.0)
 **Language:** TypeScript
 **Test Result:** 32 passed, 0 failed (Surfpool mainnet fork + devnet E2E)
 
@@ -28,7 +28,7 @@
 
 ## Executive Summary
 
-This audit covers the Torch SDK v3.6.8, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.6.0) to verify PDA derivation, quote math, vault integration, migration flow, lending accounting, and account handling. v3.6.8 includes V25 pump-style reserves, V26 permissionless migration, V27 pool account validation, V28 authority transfer, a critical lending accounting fix, and dynamic network detection.
+This audit covers the Torch SDK v3.7.0, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.7.0) to verify PDA derivation, quote math, vault integration, migration flow, lending accounting, and account handling. v3.7.0 includes V25 pump-style reserves, V26 permissionless migration, V27 treasury lock and PDA-based pool validation, removal of `update_authority` (V28), a critical lending accounting fix, and dynamic network detection.
 
 The SDK is **stateless** (no global state, no connection pools), **non-custodial** (never touches private keys — all transactions are returned unsigned), and **RPC-first** (all data from Solana, no proprietary API for core operations).
 
@@ -71,7 +71,7 @@ The SDK is **stateless** (no global state, no connection pools), **non-custodial
 | `src/quotes.ts` | 102 | Buy/sell quote calculations |
 | `src/said.ts` | 111 | SAID Protocol integration |
 | `src/gateway.ts` | 49 | Irys metadata fetch with fallback + timeout |
-| `src/torch_market.json` | — | Anchor IDL (V3.6.0, 35 instructions) |
+| `src/torch_market.json` | — | Anchor IDL (V3.7.0, 27 instructions) |
 | **Total** | **~3,100** | |
 
 ### On-Chain Cross-Reference
@@ -413,7 +413,7 @@ All transactions call `finalizeTransaction()` which fetches `getLatestBlockhash(
 
 ## Conclusion
 
-The Torch SDK v3.6.8 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.6.0 program. Key findings:
+The Torch SDK v3.7.0 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.7.0 program. Key findings:
 
 1. **PDA derivation is correct** — all 11 Torch PDAs and 5 Raydium PDAs match the on-chain seeds exactly.
 2. **Quote math is correct** — BigInt arithmetic matches the on-chain Rust `checked_mul`/`checked_div` behavior, including the dynamic treasury rate, 90/10 token split, and constant product formula.
@@ -427,12 +427,13 @@ The Torch SDK v3.6.8 is a well-structured, minimal-surface TypeScript library th
 10. **V3.5.1 pump-style distribution (V25)** — New virtual reserve model: IVS = bonding_target/8, IVT = 900M tokens, ~81x multiplier. Reverted V24 per-tier fees to flat 20%→5% all tiers. 35 Kani proof harnesses (up from 26), including V25 supply conservation.
 11. **V3.6.0 permissionless migration (V26)** — Two-step migration: `fundMigrationWsol` + `migrateToDex` in one transaction. New `buildMigrateTransaction` correctly derives all Raydium CPMM PDAs, passes treasury as WSOL funder, payer covers rent. Tested on devnet E2E.
 12. **V3.6.0 pool validation (V27)** — AMM config constrained to known constant, pool state ownership verified against Raydium CPMM program ID. Closes account substitution vector for vault swap operations.
-13. **V3.6.0 update authority (V28)** — New `update_authority` admin instruction. Authority-only, immediate transfer. No timelock (noted, acceptable — authority scope limited to pause/unpause and dev wallet).
+13. **V3.7.0 update authority removed (V28)** — The `update_authority` admin instruction was added in V3.6.0 (V28) and subsequently **removed** in V3.7.0. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
 14. **Lending `sol_balance` fix** — Treasury `sol_balance` now correctly decremented on borrow and incremented on repay/liquidation. Critical accounting bug resolved.
 15. **Lending utilization cap** — `getLendingInfo` now returns `(sol_balance * 50%) - total_sol_lent` as `treasury_sol_available`, matching on-chain enforcement. Previously returned raw `sol_balance`.
 16. **Live Raydium pool price** — `getToken()` fetches pool vault balances for migrated tokens, reporting live price instead of frozen bonding curve virtual reserves.
 17. **Dynamic network detection** — `isDevnet()` checks `globalThis.__TORCH_NETWORK__` first (browser runtime), then `process.env.TORCH_NETWORK`. Raydium addresses switch automatically. Deprecated static constants preserved for backward compatibility.
 18. **Pre-migration buyback removed** — Simplified protocol: only post-migration DEX buyback remains. `buyback()` handler, context, and Kani proof removed.
+19. **V3.7.0 treasury lock (V27)** — 250M tokens (25%) locked in TreasuryLock PDA at creation; 750M (75%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier across all tiers. PDA-based Raydium pool validation replaces runtime validation. 36 Kani proof harnesses, all passing.
 
 The SDK is safe for production use by AI agents and applications interacting with the Torch Market protocol.
 
@@ -440,9 +441,9 @@ The SDK is safe for production use by AI agents and applications interacting wit
 
 ## Audit Certification
 
-This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Independent human security auditor verified the on-chain program and frontend.
+This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). Updated February 20, 2026 for v3.7.0 (V28 `update_authority` removed — authority transfer now via multisig tooling, V27 treasury lock with 250M locked tokens, PDA-based pool validation, pre-migration buyback handler removed, 27 instructions total). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Independent human security auditor verified the on-chain program and frontend.
 
 **Auditor:** Claude Opus 4.6
-**Date:** 2026-02-19
-**SDK Version:** 3.6.8
-**On-Chain Version:** V3.6.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
+**Date:** 2026-02-20
+**SDK Version:** 3.7.0
+**On-Chain Version:** V3.7.0 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)

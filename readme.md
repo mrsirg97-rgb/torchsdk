@@ -16,16 +16,23 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.0
+
+- **`update_authority` Removed (V28)** — The `update_authority` admin instruction has been removed from the on-chain program. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
+- **Pre-migration Buyback Removed** — Only post-migration `execute_auto_buyback` (on Raydium DEX) remains. The pre-migration bonding curve buyback handler and context have been removed.
+- **V27 Treasury Lock + PDA Pool Validation** — 250M tokens (25%) locked in TreasuryLock PDA at creation; 750M (75%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation in `Borrow`, `Liquidate`, `TreasuryBuybackDex`, and `VaultSwap` contexts.
+- **36 Kani Proof Harnesses** — All passing. Including V25 supply conservation, V26 SOL wrapping conservation, lending lifecycle with interest.
+- **IDL updated to v3.7.0** (27 instructions).
+
 ### v3.6.8
 
 - **Permissionless DEX Migration (V26)** — New `buildMigrateTransaction` builds the two-step migration (fund WSOL + migrate to Raydium) in a single transaction. Anyone can trigger migration for bonding-complete tokens — payer covers rent (~0.02 SOL), treasury pays 0.15 SOL Raydium pool fee.
 - **Pool Account Validation (V27)** — Tightened Raydium pool validation: AMM config constrained to known program constant, pool state ownership verified against Raydium CPMM program ID. Closes account substitution vector.
-- **Update Authority (V28)** — New `update_authority` admin instruction for transferring protocol authority. Immediate, authority-only.
+- **Update Authority (V28)** — New `update_authority` admin instruction for transferring protocol authority. Immediate, authority-only. *(Removed in v3.7.0)*
 - **Lending `sol_balance` Bug Fix** — Treasury `sol_balance` now correctly decremented on borrow and incremented on repay/liquidation. Critical accounting fix.
 - **Lending Utilization Cap** — `getLendingInfo` now returns actual borrowable amount: `(sol_balance * 50%) - total_sol_lent`, matching on-chain enforcement.
 - **Live Raydium Pool Price** — `getToken()` fetches live pool vault balances for migrated tokens instead of frozen bonding curve virtual reserves.
 - **Dynamic Network Detection** — SDK evaluates network at call time via `globalThis.__TORCH_NETWORK__` (browser runtime) or `process.env.TORCH_NETWORK` (Node.js). Raydium addresses switch automatically between mainnet and devnet.
-- **Pre-migration Buyback Removed** — Simplified protocol: only post-migration DEX buyback remains.
 - **35 Kani Proof Harnesses** — Including V25 supply conservation, V26 SOL wrapping conservation, lending lifecycle with interest.
 - **IDL updated to v3.6.0** (35 instructions).
 

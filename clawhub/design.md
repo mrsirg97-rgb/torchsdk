@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.6.8.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.0.
 
 ## Overview
 
@@ -72,7 +72,7 @@ src/
 ├── quotes.ts           Buy/sell quote calculations (no RPC write)
 ├── said.ts             SAID Protocol integration (verify, confirm)
 ├── gateway.ts          Irys metadata fetch with fallback
-└── torch_market.json   Anchor IDL (v3.6.0, 35 instructions)
+└── torch_market.json   Anchor IDL (v3.7.0, 27 instructions)
 ```
 
 ### Dependency Graph
@@ -412,3 +412,4 @@ Expected result: **32 passed, 0 failed**
 | 3.4.0 | **Tiered Fee Structure (V24).** Dynamic treasury SOL rate is now per-tier: Spark 5%→1%, Flame 10%→2%, Torch 20%→5% (unchanged). Fee bounds derived from `bonding_target` at runtime — zero new on-chain state. `calculateTokensOut` accepts optional `bondingTarget` parameter. Callers (`getBuyQuote`, `buildBuyTransaction`) pass `bonding_target` from on-chain state. Legacy tokens (bonding_target=0) get Torch rates. IDL updated to v3.4.0. |
 | 3.5.1 | **V25 Pump-Style Token Distribution.** New virtual reserve model: IVS = bonding_target/8 (6.25-25 SOL), IVT = 900M tokens, ~81x multiplier across all tiers. Reverted V24 per-tier treasury fees to flat 20%→5% for all tiers. 35 Kani proof harnesses (up from 26), including 7 new V25 supply conservation and excess burn proofs. IDL updated to v3.5.1. |
 | 3.6.8 | **V26-V28 + Dynamic Network.** Permissionless DEX migration (`buildMigrateTransaction`) — two-step fund WSOL + migrate in one tx. Pool account validation hardened (V27 — AMM config constrained, pool ownership verified). `update_authority` admin instruction (V28). Critical lending `sol_balance` accounting fix. Lending utilization cap properly applied (50% - total_sol_lent). Live Raydium pool price for migrated tokens. Dynamic network detection (`globalThis.__TORCH_NETWORK__` / `process.env.TORCH_NETWORK`). Pre-migration buyback removed. IDL updated to v3.6.0. |
+| 3.7.0 | **V28 update_authority Removed + V27 Treasury Lock.** Removed `update_authority` instruction — authority transfer now done at deployment via multisig tooling. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority. V27 Treasury Lock: 250M tokens (25%) locked in TreasuryLock PDA at creation; 750M (75%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation. Pre-migration buyback handler removed. 36 Kani proof harnesses. IDL updated to v3.7.0. |

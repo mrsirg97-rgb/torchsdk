@@ -14,6 +14,7 @@ import {
   COLLATERAL_VAULT_SEED,
   TORCH_VAULT_SEED,
   VAULT_WALLET_LINK_SEED,
+  TREASURY_LOCK_SEED,
   getRaydiumCpmmProgram,
   WSOL_MINT,
   getRaydiumAmmConfig,
@@ -233,6 +234,24 @@ export const getVaultWalletLinkPda = (wallet: PublicKey): [PublicKey, number] =>
   return PublicKey.findProgramAddressSync(
     [Buffer.from(VAULT_WALLET_LINK_SEED), wallet.toBuffer()],
     PROGRAM_ID,
+  )
+}
+
+// V27: Treasury Lock PDA (per mint)
+export const getTreasuryLockPda = (mint: PublicKey): [PublicKey, number] => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(TREASURY_LOCK_SEED), mint.toBuffer()],
+    PROGRAM_ID,
+  )
+}
+
+// V27: Treasury Lock's Token-2022 ATA
+export const getTreasuryLockTokenAccount = (mint: PublicKey, treasuryLock: PublicKey): PublicKey => {
+  return getAssociatedTokenAddressSync(
+    mint,
+    treasuryLock,
+    true, // allowOwnerOffCurve (PDA)
+    TOKEN_2022_PROGRAM_ID,
   )
 }
 
