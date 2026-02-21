@@ -229,6 +229,30 @@ const main = async () => {
     if (data?.bondingCurve?.bonding_complete) bondingComplete = true
   }
 
+  // [V28] Recovery: if ephemeral buyers couldn't complete bonding (auto-bundled
+  // migration requires ~1.5 SOL buffer they don't have), use main wallet
+  if (!bondingComplete) {
+    log('  Attempting final buy with main wallet (has SOL for V28 migration buffer)...')
+    try {
+      const result = await buildDirectBuyTransaction(connection, {
+        mint: sparkMint,
+        buyer: walletAddr,
+        amount_sol: BUY_AMOUNT,
+        slippage_bps: 1000,
+        vote: 'burn',
+      })
+      await signAndSend(connection, wallet, result.transaction)
+      bondingComplete = true
+      buyCount++
+    } catch (e: any) {
+      if (e.message?.includes('BondingComplete') || e.message?.includes('bonding_complete')) {
+        bondingComplete = true
+      } else {
+        log(`  Final buy failed: ${e.message?.substring(0, 80)}`)
+      }
+    }
+  }
+
   if (bondingComplete) {
     ok('Spark bonding complete', `after ${buyCount} buys`)
   } else {
@@ -275,14 +299,19 @@ const main = async () => {
       const program = new Program(idl, provider)
       const bcData = await program.account.bondingCurve.fetch(bondingCurvePda)
 
-      // Migrate using SDK
-      const migrateResult = await buildMigrateTransaction(connection, {
-        mint: sparkMint,
-        payer: walletAddr,
-      })
-      await signAndSend(connection, wallet, migrateResult.transaction)
-
-      ok('Migrate to DEX', 'Raydium pool created for Spark token (V26 permissionless — program wraps SOL internally)')
+      // [V28] Check if auto-migration already happened (bundled with last buy)
+      const preMigCheck = await fetchTokenRaw(connection, new PublicKey(sparkMint))
+      if (preMigCheck?.bondingCurve?.migrated) {
+        ok('Migrate to DEX', 'V28 auto-migrated with last buy')
+      } else {
+        // Fallback: separate migration call
+        const migrateResult = await buildMigrateTransaction(connection, {
+          mint: sparkMint,
+          payer: walletAddr,
+        })
+        await signAndSend(connection, wallet, migrateResult.transaction)
+        ok('Migrate to DEX', 'Raydium pool created (fallback — separate migration call)')
+      }
 
       // Derive Raydium vault addresses for post-migration verification
       const raydium = getRaydiumMigrationAccounts(mintPk)

@@ -256,9 +256,35 @@ const main = async () => {
   }
 
   // Final status
-  const finalData = await fetchTokenRaw(connection, mintPk)
+  let finalData = await fetchTokenRaw(connection, mintPk)
   if (!bondingComplete && finalData?.bondingCurve?.bonding_complete) {
     bondingComplete = true
+  }
+
+  // [V28] Recovery: if ephemeral buyers couldn't complete bonding (auto-bundled
+  // migration requires ~1.5 SOL buffer they don't have), use funder wallet
+  if (!bondingComplete) {
+    log('\nAttempting final buy with funder wallet (has SOL for V28 migration buffer)...')
+    try {
+      const result = await buildDirectBuyTransaction(connection, {
+        mint: mintArg,
+        buyer: funder.publicKey.toBase58(),
+        amount_sol: tier.buyLamports,
+        slippage_bps: 1000,
+        vote: 'burn',
+      })
+      await signAndSend(connection, funder, result.transaction)
+      bondingComplete = true
+      buyCount++
+      log('  Final buy succeeded — bonding complete + V28 auto-migration')
+    } catch (e: any) {
+      if (e.message?.includes('BondingComplete') || e.message?.includes('bonding_complete')) {
+        bondingComplete = true
+      } else {
+        log(`  Final buy failed: ${(e.message || '').substring(0, 80)}`)
+      }
+    }
+    finalData = await fetchTokenRaw(connection, mintPk)
   }
 
   const finalReserves = Number(finalData?.bondingCurve?.real_sol_reserves?.toString() || '0')

@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.7.1",
+  "version": "4.7.2",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -39,7 +39,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.7.2",
+        "package": "torchsdk@^3.7.3",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
@@ -138,7 +138,7 @@
     },
     {
       "name": "TORCH_BUY_TOKEN",
-      "description": "Buy tokens via vault (vault SOL pays, tokens go to vault ATA). Vote required on first buy (burn/return). Optional on-chain message."
+      "description": "Buy tokens via vault (vault SOL pays, tokens go to vault ATA). Vote required on first buy (burn/return). Optional on-chain message. If this buy completes bonding, the result includes a separate migrationTransaction -- send it right after the buy to trigger DEX migration (payer fronts ~1 SOL, treasury reimburses)."
     },
     {
       "name": "TORCH_SELL_TOKEN",
@@ -190,7 +190,7 @@
     },
     {
       "name": "TORCH_MIGRATE",
-      "description": "Migrate a bonding-complete token to Raydium DEX (permissionless -- anyone can trigger). Two-step: fund WSOL from treasury + create Raydium CPMM pool. Payer covers rent (~0.02 SOL), treasury pays 0.15 SOL pool fee."
+      "description": "Migrate a bonding-complete token to Raydium DEX (permissionless -- anyone can trigger). Two-step: fund WSOL from treasury + create Raydium CPMM pool. Payer fronts ~1 SOL for Raydium costs, treasury reimburses the exact amount in the same transaction (net cost: 0 SOL)."
     },
     {
       "name": "TORCH_CLAIM_PROTOCOL_REWARDS",

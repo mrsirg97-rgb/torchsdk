@@ -249,7 +249,8 @@ export interface StarParams {
 export interface MigrateParams {
   /** Token mint address */
   mint: string
-  /** Wallet signing the transaction. Pays rent for new accounts (~0.02 SOL). Treasury pays the 0.15 SOL Raydium fee. */
+  /** Wallet signing the transaction. Fronts ~1 SOL for Raydium costs
+   *  (pool creation fee + account rent), reimbursed by treasury in the same transaction. */
   payer: string
 }
 
@@ -302,6 +303,15 @@ export interface HarvestFeesParams {
 export interface TransactionResult {
   transaction: Transaction
   message: string
+}
+
+export interface BuyTransactionResult extends TransactionResult {
+  /** [V28] Follow-up migration transaction. Present when this buy completes
+   *  bonding. Send immediately after the buy tx succeeds. The payer fronts
+   *  ~1 SOL for Raydium costs, reimbursed by treasury in the same tx.
+   *  If the caller can't afford it or it fails, anyone can trigger migration
+   *  later via buildMigrateTransaction. */
+  migrationTransaction?: Transaction
 }
 
 export interface CreateTokenResult extends TransactionResult {

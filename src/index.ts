@@ -77,6 +77,7 @@ export type {
   StarParams,
   MigrateParams,
   TransactionResult,
+  BuyTransactionResult,
   CreateTokenResult,
   BorrowParams,
   RepayParams,

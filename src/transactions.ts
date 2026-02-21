@@ -69,6 +69,7 @@ import {
   UnlinkWalletParams,
   TransferAuthorityParams,
   TransactionResult,
+  BuyTransactionResult,
   CreateTokenResult,
 } from './types'
 import idl from './torch_market.json'
@@ -110,7 +111,7 @@ const buildBuyTransactionInternal = async (
   vote: 'burn' | 'return' | undefined,
   message: string | undefined,
   vaultCreatorStr: string | undefined,
-): Promise<TransactionResult> => {
+): Promise<BuyTransactionResult> => {
 
   const mint = new PublicKey(mintStr)
   const buyer = new PublicKey(buyerStr)
@@ -118,7 +119,7 @@ const buildBuyTransactionInternal = async (
   const tokenData = await fetchTokenRaw(connection, mint)
   if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
 
-  const { bondingCurve } = tokenData
+  const { bondingCurve, treasury } = tokenData
   if (bondingCurve.bonding_complete) throw new Error('Bonding curve complete, trade on DEX')
 
   // Calculate expected output
@@ -129,6 +130,11 @@ const buildBuyTransactionInternal = async (
   const solAmount = BigInt(amount_sol)
 
   const result = calculateTokensOut(solAmount, virtualSol, virtualTokens, realSol, 100, 100, bondingTarget)
+
+  // [V28] Detect if this buy will complete bonding
+  const resolvedTarget = bondingTarget === BigInt(0) ? BigInt('200000000000') : bondingTarget
+  const newRealSol = realSol + result.solToCurve
+  const willCompleteBonding = newRealSol >= resolvedTarget
 
   // Apply slippage
   if (slippage_bps < 10 || slippage_bps > 1000) {
@@ -249,10 +255,79 @@ const buildBuyTransactionInternal = async (
 
   await finalizeTransaction(connection, tx, buyer)
 
+  // [V28] Build separate migration transaction when this buy completes bonding.
+  // Split into two txs because buy + migration exceeds the 1232-byte legacy limit.
+  let migrationTransaction: Transaction | undefined
+  if (willCompleteBonding) {
+    const migTx = new Transaction()
+    migTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+
+    const bcWsol = getAssociatedTokenAddressSync(WSOL_MINT, bondingCurvePda, true, TOKEN_PROGRAM_ID)
+    const payerWsol = getAssociatedTokenAddressSync(WSOL_MINT, buyer, false, TOKEN_PROGRAM_ID)
+    const payerToken = buyerTokenAccount
+    const raydium = getRaydiumMigrationAccounts(mint)
+    const payerLpToken = getAssociatedTokenAddressSync(raydium.lpMint, buyer, false, TOKEN_PROGRAM_ID)
+
+    migTx.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        buyer, bcWsol, bondingCurvePda, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
+      createAssociatedTokenAccountIdempotentInstruction(
+        buyer, payerWsol, buyer, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
+      createAssociatedTokenAccountIdempotentInstruction(
+        buyer, payerToken, buyer, mint, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
+    )
+
+    const fundIx = await program.methods
+      .fundMigrationWsol()
+      .accounts({ payer: buyer, mint, bondingCurve: bondingCurvePda, bcWsol } as any)
+      .instruction()
+
+    const migrateIx = await program.methods
+      .migrateToDex()
+      .accounts({
+        payer: buyer,
+        globalConfig: globalConfigPda,
+        mint,
+        bondingCurve: bondingCurvePda,
+        treasury: treasuryPda,
+        tokenVault: bondingCurveTokenAccount,
+        treasuryTokenAccount,
+        bcWsol,
+        payerWsol,
+        payerToken,
+        raydiumProgram: getRaydiumCpmmProgram(),
+        ammConfig: getRaydiumAmmConfig(),
+        raydiumAuthority: raydium.raydiumAuthority,
+        poolState: raydium.poolState,
+        wsolMint: WSOL_MINT,
+        token0Vault: raydium.token0Vault,
+        token1Vault: raydium.token1Vault,
+        lpMint: raydium.lpMint,
+        payerLpToken,
+        observationState: raydium.observationState,
+        createPoolFee: getRaydiumFeeReceiver(),
+        tokenProgram: TOKEN_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      } as any)
+      .instruction()
+
+    migTx.add(fundIx, migrateIx)
+    await finalizeTransaction(connection, migTx, buyer)
+    migrationTransaction = migTx
+  }
+
   const vaultLabel = vaultCreatorStr ? ' (via vault)' : ''
+  const migrateLabel = willCompleteBonding ? ' + migrate to DEX' : ''
   return {
     transaction: tx,
-    message: `Buy ${Number(result.tokensToUser) / 1e6} tokens for ${Number(solAmount) / 1e9} SOL${vaultLabel}`,
+    migrationTransaction,
+    message: `Buy ${Number(result.tokensToUser) / 1e6} tokens for ${Number(solAmount) / 1e9} SOL${vaultLabel}${migrateLabel}`,
   }
 }
 
@@ -268,7 +343,7 @@ const buildBuyTransactionInternal = async (
 export const buildBuyTransaction = async (
   connection: Connection,
   params: BuyParams,
-): Promise<TransactionResult> => {
+): Promise<BuyTransactionResult> => {
   const { mint, buyer, amount_sol, slippage_bps = 100, vote, message, vault } = params
   return buildBuyTransactionInternal(connection, mint, buyer, amount_sol, slippage_bps, vote, message, vault)
 }
@@ -286,7 +361,7 @@ export const buildBuyTransaction = async (
 export const buildDirectBuyTransaction = async (
   connection: Connection,
   params: DirectBuyParams,
-): Promise<TransactionResult> => {
+): Promise<BuyTransactionResult> => {
   const { mint, buyer, amount_sol, slippage_bps = 100, vote, message } = params
   return buildBuyTransactionInternal(connection, mint, buyer, amount_sol, slippage_bps, vote, message, undefined)
 }
@@ -1318,7 +1393,11 @@ export const buildWithdrawTokensTransaction = async (
  * Combines fund_migration_wsol + migrate_to_dex in a single transaction.
  * Creates a Raydium CPMM pool with locked liquidity (LP tokens burned).
  *
- * Payer pays rent for new accounts (~0.02 SOL). Treasury pays 0.15 SOL Raydium fee.
+ * [V28] Payer fronts ~1 SOL for Raydium costs (pool creation fee + account rent).
+ * Treasury reimburses the exact cost in the same transaction. Net payer cost: 0 SOL.
+ *
+ * Prefer using buildBuyTransaction — it auto-bundles migration when the buy
+ * completes bonding, so callers don't need to call this separately.
  *
  * @param connection - Solana RPC connection
  * @param params - Migration parameters (mint, payer)
