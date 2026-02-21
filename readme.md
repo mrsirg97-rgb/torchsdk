@@ -16,6 +16,14 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.4
+
+- **V28 Migration Payer Reimbursement** — The on-chain program now snapshots the payer's lamports before and after Raydium CPIs, then reimburses the exact migration cost from the treasury. Net cost to payer: 0 SOL. `MIN_MIGRATION_SOL` (1.5 SOL safety floor) replaces the old `RAYDIUM_POOL_CREATION_FEE` (0.15 SOL) constant. The inline auto-migrate path in `buildBuyTransactionInternal` has been collapsed into a single `buildMigrateTransaction()` call (~50 lines removed). IDL updated to v3.7.1. 36 Kani proofs all passing on program v3.7.1.
+
+### v3.7.3
+
+- **`fetchWithFallback` resilience** — Improved metadata fetch with gateway URL fallback.
+
 ### v3.7.2
 
 - **Auto-Buyback Client-Side Pre-Checks** — `buildAutoBuybackTransaction` now validates all on-chain conditions before building the transaction. Pre-checks: migration status, baseline initialization, cooldown interval, supply floor (500M), price vs baseline threshold (80%), and minimum buyback amount (0.01 SOL). Throws descriptive errors so callers know exactly why a buyback can't fire (e.g. `"Buyback cooldown: 142 slots remaining"`, `"Price is healthy — no buyback needed (current: 95.2% of baseline, threshold: 80.0%)"`). Return message now includes the actual SOL buyback amount.
@@ -137,7 +145,7 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 | `buildDirectBuyTransaction(connection, params)` | Buy tokens (buyer pays directly, no vault) |
 | `buildSellTransaction(connection, params)` | Sell tokens back to the bonding curve (vault-routed) |
 | `buildVaultSwapTransaction(connection, params)` | Buy/sell migrated tokens on Raydium DEX (vault-routed) |
-| `buildMigrateTransaction(connection, params)` | Migrate bonding-complete token to Raydium DEX (permissionless) |
+| `buildMigrateTransaction(connection, params)` | Migrate bonding-complete token to Raydium DEX (permissionless, payer reimbursed by treasury) |
 | `buildCreateTokenTransaction(connection, params)` | Launch a new token |
 | `buildStarTransaction(connection, params)` | Star a token (0.05 SOL, vault-routed) |
 
@@ -318,7 +326,7 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 { mint: string, borrower: string, sol_amount: number, vault?: string }
 { mint: string, liquidator: string, borrower: string, vault?: string }
 
-// Migrate (permissionless — anyone can trigger for bonding-complete tokens)
+// Migrate (permissionless — anyone can trigger for bonding-complete tokens, treasury reimburses payer)
 { mint: string, payer: string }
 
 // Rewards (optional vault routing)

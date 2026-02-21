@@ -32,7 +32,7 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.7.4
+        package: torchsdk@^3.7.5
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
@@ -186,7 +186,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.7.4), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.7.5), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
