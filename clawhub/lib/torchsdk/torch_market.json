@@ -2918,8 +2918,9 @@
                 {
                     "name": "amm_config",
                     "docs": [
-                        "Raydium AMM config"
-                    ]
+                        "Raydium AMM config — constrained to prevent pool creation with wrong fee tier"
+                    ],
+                    "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
                 },
                 {
                     "name": "raydium_authority",
@@ -2979,7 +2980,7 @@
                 {
                     "name": "create_pool_fee",
                     "docs": [
-                        "Raydium fee receiver (receives 0.15 SOL)"
+                        "Raydium fee receiver (pool creation fee)"
                     ],
                     "writable": true
                 },
