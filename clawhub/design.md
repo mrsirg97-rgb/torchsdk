@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.2.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.4.
 
 ## Overview
 
@@ -75,7 +75,7 @@ src/
 ├── said.ts             SAID Protocol integration (verify, confirm)
 ├── gateway.ts          Irys metadata fetch with fallback
 ├── ephemeral.ts        Ephemeral agent (disposable wallet helper)
-└── torch_market.json   Anchor IDL (v3.7.0, 27 instructions)
+└── torch_market.json   Anchor IDL (v3.7.1, 27 instructions)
 ```
 
 ### Dependency Graph
@@ -232,7 +232,7 @@ CREATE → BONDING → COMPLETE → MIGRATE → DEX TRADING
 
 ### Migration (V26 — Permissionless)
 
-- `buildMigrateTransaction` — two-step: fund WSOL from treasury + create Raydium CPMM pool. Anyone can trigger for bonding-complete tokens. Payer covers ~0.02 SOL rent, treasury pays 0.15 SOL pool fee.
+- `buildMigrateTransaction` — two-step: fund WSOL from treasury + create Raydium CPMM pool. Anyone can trigger for bonding-complete tokens. Payer fronts ~1 SOL for Raydium costs (pool creation fee + account rent), treasury reimburses the exact amount in the same transaction. Net cost to payer: 0 SOL.
 
 ### Post-Migration
 
@@ -425,3 +425,5 @@ Expected result: **32 passed, 0 failed** (mainnet fork). Tiers test covers harve
 | 3.7.0 | **V28 update_authority Removed + V27 Treasury Lock.** Removed `update_authority` instruction — authority transfer now done at deployment via multisig tooling. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority. V27 Treasury Lock: 250M tokens (25%) locked in TreasuryLock PDA at creation; 750M (75%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation. Pre-migration buyback handler removed. 36 Kani proof harnesses. IDL updated to v3.7.0. |
 | 3.7.1 | **Treasury Cranks.** New `buildAutoBuybackTransaction` — permissionless treasury buyback on Raydium when price < 80% of baseline. Burns bought tokens. New `buildHarvestFeesTransaction` — permissionless Token-2022 transfer fee harvesting into treasury. New types: `AutoBuybackParams`, `HarvestFeesParams`. |
 | 3.7.2 | **Buyback Pre-Checks + Harvest Auto-Discovery.** `buildAutoBuybackTransaction` now validates all on-chain conditions client-side before building the tx: migration status, baseline initialization, cooldown interval, supply floor (500M), price vs threshold (80% of baseline), minimum buyback amount (0.01 SOL). Descriptive errors for each failure. `buildHarvestFeesTransaction` auto-discovers source accounts with withheld fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. New optional `sources` field for explicit accounts. Dynamic compute budget (200k + 20k per source). Graceful RPC fallback when `getTokenLargestAccounts` is unsupported (e.g. Surfpool). E2E tests for harvest and buyback across all three test suites. |
+| 3.7.3 | **`fetchWithFallback` resilience.** Improved metadata fetch with gateway URL fallback. |
+| 3.7.4 | **V28 Migration Payer Reimbursement.** `buildBuyTransactionInternal` auto-migrate path collapsed into a single `buildMigrateTransaction()` call — program now handles treasury reimbursement internally (payer fronts ~1 SOL, treasury reimburses exact cost, net 0). Removed ~50 lines of inline migration builder. IDL updated to v3.7.1 (program v3.7.1: `MIN_MIGRATION_SOL` replaces `RAYDIUM_POOL_CREATION_FEE`, payer lamport snapshot + reimbursement in migration handler). 36 Kani proofs all passing on v3.7.1. |

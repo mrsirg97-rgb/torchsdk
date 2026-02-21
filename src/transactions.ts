@@ -257,69 +257,14 @@ const buildBuyTransactionInternal = async (
 
   // [V28] Build separate migration transaction when this buy completes bonding.
   // Split into two txs because buy + migration exceeds the 1232-byte legacy limit.
+  // Program handles treasury reimbursement internally, so this is just a standard migration call.
   let migrationTransaction: Transaction | undefined
   if (willCompleteBonding) {
-    const migTx = new Transaction()
-    migTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-
-    const bcWsol = getAssociatedTokenAddressSync(WSOL_MINT, bondingCurvePda, true, TOKEN_PROGRAM_ID)
-    const payerWsol = getAssociatedTokenAddressSync(WSOL_MINT, buyer, false, TOKEN_PROGRAM_ID)
-    const payerToken = buyerTokenAccount
-    const raydium = getRaydiumMigrationAccounts(mint)
-    const payerLpToken = getAssociatedTokenAddressSync(raydium.lpMint, buyer, false, TOKEN_PROGRAM_ID)
-
-    migTx.add(
-      createAssociatedTokenAccountIdempotentInstruction(
-        buyer, bcWsol, bondingCurvePda, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-      ),
-      createAssociatedTokenAccountIdempotentInstruction(
-        buyer, payerWsol, buyer, WSOL_MINT, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-      ),
-      createAssociatedTokenAccountIdempotentInstruction(
-        buyer, payerToken, buyer, mint, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-      ),
-    )
-
-    const fundIx = await program.methods
-      .fundMigrationWsol()
-      .accounts({ payer: buyer, mint, bondingCurve: bondingCurvePda, bcWsol } as any)
-      .instruction()
-
-    const migrateIx = await program.methods
-      .migrateToDex()
-      .accounts({
-        payer: buyer,
-        globalConfig: globalConfigPda,
-        mint,
-        bondingCurve: bondingCurvePda,
-        treasury: treasuryPda,
-        tokenVault: bondingCurveTokenAccount,
-        treasuryTokenAccount,
-        bcWsol,
-        payerWsol,
-        payerToken,
-        raydiumProgram: getRaydiumCpmmProgram(),
-        ammConfig: getRaydiumAmmConfig(),
-        raydiumAuthority: raydium.raydiumAuthority,
-        poolState: raydium.poolState,
-        wsolMint: WSOL_MINT,
-        token0Vault: raydium.token0Vault,
-        token1Vault: raydium.token1Vault,
-        lpMint: raydium.lpMint,
-        payerLpToken,
-        observationState: raydium.observationState,
-        createPoolFee: getRaydiumFeeReceiver(),
-        tokenProgram: TOKEN_PROGRAM_ID,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
-      } as any)
-      .instruction()
-
-    migTx.add(fundIx, migrateIx)
-    await finalizeTransaction(connection, migTx, buyer)
-    migrationTransaction = migTx
+    const migResult = await buildMigrateTransaction(connection, {
+      mint: mintStr,
+      payer: buyerStr,
+    })
+    migrationTransaction = migResult.transaction
   }
 
   const vaultLabel = vaultCreatorStr ? ' (via vault)' : ''
