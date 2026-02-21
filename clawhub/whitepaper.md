@@ -177,8 +177,9 @@ The transfer fee is not extracted from the sender or receiver as a separate char
 The accumulated transfer fees create a perpetual buyback engine:
 
 1. **Harvest** (permissionless): Anyone can call `harvest_fees` to collect withheld tokens from transfers into the token treasury's token account.
-2. **Buyback** (permissionless): Anyone can call `buyback` to execute a market buy using treasury SOL. The bought tokens are burned.
-3. **Burn**: Acquired tokens are permanently burned, reducing supply. When supply reaches the 500M floor, tokens are held in treasury instead (preventing hyper-deflation).
+2. **Swap to SOL** (permissionless): Anyone can call `swap_fees_to_sol` to sell the harvested tokens back to SOL via Raydium, adding the proceeds to the treasury's SOL balance. The SDK bundles harvest + swap in one atomic transaction via `buildSwapFeesToSolTransaction`.
+3. **Buyback** (permissionless): Anyone can call `execute_auto_buyback` to execute a market buy using treasury SOL when price dips. The bought tokens are burned.
+4. **Burn**: Acquired tokens are permanently burned, reducing supply. When supply reaches the 500M floor, tokens are held in treasury instead (preventing hyper-deflation).
 
 ### Buyback Parameters
 
@@ -402,7 +403,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          TORCH MARKET PROTOCOL v3.7.0                                │
+│                          TORCH MARKET PROTOCOL v3.7.7                                │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
@@ -457,7 +458,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                      │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│  INSTRUCTION HANDLERS (27 total)                                                     │
+│  INSTRUCTION HANDLERS (28 total)                                                     │
 │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐      │
 │  │ admin  │ │ token  │ │ market │ │treasury│ │ dex    │ │rewards │ │reclaim │      │
 │  │        │ │        │ │        │ │/lending│ │migrate │ │        │ │/revival│      │
@@ -489,14 +490,14 @@ The protocol uses 12 on-chain account types, all deterministic PDAs:
 
 ### Instruction Set
 
-The V3.7.0 program exposes 27 instructions across 9 handler domains:
+The V3.7.7 program exposes 28 instructions across 9 handler domains:
 
 | Domain | Instructions |
 |--------|-------------|
 | **Admin** | `initialize`, `initialize_protocol_treasury`, `update_dev_wallet` |
 | **Token** | `create_token` |
 | **Market** | `buy`, `sell` |
-| **Treasury** | `harvest_fees` |
+| **Treasury** | `harvest_fees`, `swap_fees_to_sol` |
 | **Migration** | `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback` |
 | **Rewards** | `advance_protocol_epoch`, `claim_protocol_rewards`, `star_token` |
 | **Reclaim/Revival** | `reclaim_failed_token`, `contribute_revival` |
@@ -505,6 +506,8 @@ The V3.7.0 program exposes 27 instructions across 9 handler domains:
 | **Lending** | `borrow`, `repay`, `liquidate` |
 
 > **Note (V3.7.0):** `update_authority` was removed. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
+>
+> **Note (V3.7.7):** `swap_fees_to_sol` added. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless — anyone can call after migration. 28 instructions total.
 
 ### Bonding Curve Formula
 
@@ -580,7 +583,7 @@ Price: price      = virtual_sol_reserves / virtual_token_reserves
 **Access Control:**
 - **Authority-only:** `initialize`, `update_dev_wallet`
 - **Vault authority-only:** `withdraw_vault`, `link_wallet`, `unlink_wallet`, `transfer_authority`, `withdraw_tokens`
-- **Permissionless cranks:** `advance_protocol_epoch`, `harvest_fees`, `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback`, `reclaim_failed_token`, `liquidate`
+- **Permissionless cranks:** `advance_protocol_epoch`, `harvest_fees`, `swap_fees_to_sol`, `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback`, `reclaim_failed_token`, `liquidate`
 - **Permissionless deposits:** Anyone can deposit into any vault
 
 **Vault Security (V3.1.0 — Full Custody):**
@@ -617,7 +620,7 @@ CREATE → BONDING → COMPLETE → VOTE → MIGRATE → DEX
    │                                    [1% Transfer Fee]
    │                                              │
    │                                              ▼
-   │                                    HARVEST → BUYBACK → BURN
+   │                                    HARVEST → SWAP TO SOL → BUYBACK → BURN
    │                                              │
    │                                     ┌────────┴────────┐
    │                                     │                  │
@@ -696,6 +699,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | V3.6.0 | **V26 Permissionless Migration + Authority Revocation.** Mint and freeze authority revoked permanently at migration. |
 | V3.6.x | **V27 Treasury Lock + PDA Pool Validation.** 250M tokens locked at creation. IVS = 3BT/8, 13.44x multiplier. |
 | V3.7.0 | **V28 `update_authority` Removed.** Authority transfer via multisig tooling. 27 instructions. Minimal admin surface. |
+| V3.7.7 | **V20 Swap Fees to SOL.** New `swap_fees_to_sol` instruction sells harvested Token-2022 fees to SOL via Raydium. 28 instructions. Vault ordering bug fix in pool validation. |
 
 ---
 

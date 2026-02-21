@@ -48,6 +48,7 @@ export {
   buildVaultSwapTransaction,
   buildAutoBuybackTransaction,
   buildHarvestFeesTransaction,
+  buildSwapFeesToSolTransaction,
 } from './transactions'
 
 // Ephemeral Agent
@@ -101,6 +102,7 @@ export type {
   VaultSwapParams,
   AutoBuybackParams,
   HarvestFeesParams,
+  SwapFeesToSolParams,
 } from './types'
 
 // Constants (for advanced usage)

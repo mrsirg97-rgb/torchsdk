@@ -485,10 +485,21 @@ const main = async () => {
         }
         ok('Vault swap buys', '3 buys to generate transfer fees')
 
-        // Snapshot treasury token balance before harvest
+        // Snapshot treasury state before harvest
         const preHarvest = await fetchTokenRaw(connection, new PublicKey(sparkMint))
-        const preTokens = Number(preHarvest?.treasury?.tokens_held?.toString() || '0')
-        const preFees = Number(preHarvest?.treasury?.harvested_fees?.toString() || '0')
+        const preSolBalance = Number(preHarvest?.treasury?.sol_balance?.toString() || '0') / LAMPORTS_PER_SOL
+
+        // Read treasury token account balance (where harvested tokens actually go)
+        const { getTokenTreasuryPda, getTreasuryTokenAccount } = require('../src/program')
+        const [treasuryPdaH] = getTokenTreasuryPda(new PublicKey(sparkMint))
+        const treasuryAtaH = getTreasuryTokenAccount(new PublicKey(sparkMint), treasuryPdaH)
+        let preTokenBal = 0
+        try {
+          const bal = await connection.getTokenAccountBalance(treasuryAtaH)
+          preTokenBal = Number(bal.value.amount)
+        } catch { /* ATA may not exist yet */ }
+
+        log(`  [before] treasury_sol=${preSolBalance.toFixed(4)} SOL, treasury_tokens=${(preTokenBal / 1e6).toFixed(2)}`)
 
         // Harvest with auto-discovery
         const harvestResult = await buildHarvestFeesTransaction(connection, {
@@ -497,15 +508,21 @@ const main = async () => {
         })
         await signAndSend(connection, wallet, harvestResult.transaction)
 
-        // Verify treasury token balance increased
+        // Snapshot after harvest
         const postHarvest = await fetchTokenRaw(connection, new PublicKey(sparkMint))
-        const postTokens = Number(postHarvest?.treasury?.tokens_held?.toString() || '0')
-        const postFees = Number(postHarvest?.treasury?.harvested_fees?.toString() || '0')
+        const postSolBalance = Number(postHarvest?.treasury?.sol_balance?.toString() || '0') / LAMPORTS_PER_SOL
+        let postTokenBal = 0
+        try {
+          const bal = await connection.getTokenAccountBalance(treasuryAtaH)
+          postTokenBal = Number(bal.value.amount)
+        } catch { /* shouldn't happen */ }
 
-        if (postTokens > preTokens || postFees > preFees) {
-          ok('Harvest fees', `${harvestResult.message} — tokens_held: ${preTokens}→${postTokens}, harvested_fees: ${preFees}→${postFees}`)
+        const tokensHarvested = postTokenBal - preTokenBal
+        log(`  [after]  treasury_sol=${postSolBalance.toFixed(4)} SOL, treasury_tokens=${(postTokenBal / 1e6).toFixed(2)} (+${(tokensHarvested / 1e6).toFixed(2)})`)
+
+        if (tokensHarvested > 0) {
+          ok('Harvest fees', `${harvestResult.message} — harvested ${(tokensHarvested / 1e6).toFixed(2)} tokens`)
         } else {
-          // Even if no fees were withheld (depends on transfer activity), the tx should succeed
           ok('Harvest fees', `${harvestResult.message} — tx succeeded (no withheld fees to harvest)`)
         }
       } catch (e: any) {

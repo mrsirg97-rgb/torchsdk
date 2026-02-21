@@ -595,8 +595,19 @@ const main = async () => {
     try {
       // The 100 post-migration buys + sells generated transfer fees
       const preHarvestData = await fetchTokenRaw(connection, new PublicKey(mint))
-      const preHarvestTokens = Number(preHarvestData?.treasury?.tokens_held?.toString() || '0')
-      const preHarvestFees = Number(preHarvestData?.treasury?.harvested_fees?.toString() || '0')
+      const preSolBalance = Number(preHarvestData?.treasury?.sol_balance?.toString() || '0') / LAMPORTS_PER_SOL
+
+      // Read treasury token account balance (where harvested tokens actually go)
+      const { getTokenTreasuryPda, getTreasuryTokenAccount } = require('../src/program')
+      const [treasuryPdaH] = getTokenTreasuryPda(new PublicKey(mint))
+      const treasuryAtaH = getTreasuryTokenAccount(new PublicKey(mint), treasuryPdaH)
+      let preTokenBal = 0
+      try {
+        const bal = await connection.getTokenAccountBalance(treasuryAtaH)
+        preTokenBal = Number(bal.value.amount)
+      } catch { /* ATA may not exist yet */ }
+
+      log(`  [before] treasury_sol=${preSolBalance.toFixed(4)} SOL, treasury_tokens=${(preTokenBal / 1e6).toFixed(2)}`)
 
       const harvestResult = await buildHarvestFeesTransaction(connection, {
         mint,
@@ -604,14 +615,22 @@ const main = async () => {
       })
       const harvestSig = await signAndSend(connection, wallet, harvestResult.transaction)
 
+      // Snapshot after harvest
       const postHarvestData = await fetchTokenRaw(connection, new PublicKey(mint))
-      const postHarvestTokens = Number(postHarvestData?.treasury?.tokens_held?.toString() || '0')
-      const postHarvestFees = Number(postHarvestData?.treasury?.harvested_fees?.toString() || '0')
+      const postSolBalance = Number(postHarvestData?.treasury?.sol_balance?.toString() || '0') / LAMPORTS_PER_SOL
+      let postTokenBal = 0
+      try {
+        const bal = await connection.getTokenAccountBalance(treasuryAtaH)
+        postTokenBal = Number(bal.value.amount)
+      } catch { /* shouldn't happen */ }
 
-      if (postHarvestTokens > preHarvestTokens || postHarvestFees > preHarvestFees) {
-        ok('Harvest fees', `${harvestResult.message} tokens: ${preHarvestTokens}→${postHarvestTokens} sig=${harvestSig.slice(0, 8)}...`)
+      const tokensHarvested = postTokenBal - preTokenBal
+      log(`  [after]  treasury_sol=${postSolBalance.toFixed(4)} SOL, treasury_tokens=${(postTokenBal / 1e6).toFixed(2)} (+${(tokensHarvested / 1e6).toFixed(2)})`)
+
+      if (tokensHarvested > 0) {
+        ok('Harvest fees', `${harvestResult.message} — harvested ${(tokensHarvested / 1e6).toFixed(2)} tokens sig=${harvestSig.slice(0, 8)}...`)
       } else {
-        ok('Harvest fees', `${harvestResult.message} — tx succeeded sig=${harvestSig.slice(0, 8)}...`)
+        ok('Harvest fees', `${harvestResult.message} — tx succeeded (no withheld fees) sig=${harvestSig.slice(0, 8)}...`)
       }
     } catch (e: any) {
       fail('Harvest fees', e)

@@ -35,6 +35,7 @@ buildRepayTransaction(connection, params)               → repay loan (vault-ro
 buildLiquidateTransaction(connection, params)           → liquidate position
 buildVaultSwapTransaction(connection, params)           → DEX trade (vault-routed)
 buildClaimProtocolRewardsTransaction(connection, params) → claim epoch rewards
+buildSwapFeesToSolTransaction(connection, params)       → harvest fees + swap to SOL
 buildCreateVaultTransaction(connection, params)         → create vault
 buildDepositVaultTransaction(connection, params)        → fund vault
 buildLinkWalletTransaction(connection, params)          → link agent to vault
@@ -212,21 +213,25 @@ for (const token of tokens) {
 
 ---
 
-### 9. Fee Harvester (Public Good)
+### 9. Fee Harvester + Swap to SOL (Public Good)
 
-**What:** Transfer fees accumulate in token mints. Harvest them into treasuries so buybacks stay funded.
+**What:** Transfer fees accumulate in token mints as tokens. Harvest them and swap to SOL so the treasury can fund buybacks.
 
 **SDK:**
 ```typescript
 const { tokens } = await getTokens(connection, { status: "migrated" });
 for (const token of tokens) {
-  // check withheld fees on mint
-  // call harvest to move fees to treasury token account
-  // this enables the next buyback cycle
+  // harvest withheld fees + swap to SOL in one atomic transaction
+  const { transaction } = await buildSwapFeesToSolTransaction(connection, {
+    mint: token.mint,
+    payer: wallet,
+    minimum_amount_out: 1, // or calculate from pool price
+  });
+  // sign and submit
 }
 ```
 
-**Deliverable:** A bot that runs on a cadence, harvests accumulated transfer fees across all migrated tokens. A public good — the harvester pays gas, every token holder benefits.
+**Deliverable:** A bot that runs on a cadence, harvests accumulated transfer fees across all migrated tokens and swaps them to SOL. A public good — the harvester pays gas, every token holder benefits from a stronger treasury.
 
 ---
 

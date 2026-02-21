@@ -61,6 +61,7 @@ import {
   VaultSwapParams,
   AutoBuybackParams,
   HarvestFeesParams,
+  SwapFeesToSolParams,
   CreateVaultParams,
   DepositVaultParams,
   WithdrawVaultParams,
@@ -1868,5 +1869,155 @@ export const buildHarvestFeesTransaction = async (
   return {
     transaction: tx,
     message: `Harvest transfer fees for ${mintStr.slice(0, 8)}... (${sourceAccounts.length} source accounts)`,
+  }
+}
+
+/**
+ * [V20] Harvest transfer fees AND swap them to SOL in a single transaction.
+ *
+ * Bundles: create_idempotent(treasury_wsol) + harvest_fees + swap_fees_to_sol.
+ * Set harvest=false to skip harvest (if already harvested separately).
+ */
+export const buildSwapFeesToSolTransaction = async (
+  connection: Connection,
+  params: SwapFeesToSolParams,
+): Promise<TransactionResult> => {
+  const {
+    mint: mintStr,
+    payer: payerStr,
+    minimum_amount_out = 1,
+    harvest = true,
+    sources: sourcesStr,
+  } = params
+
+  const mint = new PublicKey(mintStr)
+  const payer = new PublicKey(payerStr)
+
+  const [bondingCurvePda] = getBondingCurvePda(mint)
+  const [treasuryPda] = getTokenTreasuryPda(mint)
+  const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
+
+  // Treasury's WSOL ATA (SPL Token, not Token-2022)
+  const treasuryWsol = getAssociatedTokenAddressSync(
+    WSOL_MINT,
+    treasuryPda,
+    true,
+    TOKEN_PROGRAM_ID,
+  )
+
+  // Raydium accounts — swap direction is token → WSOL (sell)
+  const raydium = getRaydiumMigrationAccounts(mint)
+  const tokenVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault
+  const wsolVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault
+
+  const provider = makeDummyProvider(connection, payer)
+  const program = new Program(idl as unknown, provider)
+
+  const tx = new Transaction()
+
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+
+  // Create treasury WSOL ATA if needed (idempotent)
+  tx.add(
+    createAssociatedTokenAccountIdempotentInstruction(
+      payer,
+      treasuryWsol,
+      treasuryPda,
+      WSOL_MINT,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
+  )
+
+  // Optionally bundle harvest_fees first
+  if (harvest) {
+    // Auto-discover source accounts with withheld transfer fees
+    let sourceAccounts: PublicKey[]
+
+    if (sourcesStr && sourcesStr.length > 0) {
+      sourceAccounts = sourcesStr.map((s) => new PublicKey(s))
+    } else {
+      try {
+        const largestAccounts = await connection.getTokenLargestAccounts(mint, 'confirmed')
+        const addresses = largestAccounts.value.map((a) => a.address)
+
+        if (addresses.length > 0) {
+          const accountInfos = await connection.getMultipleAccountsInfo(addresses)
+          sourceAccounts = []
+
+          for (let i = 0; i < addresses.length; i++) {
+            const info = accountInfos[i]
+            if (!info) continue
+            try {
+              const account = unpackAccount(addresses[i], info, TOKEN_2022_PROGRAM_ID)
+              const feeAmount = getTransferFeeAmount(account)
+              if (feeAmount && feeAmount.withheldAmount > BigInt(0)) {
+                sourceAccounts.push(addresses[i])
+              }
+            } catch {
+              // Not a Token-2022 account or can't decode — skip
+            }
+          }
+        } else {
+          sourceAccounts = []
+        }
+      } catch {
+        sourceAccounts = []
+      }
+    }
+
+    const harvestIx = await program.methods
+      .harvestFees()
+      .accounts({
+        payer,
+        mint,
+        bondingCurve: bondingCurvePda,
+        tokenTreasury: treasuryPda,
+        treasuryTokenAccount,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      } as any)
+      .remainingAccounts(
+        sourceAccounts.map((pubkey) => ({
+          pubkey,
+          isSigner: false,
+          isWritable: true,
+        })),
+      )
+      .instruction()
+
+    tx.add(harvestIx)
+  }
+
+  // swap_fees_to_sol instruction
+  const swapIx = await program.methods
+    .swapFeesToSol(new BN(minimum_amount_out.toString()))
+    .accounts({
+      payer,
+      mint,
+      bondingCurve: bondingCurvePda,
+      treasury: treasuryPda,
+      treasuryTokenAccount,
+      treasuryWsol,
+      raydiumProgram: getRaydiumCpmmProgram(),
+      raydiumAuthority: raydium.raydiumAuthority,
+      ammConfig: getRaydiumAmmConfig(),
+      poolState: raydium.poolState,
+      tokenVault,
+      wsolVault,
+      wsolMint: WSOL_MINT,
+      observationState: raydium.observationState,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .instruction()
+
+  tx.add(swapIx)
+  await finalizeTransaction(connection, tx, payer)
+
+  return {
+    transaction: tx,
+    message: `Swap harvested fees to SOL for ${mintStr.slice(0, 8)}...${harvest ? ' (harvest + swap)' : ''}`,
   }
 }

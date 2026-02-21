@@ -16,6 +16,12 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.7
+
+- **V20 Swap Fees to SOL** — New `buildSwapFeesToSolTransaction` bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic transaction. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL unwrapped to SOL, proceeds added to `treasury.sol_balance` and tracked in `treasury.harvested_fees`. Set `harvest=false` to skip harvest if already done separately. New type: `SwapFeesToSolParams`.
+- **Vault ordering bug fix** — Fixed `validate_pool_accounts` vault ordering in both `swap_fees_to_sol` and `execute_auto_buyback` handlers. Vaults are now passed in pool order (by mint pubkey) instead of swap direction, preventing false validation failures for tokens where `mint < WSOL` (~2.6% of tokens).
+- **28 instructions** — IDL updated to v3.7.7 (28 instructions, up from 27).
+
 ### v3.7.4
 
 - **V28 Migration Payer Reimbursement** — The on-chain program now snapshots the payer's lamports before and after Raydium CPIs, then reimburses the exact migration cost from the treasury. Net cost to payer: 0 SOL. `MIN_MIGRATION_SOL` (1.5 SOL safety floor) replaces the old `RAYDIUM_POOL_CREATION_FEE` (0.15 SOL) constant. The inline auto-migrate path in `buildBuyTransactionInternal` has been collapsed into a single `buildMigrateTransaction()` call (~50 lines removed). IDL updated to v3.7.1. 36 Kani proofs all passing on program v3.7.1.
@@ -176,6 +182,7 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 |----------|-------------|
 | `buildAutoBuybackTransaction(connection, params)` | Trigger treasury buyback when price < 80% of baseline. Pre-checks all conditions client-side. |
 | `buildHarvestFeesTransaction(connection, params)` | Harvest Token-2022 transfer fees into treasury. Auto-discovers source accounts or accepts explicit list. |
+| `buildSwapFeesToSolTransaction(connection, params)` | Swap harvested transfer fee tokens to SOL via Raydium. Bundles harvest + swap in one atomic tx. |
 
 ### SAID Protocol
 
@@ -329,6 +336,9 @@ const { transaction } = await buildDirectBuyTransaction(connection, {
 // Migrate (permissionless — anyone can trigger for bonding-complete tokens, treasury reimburses payer)
 { mint: string, payer: string }
 
+// Swap Fees to SOL (permissionless — bundles harvest + swap, treasury reimburses)
+{ mint: string, payer: string, minimum_amount_out?: number, harvest?: boolean, sources?: string[] }
+
 // Rewards (optional vault routing)
 { user: string, vault?: string }                                       // claim protocol rewards
 ```
@@ -375,7 +385,7 @@ npx tsx tests/test_e2e.ts
 
 Expected output: `RESULTS: 32 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), harvest transfer fees (auto-discovery), auto-buyback (pre-checks + cooldown verification), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), harvest transfer fees (auto-discovery), swap fees to SOL (harvest + Raydium swap in one tx), auto-buyback (pre-checks + cooldown verification), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
 
 A separate devnet E2E test (`tests/test_devnet_e2e.ts`) validates the full lifecycle against Solana devnet with `TORCH_NETWORK=devnet`. A tiers test (`tests/test_tiers.ts`) validates the full lifecycle across all three graduation tiers (Spark/Flame/Torch) including harvest and buyback.
 

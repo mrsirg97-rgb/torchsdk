@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.7.3"
+version: "4.7.4"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -32,11 +32,11 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.7.6
+        package: torchsdk@^3.7.7
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.7.3"
+  version: "4.7.4"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -186,7 +186,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.7.6), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.7.7), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -289,7 +289,7 @@ const result = await confirmTransaction(connection, signature, controller.public
 - **Migration** -- `buildMigrateTransaction` (permissionless -- anyone can trigger for bonding-complete tokens). Buy transactions that complete bonding automatically include a `migrationTransaction` in the result (`BuyTransactionResult.migrationTransaction`) -- send it right after the buy. If skipped, anyone can migrate later via `buildMigrateTransaction`.
 - **Lending** -- `buildBorrowTransaction` (vault-routed), `buildRepayTransaction` (vault-routed), `buildLiquidateTransaction`
 - **Rewards** -- `buildClaimProtocolRewardsTransaction` (vault-routed, epoch-based)
-- **Treasury Cranks** -- `buildAutoBuybackTransaction` (permissionless buyback when price < 80% baseline, full client-side pre-checks), `buildHarvestFeesTransaction` (permissionless Token-2022 transfer fee harvesting, auto-discovers source accounts)
+- **Treasury Cranks** -- `buildAutoBuybackTransaction` (permissionless buyback when price < 80% baseline, full client-side pre-checks), `buildHarvestFeesTransaction` (permissionless Token-2022 transfer fee harvesting, auto-discovers source accounts), `buildSwapFeesToSolTransaction` (swap harvested tokens to SOL via Raydium, bundles harvest + swap in one atomic tx)
 - **SAID Protocol** -- `verifySaid`, `confirmTransaction`
 
 SDK source: [github.com/mrsirg97-rgb/torchsdk](https://github.com/mrsirg97-rgb/torchsdk)

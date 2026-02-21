@@ -2,7 +2,7 @@
   "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
   "metadata": {
     "name": "torch_market",
-    "version": "3.7.1",
+    "version": "3.7.2",
     "spec": "0.1.0",
     "description": "torch.market"
   },
@@ -4009,6 +4009,235 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "swap_fees_to_sol",
+      "docs": [
+        "[V20] Swap harvested transfer fee tokens to SOL via Raydium.",
+        "Sells treasury's Token-2022 tokens for SOL. Permissionless."
+      ],
+      "discriminator": [
+        138,
+        113,
+        240,
+        196,
+        158,
+        157,
+        10,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Anyone can trigger (permissionless)"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Token mint (Token-2022)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "bonding_curve",
+          "docs": [
+            "Bonding curve (must be migrated + Token-2022)"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "docs": [
+            "Token treasury (sells tokens, receives SOL)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_token_account",
+          "docs": [
+            "Treasury's Token-2022 ATA (source of harvested tokens)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "treasury"
+              },
+              {
+                "kind": "account",
+                "path": "token_2022_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "treasury_wsol",
+          "docs": [
+            "Treasury's WSOL ATA (receives swap proceeds, then closed)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "raydium_program",
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+        },
+        {
+          "name": "raydium_authority"
+        },
+        {
+          "name": "amm_config",
+          "docs": [
+            "Raydium AMM config — constrained to prevent pool substitution attacks"
+          ],
+          "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
+        },
+        {
+          "name": "pool_state",
+          "docs": [
+            "Raydium pool state — constrained via PDA derivation"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_vault",
+          "docs": [
+            "Pool's token vault — constrained via PDA derivation"
+          ],
+          "writable": true
+        },
+        {
+          "name": "wsol_vault",
+          "docs": [
+            "Pool's WSOL vault — constrained via PDA derivation"
+          ],
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "docs": [
+            "WSOL mint"
+          ],
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "observation_state",
+          "docs": [
+            "Raydium observation state — constrained via PDA derivation"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "docs": [
+            "SPL Token program (for WSOL operations)"
+          ]
+        },
+        {
+          "name": "token_2022_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "minimum_amount_out",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "transfer_authority",

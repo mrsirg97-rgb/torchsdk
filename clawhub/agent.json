@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.7.3",
+  "version": "4.7.4",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -39,7 +39,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.7.6",
+        "package": "torchsdk@^3.7.7",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
@@ -203,6 +203,10 @@
     {
       "name": "TORCH_HARVEST_FEES",
       "description": "Harvest accumulated Token-2022 transfer fees (1%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
+    },
+    {
+      "name": "TORCH_SWAP_FEES_TO_SOL",
+      "description": "Swap harvested transfer fee tokens to SOL via Raydium CPMM. Permissionless -- anyone can trigger after migration. Bundles harvest + swap in one atomic transaction. SOL proceeds added to treasury for buybacks."
     }
   ],
   "constants": {

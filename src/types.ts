@@ -296,6 +296,20 @@ export interface HarvestFeesParams {
   sources?: string[]
 }
 
+export interface SwapFeesToSolParams {
+  /** Token mint address */
+  mint: string
+  /** Payer wallet (permissionless — anyone can trigger) */
+  payer: string
+  /** Minimum SOL out from the swap (slippage protection, default 1) */
+  minimum_amount_out?: number
+  /** Bundle harvest_fees in the same transaction (default true) */
+  harvest?: boolean
+  /** Optional list of token account addresses to harvest from.
+   *  Only used when harvest=true. If omitted, auto-discovers. */
+  sources?: string[]
+}
+
 // ============================================================================
 // Transaction Results
 // ============================================================================

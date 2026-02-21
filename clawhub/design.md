@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.6.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.7.
 
 ## Overview
 
@@ -36,6 +36,7 @@ The SDK is designed for AI agent integration. The core safety primitive is the *
 │                          │  │  buildClaimProtocolRewardsTx│
 │                          │  │  buildAutoBuybackTx()      │
 │                          │  │  buildHarvestFeesTx()      │
+│                          │  │  buildSwapFeesToSolTx()    │
 │                          │  │  buildCreateVaultTx()      │
 │                          │  │  buildDepositVaultTx()     │
 │                          │  │  buildWithdrawVaultTx()    │
@@ -70,12 +71,12 @@ src/
 ├── constants.ts        Program ID, PDA seeds, token constants, blacklist, dynamic network
 ├── program.ts          Anchor IDL, PDA derivation, on-chain types, math
 ├── tokens.ts           Read-only queries (tokens, holders, vault, lending, pool price)
-├── transactions.ts     Transaction builders (buy, sell, vault, lending, migrate, buyback, harvest)
+├── transactions.ts     Transaction builders (buy, sell, vault, lending, migrate, buyback, harvest, swap fees)
 ├── quotes.ts           Buy/sell quote calculations (no RPC write)
 ├── said.ts             SAID Protocol integration (verify, confirm)
 ├── gateway.ts          Irys metadata fetch with fallback
 ├── ephemeral.ts        Ephemeral agent (disposable wallet helper)
-└── torch_market.json   Anchor IDL (v3.7.1, 27 instructions)
+└── torch_market.json   Anchor IDL (v3.7.7, 28 instructions)
 ```
 
 ### Dependency Graph
@@ -245,6 +246,7 @@ CREATE → BONDING → COMPLETE → MIGRATE → DEX TRADING
 
 - `buildAutoBuybackTransaction` — trigger treasury buyback when pool price < 80% of migration baseline. Full client-side pre-checks (migration, baseline, cooldown, supply floor, price threshold, dust). Buys tokens with treasury SOL on Raydium and burns them.
 - `buildHarvestFeesTransaction` — harvest accumulated Token-2022 transfer fees from token accounts into the treasury. Auto-discovers source accounts with withheld fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. Falls back gracefully if RPC doesn't support discovery. Optional `sources` param for explicit accounts.
+- `buildSwapFeesToSolTransaction` — swap harvested transfer fee tokens to SOL via Raydium CPMM. Bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic transaction. SOL proceeds added to `treasury.sol_balance` and tracked in `treasury.harvested_fees`. Set `harvest=false` to skip harvest if already done separately.
 
 ### Community Features
 
@@ -427,3 +429,4 @@ Expected result: **32 passed, 0 failed** (mainnet fork). Tiers test covers harve
 | 3.7.2 | **Buyback Pre-Checks + Harvest Auto-Discovery.** `buildAutoBuybackTransaction` now validates all on-chain conditions client-side before building the tx: migration status, baseline initialization, cooldown interval, supply floor (500M), price vs threshold (80% of baseline), minimum buyback amount (0.01 SOL). Descriptive errors for each failure. `buildHarvestFeesTransaction` auto-discovers source accounts with withheld fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. New optional `sources` field for explicit accounts. Dynamic compute budget (200k + 20k per source). Graceful RPC fallback when `getTokenLargestAccounts` is unsupported (e.g. Surfpool). E2E tests for harvest and buyback across all three test suites. |
 | 3.7.3 | **`fetchWithFallback` resilience.** Improved metadata fetch with gateway URL fallback. |
 | 3.7.6 | **V28 Migration Payer Reimbursement.** `buildBuyTransactionInternal` auto-migrate path collapsed into a single `buildMigrateTransaction()` call — program now handles treasury reimbursement internally (payer fronts ~1 SOL, treasury reimburses exact cost, net 0). Removed ~50 lines of inline migration builder. IDL updated to v3.7.1 (program v3.7.1: `MIN_MIGRATION_SOL` replaces `RAYDIUM_POOL_CREATION_FEE`, payer lamport snapshot + reimbursement in migration handler). 36 Kani proofs all passing on v3.7.1. |
+| 3.7.7 | **V20 Swap Fees to SOL.** New `buildSwapFeesToSolTransaction` — bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic tx. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL unwrapped to SOL, proceeds added to `treasury.sol_balance` and tracked in `treasury.harvested_fees`. New type: `SwapFeesToSolParams`. Fixed `validate_pool_accounts` vault ordering bug in `swap_fees_to_sol` and `execute_auto_buyback` — vaults now passed in pool order (by mint pubkey) instead of swap direction. IDL updated to v3.7.7 (28 instructions). |
