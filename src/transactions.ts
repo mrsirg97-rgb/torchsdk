@@ -1872,10 +1872,15 @@ export const buildHarvestFeesTransaction = async (
   }
 }
 
+/** Max transaction size in bytes (Solana packet data limit) */
+const PACKET_DATA_SIZE = 1232
+
 /**
- * [V20] Harvest transfer fees AND swap them to SOL in a single transaction.
+ * [V20] Harvest transfer fees AND swap them to SOL.
  *
- * Bundles: create_idempotent(treasury_wsol) + harvest_fees + swap_fees_to_sol.
+ * Tries to bundle: create_idempotent(treasury_wsol) + harvest_fees + swap_fees_to_sol.
+ * If the combined transaction exceeds the 1232-byte limit (many source accounts),
+ * automatically splits into a harvest-only tx + swap-only tx via additionalTransactions.
  * Set harvest=false to skip harvest (if already harvested separately).
  */
 export const buildSwapFeesToSolTransaction = async (
@@ -1913,27 +1918,69 @@ export const buildSwapFeesToSolTransaction = async (
   const provider = makeDummyProvider(connection, payer)
   const program = new Program(idl as unknown, provider)
 
-  const tx = new Transaction()
+  // Helper: build the harvest instruction with given sources
+  const buildHarvestIx = async (sources: PublicKey[]) => {
+    return program.methods
+      .harvestFees()
+      .accounts({
+        payer,
+        mint,
+        bondingCurve: bondingCurvePda,
+        tokenTreasury: treasuryPda,
+        treasuryTokenAccount,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      } as any)
+      .remainingAccounts(
+        sources.map((pubkey) => ({
+          pubkey,
+          isSigner: false,
+          isWritable: true,
+        })),
+      )
+      .instruction()
+  }
 
-  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+  // Helper: build the swap instruction
+  const buildSwapIx = async () => {
+    return program.methods
+      .swapFeesToSol(new BN(minimum_amount_out.toString()))
+      .accounts({
+        payer,
+        mint,
+        bondingCurve: bondingCurvePda,
+        treasury: treasuryPda,
+        treasuryTokenAccount,
+        treasuryWsol,
+        raydiumProgram: getRaydiumCpmmProgram(),
+        raydiumAuthority: raydium.raydiumAuthority,
+        ammConfig: getRaydiumAmmConfig(),
+        poolState: raydium.poolState,
+        tokenVault,
+        wsolVault,
+        wsolMint: WSOL_MINT,
+        observationState: raydium.observationState,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .instruction()
+  }
 
-  // Create treasury WSOL ATA if needed (idempotent)
-  tx.add(
-    createAssociatedTokenAccountIdempotentInstruction(
-      payer,
-      treasuryWsol,
-      treasuryPda,
-      WSOL_MINT,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID,
-    ),
+  // Helper: create WSOL ATA instruction
+  const createWsolAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    payer,
+    treasuryWsol,
+    treasuryPda,
+    WSOL_MINT,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   )
 
-  // Optionally bundle harvest_fees first
-  if (harvest) {
-    // Auto-discover source accounts with withheld transfer fees
-    let sourceAccounts: PublicKey[]
+  // Discover source accounts
+  let sourceAccounts: PublicKey[] = []
 
+  if (harvest) {
     if (sourcesStr && sourcesStr.length > 0) {
       sourceAccounts = sourcesStr.map((s) => new PublicKey(s))
     } else {
@@ -1943,7 +1990,6 @@ export const buildSwapFeesToSolTransaction = async (
 
         if (addresses.length > 0) {
           const accountInfos = await connection.getMultipleAccountsInfo(addresses)
-          sourceAccounts = []
 
           for (let i = 0; i < addresses.length; i++) {
             const info = accountInfos[i]
@@ -1958,66 +2004,51 @@ export const buildSwapFeesToSolTransaction = async (
               // Not a Token-2022 account or can't decode — skip
             }
           }
-        } else {
-          sourceAccounts = []
         }
       } catch {
         sourceAccounts = []
       }
     }
-
-    const harvestIx = await program.methods
-      .harvestFees()
-      .accounts({
-        payer,
-        mint,
-        bondingCurve: bondingCurvePda,
-        tokenTreasury: treasuryPda,
-        treasuryTokenAccount,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      } as any)
-      .remainingAccounts(
-        sourceAccounts.map((pubkey) => ({
-          pubkey,
-          isSigner: false,
-          isWritable: true,
-        })),
-      )
-      .instruction()
-
-    tx.add(harvestIx)
   }
 
-  // swap_fees_to_sol instruction
-  const swapIx = await program.methods
-    .swapFeesToSol(new BN(minimum_amount_out.toString()))
-    .accounts({
-      payer,
-      mint,
-      bondingCurve: bondingCurvePda,
-      treasury: treasuryPda,
-      treasuryTokenAccount,
-      treasuryWsol,
-      raydiumProgram: getRaydiumCpmmProgram(),
-      raydiumAuthority: raydium.raydiumAuthority,
-      ammConfig: getRaydiumAmmConfig(),
-      poolState: raydium.poolState,
-      tokenVault,
-      wsolVault,
-      wsolMint: WSOL_MINT,
-      observationState: raydium.observationState,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      token2022Program: TOKEN_2022_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-    } as any)
-    .instruction()
+  // Try combined transaction first
+  const tx = new Transaction()
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+  tx.add(createWsolAtaIx)
 
-  tx.add(swapIx)
+  if (harvest && sourceAccounts.length > 0) {
+    tx.add(await buildHarvestIx(sourceAccounts))
+  }
+  tx.add(await buildSwapIx())
   await finalizeTransaction(connection, tx, payer)
 
+  // Check if it fits in a single transaction
+  const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false })
+  if (serialized.length <= PACKET_DATA_SIZE) {
+    return {
+      transaction: tx,
+      message: `Swap harvested fees to SOL for ${mintStr.slice(0, 8)}...${harvest ? ' (harvest + swap)' : ''}`,
+    }
+  }
+
+  // Too large — split into harvest tx + swap-only tx
+  // Transaction 1: harvest with all source accounts
+  const harvestTx = new Transaction()
+  const computeUnits = 200_000 + 20_000 * sourceAccounts.length
+  harvestTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }))
+  harvestTx.add(await buildHarvestIx(sourceAccounts))
+  await finalizeTransaction(connection, harvestTx, payer)
+
+  // Transaction 2: swap only (no harvest — tokens already in treasury ATA)
+  const swapTx = new Transaction()
+  swapTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+  swapTx.add(createWsolAtaIx)
+  swapTx.add(await buildSwapIx())
+  await finalizeTransaction(connection, swapTx, payer)
+
   return {
-    transaction: tx,
-    message: `Swap harvested fees to SOL for ${mintStr.slice(0, 8)}...${harvest ? ' (harvest + swap)' : ''}`,
+    transaction: harvestTx,
+    additionalTransactions: [swapTx],
+    message: `Harvest + swap fees to SOL for ${mintStr.slice(0, 8)}... (split: ${sourceAccounts.length} sources)`,
   }
 }

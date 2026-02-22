@@ -316,6 +316,9 @@ export interface SwapFeesToSolParams {
 
 export interface TransactionResult {
   transaction: Transaction
+  /** Additional transactions when a single tx exceeds the size limit.
+   *  When present, send all transactions in order: transaction first, then these. */
+  additionalTransactions?: Transaction[]
   message: string
 }
 
