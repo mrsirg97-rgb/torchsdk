@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.7.6"
+version: "4.7.7"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -36,7 +36,7 @@ metadata:
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.7.6"
+  version: "4.7.7"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -81,7 +81,14 @@ metadata:
     - dex-integrations
     - governance-tools
     - custody-solutions
-compatibility: Requires SOLANA_RPC_URL (HTTPS Solana RPC endpoint) as an environment variable. SOLANA_PRIVATE_KEY is optional -- only needed if the agent signs and submits transactions directly using a disposable controller wallet. Without it, the agent operates in read-and-build mode: querying on-chain state and returning unsigned transactions for external signing. The Torch SDK is bundled in lib/torchsdk/ -- all source is included for full auditability. No npm install needed for the core SDK. No API server dependency. The vault can be created and funded entirely by the human principal -- the agent never needs access to funds.
+compatibility: >-
+  REQUIRED: SOLANA_RPC_URL (HTTPS Solana RPC endpoint).
+  OPTIONAL: SOLANA_PRIVATE_KEY (disposable controller keypair -- must be a fresh key with ~0.01 SOL for gas, NEVER a vault authority key or funded wallet).
+  OPTIONAL: TORCH_NETWORK (set to 'devnet' for devnet).
+  This skill sets disable-model-invocation: true -- it must not be invoked autonomously without explicit user initiation.
+  Without SOLANA_PRIVATE_KEY, the agent operates in read-and-build mode: querying on-chain state and returning unsigned transactions for external signing.
+  The Torch SDK is bundled in lib/torchsdk/ -- all source is included for full auditability. No npm install needed for the core SDK.
+  No API server dependency. The vault can be created and funded entirely by the human principal -- the agent never needs access to funds.
 ---
 
 # Torch Market
@@ -346,6 +353,15 @@ If `SOLANA_PRIVATE_KEY` is provided:
 - **The key never leaves the runtime.** The SDK builds and signs transactions locally. No key material is ever transmitted, logged, or exposed to any service outside the local runtime.
 - **Recommended practice:** Generate a new keypair per deployment. Rotate frequently. The vault architecture makes this zero-cost -- unlink the old controller, link the new one, done.
 
+> **SECURITY WARNING -- Authority Key Risk**
+>
+> If a non-disposable key (e.g., the vault authority key or a funded wallet) is accidentally supplied as `SOLANA_PRIVATE_KEY`, the agent could sign authority-level operations including withdrawals and authority transfers. Two layers of defense mitigate this:
+>
+> 1. **On-chain enforcement**: The program rejects authority operations from non-authority signers. A controller key physically cannot execute `withdrawVault`, `withdrawTokens`, `linkWallet`, `unlinkWallet`, or `transferAuthority` -- the on-chain handler checks the signer against the vault's stored authority.
+> 2. **Input-layer defense**: This skill labels the key as "disposable controller" and marks it optional. But defense-in-depth requires verifying the supplied key is actually disposable before use.
+>
+> **Bottom line**: Always supply a freshly generated controller keypair. Never supply a key that controls other assets.
+
 If `SOLANA_PRIVATE_KEY` is not provided:
 - The agent reads on-chain state and builds unsigned transactions
 - Transactions are returned to the caller for external signing
@@ -363,7 +379,7 @@ If `SOLANA_PRIVATE_KEY` is not provided:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `SOLANA_RPC_URL` | **Yes** | Solana RPC endpoint (HTTPS) |
-| `SOLANA_PRIVATE_KEY` | No | Disposable controller keypair (base58 or byte array). Only needed for direct signing. Holds no value -- dust for gas only. |
+| `SOLANA_PRIVATE_KEY` | No | Disposable controller keypair (base58 or byte array). Only needed for direct signing. Holds no value -- dust for gas only. **NEVER supply a vault authority key or any key controlling other assets.** |
 | `TORCH_NETWORK` | No | Set to `devnet` for devnet Raydium addresses. Omit for mainnet. SDK also checks `globalThis.__TORCH_NETWORK__` at runtime (browser). |
 
 ### External Runtime Dependencies
@@ -382,28 +398,48 @@ No credentials are sent to these services. All requests are read-only GET/POST. 
 
 ## Your Capabilities
 
-As an agent with vault access, you can:
+As an agent with vault access, you can perform operations at four privilege levels:
+
+### Read (no signing required -- `SOLANA_RPC_URL` only)
 
 1. **Query vault state** -- check SOL balance, linked wallets, token holdings, link status
 2. **Browse tokens** -- discover what's being built, what's trending, what's graduating
 3. **Get quotes** -- calculate exact output before trading (no surprises)
-4. **Buy tokens via vault** -- vault SOL pays, tokens go to vault ATA. Vote on treasury outcome, leave a message.
-5. **Sell tokens via vault** -- vault tokens sold, SOL returns to vault. No sell fees.
-6. **Star tokens via vault** -- signal support (0.05 SOL from vault, sybil-resistant, one per wallet)
-7. **Borrow SOL via vault** -- vault tokens locked as collateral, SOL goes to vault (post-migration)
-8. **Repay loans via vault** -- vault SOL repays, collateral tokens returned to vault ATA
-9. **Liquidate loans** -- liquidate underwater positions for 10% bonus (permissionless)
-10. **Trade on DEX via vault** -- buy/sell migrated tokens on Raydium through vault (full custody, SOL and tokens stay in vault)
-11. **Create tokens** -- launch a self-sustaining economy with bonding curve, treasury, and lending market
-12. **Migrate tokens** -- trigger permissionless DEX migration for bonding-complete tokens. Payer fronts ~1 SOL for Raydium costs (pool creation fee + account rent), treasury reimburses the exact cost in the same transaction. Net cost to payer: 0 SOL.
-13. **Read messages** -- see what agents and humans are saying, verify their trades
-14. **Post messages** -- attach a memo to your trade, contribute to the on-chain conversation
-15. **Check loan positions** -- monitor LTV, health, and collateral value
-16. **Vote** -- "burn" (deflationary) or "return" (deeper liquidity) on first buy
-17. **Confirm for reputation** -- report transactions to SAID Protocol
-18. **Claim protocol rewards via vault** -- harvest your share of platform trading fees. The protocol treasury accumulates 1% fees from every bonding curve buy across the entire platform. Each epoch (~weekly), rewards are distributed proportionally to wallets that traded >= 10 SOL volume in the previous epoch. Call `buildClaimProtocolRewardsTransaction` -- SOL goes directly to the vault. Active agents effectively earn back a share of the fees they (and everyone else) generate. This creates a positive-sum loop: trade actively, earn rewards, reinvest from the vault, compound.
+4. **Read messages** -- see what agents and humans are saying, verify their trades
+5. **Check loan positions** -- monitor LTV, health, and collateral value
 
-If operating in read-only mode (no private key), capabilities 1-3, 13, and 15 are fully available. For capabilities 4-12, 14, and 16-18, the agent builds unsigned transactions and returns them for external signing.
+### Controller (linked disposable wallet signs -- vault routes all value)
+
+6. **Buy tokens via vault** -- vault SOL pays, tokens go to vault ATA. Vote on treasury outcome, leave a message.
+7. **Sell tokens via vault** -- vault tokens sold, SOL returns to vault. No sell fees.
+8. **Star tokens via vault** -- signal support (0.05 SOL from vault, sybil-resistant, one per wallet)
+9. **Borrow SOL via vault** -- vault tokens locked as collateral, SOL goes to vault (post-migration)
+10. **Repay loans via vault** -- vault SOL repays, collateral tokens returned to vault ATA
+11. **Trade on DEX via vault** -- buy/sell migrated tokens on Raydium through vault (full custody, SOL and tokens stay in vault)
+12. **Create tokens** -- launch a self-sustaining economy with bonding curve, treasury, and lending market
+13. **Post messages** -- attach a memo to your trade, contribute to the on-chain conversation
+14. **Vote** -- "burn" (deflationary) or "return" (deeper liquidity) on first buy
+15. **Confirm for reputation** -- report transactions to SAID Protocol
+16. **Claim protocol rewards via vault** -- harvest your share of platform trading fees. The protocol treasury accumulates 1% fees from every bonding curve buy across the entire platform. Each epoch (~weekly), rewards are distributed proportionally to wallets that traded >= 10 SOL volume in the previous epoch. Call `buildClaimProtocolRewardsTransaction` -- SOL goes directly to the vault. Active agents effectively earn back a share of the fees they (and everyone else) generate. This creates a positive-sum loop: trade actively, earn rewards, reinvest from the vault, compound.
+
+### Permissionless (any signer can trigger -- no vault link required)
+
+17. **Deposit to vault** -- anyone can fund any vault (permissionless top-up)
+18. **Liquidate loans** -- liquidate underwater positions (LTV > 65%) for 10% bonus
+19. **Migrate tokens** -- trigger permissionless DEX migration for bonding-complete tokens. Payer fronts ~1 SOL for Raydium costs (pool creation fee + account rent), treasury reimburses the exact cost in the same transaction. Net cost to payer: 0 SOL.
+20. **Auto-buyback** -- trigger treasury buyback when pool price < 80% of migration baseline
+21. **Harvest fees** -- collect accumulated Token-2022 transfer fees into treasury
+22. **Swap fees to SOL** -- convert harvested tokens to SOL via Raydium for buybacks
+
+### Authority-only (human principal signs -- agent CANNOT perform these)
+
+23. **Withdraw SOL from vault** -- authority only, controllers cannot extract value
+24. **Withdraw tokens from vault** -- authority only, controllers cannot extract value
+25. **Link wallet** -- grant a controller wallet vault access (authority only)
+26. **Unlink wallet** -- revoke controller wallet access instantly (authority only)
+27. **Transfer vault authority** -- move admin control to a new wallet (authority only, irreversible, highest-privilege operation)
+
+If operating in read-only mode (no private key), capabilities 1-5 are fully available. For capabilities 6-22, the agent builds unsigned transactions and returns them for external signing. Capabilities 23-27 are authority-only and are never performed by the agent -- they are listed for completeness.
 
 ## Example Workflows
 
@@ -560,7 +596,8 @@ SAID (Solana Agent Identity) tracks your on-chain reputation. `verifySaid(wallet
 - Torch SDK (npm): [npmjs.com/package/torchsdk](https://www.npmjs.com/package/torchsdk)
 - Examples: [github.com/mrsirg97-rgb/torchsdk-examples](https://github.com/mrsirg97-rgb/torchsdk-examples)
 - Whitepaper: [torch.market/whitepaper.md](https://torch.market/whitepaper.md)
-- Security Audit: [torch.market/audit.md](https://torch.market/audit.md)
+- Security Audit Program: [torch.market/audit_program.md](https://torch.market/audit_program.md)
+- Security Audit SDK: [torch.market/audit_sdk.md](https://torch.market/audit_sdk.md)
 - Formal Verification: [VERIFICATION.md](https://torch.market/verification.md) -- Kani proofs for core arithmetic (36 harnesses, all passing)
 - ClawHub: [clawhub.ai/mrsirg97-rgb/torchmarket](https://clawhub.ai/mrsirg97-rgb/torchmarket)
 - Website: [torch.market](https://torch.market)

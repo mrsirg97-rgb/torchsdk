@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.7.6",
+  "version": "4.7.7",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -24,7 +24,7 @@
       },
       {
         "name": "SOLANA_PRIVATE_KEY",
-        "description": "Disposable controller keypair (base58 or byte array JSON). Optional -- only needed for direct signing. Should be a fresh keypair with ~0.01 SOL for gas. Holds no value. All trading capital lives in the vault. If omitted, the agent operates in read-and-build mode: querying state and returning unsigned transactions for external signing.",
+        "description": "Disposable controller keypair (base58 or byte array JSON). Optional -- only needed for direct signing. Should be a fresh keypair with ~0.01 SOL for gas. Holds no value. All trading capital lives in the vault. If omitted, the agent operates in read-and-build mode: querying state and returning unsigned transactions for external signing. SECURITY: Must be a dedicated disposable controller keypair. NEVER supply a vault authority key or any key controlling other assets. If an authority key were supplied, the agent could sign authority-level operations (withdrawals, authority transfers). On-chain enforcement provides a second layer -- the program rejects authority operations from non-authority signers -- but defense-in-depth requires the correct key at the input layer.",
         "sensitive": true,
         "required": false
       },
@@ -106,7 +106,7 @@
     },
     {
       "name": "TORCH_TRANSFER_VAULT_AUTHORITY",
-      "description": "Transfer vault admin control to a new wallet"
+      "description": "Transfer vault admin control to a new wallet (authority only -- highest-privilege operation, irreversible)"
     },
     {
       "name": "TORCH_GET_VAULT",
@@ -258,7 +258,57 @@
     "core_arithmetic_formally_verified": true,
     "no_rug_mechanics": true,
     "open_source": true,
-    "sdk_audited": true
+    "sdk_audited": true,
+    "autonomous_invocation_blocked": true,
+    "credential_risk_mitigations": [
+      "SOLANA_PRIVATE_KEY must be a fresh disposable controller -- never a vault authority key or funded wallet",
+      "On-chain program rejects authority operations (withdraw, transfer authority, link/unlink) from non-authority signers",
+      "Controller wallets hold ~0.01 SOL dust only -- maximum loss bounded by gas balance",
+      "Vault authority can revoke any controller in one transaction via unlinkWallet",
+      "If an authority key is accidentally supplied, blast radius is limited by on-chain role enforcement"
+    ]
+  },
+  "privilege_levels": {
+    "read": [
+      "TORCH_GET_VAULT",
+      "TORCH_GET_VAULT_FOR_WALLET",
+      "TORCH_GET_VAULT_WALLET_LINK",
+      "TORCH_GET_BUY_QUOTE",
+      "TORCH_GET_SELL_QUOTE",
+      "TORCH_LIST_TOKENS",
+      "TORCH_GET_TOKEN",
+      "TORCH_GET_MESSAGES",
+      "TORCH_VERIFY_SAID",
+      "TORCH_GET_LENDING_INFO",
+      "TORCH_GET_LOAN"
+    ],
+    "controller": [
+      "TORCH_BUY_TOKEN",
+      "TORCH_SELL_TOKEN",
+      "TORCH_STAR_TOKEN",
+      "TORCH_CREATE_TOKEN",
+      "TORCH_BORROW",
+      "TORCH_REPAY",
+      "TORCH_VAULT_SWAP",
+      "TORCH_CLAIM_PROTOCOL_REWARDS",
+      "TORCH_CONFIRM"
+    ],
+    "authority": [
+      "TORCH_CREATE_VAULT",
+      "TORCH_WITHDRAW_VAULT",
+      "TORCH_WITHDRAW_TOKENS",
+      "TORCH_LINK_WALLET",
+      "TORCH_UNLINK_WALLET",
+      "TORCH_TRANSFER_VAULT_AUTHORITY"
+    ],
+    "permissionless": [
+      "TORCH_DEPOSIT_VAULT",
+      "TORCH_LIQUIDATE",
+      "TORCH_MIGRATE",
+      "TORCH_AUTO_BUYBACK",
+      "TORCH_HARVEST_FEES",
+      "TORCH_SWAP_FEES_TO_SOL"
+    ]
   },
   "tags": [
     "solana",
