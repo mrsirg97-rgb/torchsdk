@@ -200,7 +200,7 @@ async function main() {
       const recipientAta = getAssociatedTokenAddressSync(
         newMint,
         recipientPk,
-        false,
+        true,
         TOKEN_2022_PROGRAM_ID,
       )
 

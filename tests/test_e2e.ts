@@ -46,6 +46,7 @@ import {
   buildAutoBuybackTransaction,
   confirmTransaction,
   createEphemeralAgent,
+  getTokenMetadata,
 } from '../src/index'
 import { fetchTokenRaw } from '../src/tokens'
 import * as fs from 'fs'
@@ -154,6 +155,29 @@ const main = async () => {
     fail('buildCreateTokenTransaction', e)
     console.error('Cannot continue without token. Exiting.')
     process.exit(1)
+  }
+
+  // V29: Verify on-chain Token-2022 metadata
+  try {
+    const metadata = await getTokenMetadata(connection, mint)
+    if (!metadata) {
+      fail('Token metadata', 'metadata is null')
+    } else {
+      const checks = [
+        { field: 'name', expected: 'SDK Test Token', actual: metadata.name },
+        { field: 'symbol', expected: 'SDKTEST', actual: metadata.symbol },
+        { field: 'uri', expected: 'https://example.com/test.json', actual: metadata.uri },
+      ]
+      for (const c of checks) {
+        if (c.actual === c.expected) {
+          ok(`Token metadata ${c.field}`, `"${c.actual}"`)
+        } else {
+          fail(`Token metadata ${c.field}`, `expected "${c.expected}", got "${c.actual}"`)
+        }
+      }
+    }
+  } catch (e: any) {
+    fail('Token metadata read', e)
   }
 
   // ------------------------------------------------------------------

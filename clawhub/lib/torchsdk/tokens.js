@@ -41,7 +41,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchTokenRaw = exports.getVaultWalletLink = exports.getVaultForWallet = exports.getVault = exports.getLoanPosition = exports.getLendingInfo = exports.getMessages = exports.getHolders = exports.getToken = exports.getTokens = void 0;
+exports.fetchTokenRaw = exports.getVaultWalletLink = exports.getVaultForWallet = exports.getVault = exports.getLoanPosition = exports.getLendingInfo = exports.getMessages = exports.getHolders = exports.getToken = exports.getTokenMetadata = exports.getTokens = void 0;
 const web3_js_1 = require("@solana/web3.js");
 const anchor_1 = require("@coral-xyz/anchor");
 const spl_token_1 = require("@solana/spl-token");
@@ -236,6 +236,25 @@ const getTokens = async (connection, params = {}) => {
     };
 };
 exports.getTokens = getTokens;
+/**
+ * Get on-chain Token-2022 metadata for a token.
+ *
+ * Reads name, symbol, and uri directly from the mint's TokenMetadata extension.
+ * Returns null if the mint has no metadata (legacy pre-V29 tokens).
+ */
+const getTokenMetadata = async (connection, mintStr) => {
+    const mint = new web3_js_1.PublicKey(mintStr);
+    const metadata = await (0, spl_token_1.getTokenMetadata)(connection, mint, 'confirmed', constants_1.TOKEN_2022_PROGRAM_ID);
+    if (!metadata)
+        return null;
+    return {
+        name: metadata.name,
+        symbol: metadata.symbol,
+        uri: metadata.uri,
+        mint: mintStr,
+    };
+};
+exports.getTokenMetadata = getTokenMetadata;
 /**
  * Get detailed info for a single token.
  */

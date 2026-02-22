@@ -30,6 +30,7 @@ import {
   buildVaultSwapTransaction,
   buildCreateVaultTransaction,
   buildDepositVaultTransaction,
+  getTokenMetadata,
 } from '../src/index'
 import { fetchTokenRaw } from '../src/tokens'
 import * as fs from 'fs'
@@ -133,6 +134,29 @@ const main = async () => {
     }
   } catch (e: any) {
     fail('bonding_target read', e)
+  }
+
+  // V29: Verify on-chain Token-2022 metadata
+  try {
+    const metadata = await getTokenMetadata(connection, sparkMint)
+    if (!metadata) {
+      fail('Token metadata', 'metadata is null')
+    } else {
+      const checks = [
+        { field: 'name', expected: 'Spark Test', actual: metadata.name },
+        { field: 'symbol', expected: 'SPARK', actual: metadata.symbol },
+        { field: 'uri', expected: 'https://example.com/spark.json', actual: metadata.uri },
+      ]
+      for (const c of checks) {
+        if (c.actual === c.expected) {
+          ok(`Token metadata ${c.field}`, `"${c.actual}"`)
+        } else {
+          fail(`Token metadata ${c.field}`, `expected "${c.expected}", got "${c.actual}"`)
+        }
+      }
+    }
+  } catch (e: any) {
+    fail('Token metadata read', e)
   }
 
   // ==================================================================

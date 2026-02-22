@@ -14,6 +14,7 @@
 export {
   getTokens,
   getToken,
+  getTokenMetadata,
   getHolders,
   getMessages,
   getLendingInfo,
@@ -103,6 +104,7 @@ export type {
   AutoBuybackParams,
   HarvestFeesParams,
   SwapFeesToSolParams,
+  TokenMetadataResult,
 } from './types'
 
 // Constants (for advanced usage)

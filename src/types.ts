@@ -311,6 +311,21 @@ export interface SwapFeesToSolParams {
 }
 
 // ============================================================================
+// V29: Token Metadata
+// ============================================================================
+
+export interface TokenMetadataResult {
+  /** Token name from on-chain metadata */
+  name: string
+  /** Token symbol from on-chain metadata */
+  symbol: string
+  /** Token metadata URI */
+  uri: string
+  /** Mint address */
+  mint: string
+}
+
+// ============================================================================
 // Transaction Results
 // ============================================================================
 

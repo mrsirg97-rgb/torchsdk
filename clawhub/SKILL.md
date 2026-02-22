@@ -32,7 +32,7 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.7.10
+        package: torchsdk@^3.7.11
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
@@ -186,7 +186,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.7.10), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.7.11), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -281,7 +281,7 @@ const result = await confirmTransaction(connection, signature, controller.public
 
 ### SDK Functions
 
-- **Token data** -- `getTokens`, `getToken`, `getHolders`, `getMessages`, `getLendingInfo`, `getLoanPosition`
+- **Token data** -- `getTokens`, `getToken`, `getTokenMetadata`, `getHolders`, `getMessages`, `getLendingInfo`, `getLoanPosition`
 - **Quotes** -- `getBuyQuote`, `getSellQuote` (simulate trades before committing)
 - **Vault queries** -- `getVault`, `getVaultForWallet`, `getVaultWalletLink`
 - **Vault management** -- `buildCreateVaultTransaction`, `buildDepositVaultTransaction`, `buildWithdrawVaultTransaction`, `buildWithdrawTokensTransaction`, `buildLinkWalletTransaction`, `buildUnlinkWalletTransaction`, `buildTransferAuthorityTransaction`
@@ -499,7 +499,7 @@ Every token page has an on-chain message board. Messages are SPL Memo transactio
 | Utilization Cap | 50% of treasury |
 | Min Borrow | 0.1 SOL |
 
-Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 transfer fee applies on collateral deposits and withdrawals (~2% round-trip).
+Collateral value is calculated from Raydium pool reserves. The 0.1% Token-2022 transfer fee applies on collateral deposits and withdrawals (~0.2% round-trip).
 
 ### Protocol Constants
 
@@ -511,7 +511,7 @@ Collateral value is calculated from Raydium pool reserves. The 1% Token-2022 tra
 | Protocol Fee | 1% on buys, 0% on sells |
 | Max Wallet | 2% during bonding |
 | Star Cost | 0.05 SOL |
-| Token-2022 Transfer Fee | 1% on all transfers (post-migration) |
+| Token-2022 Transfer Fee | 0.1% on all transfers (post-migration) |
 | Buyback Trigger | Price < 80% of migration baseline |
 | Supply Floor | 500M tokens |
 | Vanity Suffix | All token addresses end in `tm` |

@@ -220,7 +220,7 @@ All 36 harnesses pass. Most complete in under 1 second; the slowest (`verify_tra
 | `TREASURY_SOL_MAX_BPS` | 2000 | 20% max treasury SOL rate (flat, all tiers) |
 | `DEV_WALLET_SHARE_BPS` | 2500 | 25% of protocol fee to dev |
 | `BURN_RATE_BPS` | 1000 | 10% token burn on buy |
-| `TRANSFER_FEE_BPS` | 100 | 1% Token-2022 transfer fee |
+| `TRANSFER_FEE_BPS` | 10 | 0.1% Token-2022 transfer fee |
 | `DEFAULT_INTEREST_RATE_BPS` | 200 | 2% lending interest per epoch |
 | `DEFAULT_LIQUIDATION_BONUS_BPS` | 1000 | 10% liquidation bonus |
 | `RATIO_PRECISION` | 1,000,000,000 | 1e9 ratio scale factor |

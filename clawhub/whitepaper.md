@@ -36,7 +36,7 @@ Per-Token Economy:
   │                            Migration ──── Raydium DEX Pool
   │
   └── Token-2022 Extensions
-       ├── Transfer Fee (1%)
+       ├── Transfer Fee (0.1%)
        └── Confidential Transfer (optional)
 
 Protocol Layer:
@@ -133,7 +133,7 @@ New buyers may also be more likely to purchase a token seeing that it is "safer"
 
 - The fee structure itself (sybiling costs more in fees)
 - The community treasury (even sybil buyers fund the collective)
-- Post-migration transfer fees (every transfer costs 1%)
+- Post-migration transfer fees (every transfer costs 0.1%)
 
 ---
 
@@ -148,7 +148,7 @@ Migration is **permissionless** — any wallet can trigger the migration for any
 The migration is executed as a two-step atomic process within a single transaction:
 
 1. **Fund WSOL**: Wrap the bonding curve's SOL reserves into a WSOL token account
-2. **Migrate to DEX**: Vote finalization, pool creation on Raydium CPMM, liquidity provision (SOL + tokens), LP token burn (liquidity locked forever), transfer fee activation (1% on all future transfers)
+2. **Migrate to DEX**: Vote finalization, pool creation on Raydium CPMM, liquidity provision (SOL + tokens), LP token burn (liquidity locked forever), transfer fee activation (0.1% on all future transfers)
 
 When your token bonds, anyone can complete the migration. The community is not dependent on the creator or any centralized operator.
 
@@ -156,21 +156,21 @@ When your token bonds, anyone can complete the migration. The community is not d
 
 ## 5. Post-Migration: Automatic Buybacks and Burns
 
-Once a token migrates to Raydium, the treasury mechanics continue working for holders through the **1% transfer fee**.
+Once a token migrates to Raydium, the treasury mechanics continue working for holders through the **0.1% transfer fee**.
 
-### The 1% Transfer Fee (Token-2022)
+### The 0.1% Transfer Fee (Token-2022)
 
-All `torch.market` tokens use Solana's Token-2022 standard with a built-in **1% transfer fee**. This fee is collected on every transfer — wallet to wallet, DEX trades, everything.
+All `torch.market` tokens use Solana's Token-2022 standard with a built-in **0.1% transfer fee**. This fee is collected on every transfer — wallet to wallet, DEX trades, everything.
 
 ```
 User transfers 100 tokens
         │
-        └── 1% (1 token) → Withheld in mint
+        └── 0.1% (0.1 token) → Withheld in mint
                             │
                             └── Harvested → Token Treasury
 ```
 
-The transfer fee is not extracted from the sender or receiver as a separate charge — it's automatically withheld from the transferred amount. If you send 100 tokens, the recipient receives 99 and 1 is held for the treasury.
+The transfer fee is not extracted from the sender or receiver as a separate charge — it's automatically withheld from the transferred amount. If you send 1000 tokens, the recipient receives 999 and 1 is held for the treasury.
 
 ### Harvest and Buyback Cycle
 
@@ -195,7 +195,7 @@ This creates a continuous deflationary pressure. Every time someone trades the t
 | Phase | SOL Source | Token Destination |
 |-------|-----------|-------------------|
 | Bonding | 1% fee + 20%→5% of buys (dynamic) | Community treasury (vote vault) |
-| DEX | 1% transfer fee (harvested) | Burned (or held at floor) |
+| DEX | 0.1% transfer fee (harvested) | Burned (or held at floor) |
 
 ---
 
@@ -403,7 +403,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          TORCH MARKET PROTOCOL v3.7.10                                │
+│                          TORCH MARKET PROTOCOL v3.7.11                                │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
@@ -423,7 +423,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 │  │  │    Token     │    │   Bonding    │    │   Treasury   │                   │    │
 │  │  │   (Mint)     │───▶│    Curve     │───▶│  (buybacks,  │                   │    │
 │  │  │  Token-2022  │    │  (pricing,   │    │   stars,     │                   │    │
-│  │  │  1% xfer fee │    │   voting)    │    │   lending)   │                   │    │
+│  │  │ 0.1% xfer fee│    │   voting)    │    │   lending)   │                   │    │
 │  │  └──────────────┘    └──────┬───────┘    └──────────────┘                   │    │
 │  │                             │                                                │    │
 │  │         ┌───────────────────┼───────────────────┐                           │    │
@@ -490,7 +490,7 @@ The protocol uses 12 on-chain account types, all deterministic PDAs:
 
 ### Instruction Set
 
-The V3.7.10 program exposes 28 instructions across 9 handler domains:
+The V3.7.11 program exposes 28 instructions across 9 handler domains:
 
 | Domain | Instructions |
 |--------|-------------|
@@ -508,6 +508,8 @@ The V3.7.10 program exposes 28 instructions across 9 handler domains:
 > **Note (V3.7.0):** `update_authority` was removed. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
 >
 > **Note (V3.7.10):** `swap_fees_to_sol` added. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless — anyone can call after migration. 28 instructions total.
+>
+> **Note (V3.7.11):** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1% (`TRANSFER_FEE_BPS` 100→10). All tokens now use Token-2022 metadata extensions exclusively. 28 instructions total.
 
 ### Bonding Curve Formula
 
@@ -617,7 +619,7 @@ Pool accounts were reported as unconstrained. Assessment: `validate_pool_account
 CREATE → BONDING → COMPLETE → VOTE → MIGRATE → DEX
    │                                              │
    │                                              ▼
-   │                                    [1% Transfer Fee]
+   │                                    [0.1% Transfer Fee]
    │                                              │
    │                                              ▼
    │                                    HARVEST → SWAP TO SOL → BUYBACK → BURN
@@ -655,7 +657,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Treasury SOL Share | 20%→5% | Dynamic: decays as bonding progresses |
 | Token Treasury Fee | 1% | Fee on all buys (lifetime) |
 | Protocol Fee | 1% | Fee during bonding (75% treasury, 25% dev) |
-| Transfer Fee | 1% | Post-migration fee on all transfers |
+| Transfer Fee | 0.1% | Post-migration fee on all transfers |
 | Supply Floor | 500,000,000 | Minimum supply (buyback burns stop here) |
 | Inactivity Period | 7 days | Time before failed token can be reclaimed |
 | Revival Threshold (V27) | 3BT/8 per tier (18.75 / 37.5 / 75 SOL) | SOL needed to revive a reclaimed token |
@@ -699,6 +701,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | V3.6.0 | **V26 Permissionless Migration + Authority Revocation.** Mint and freeze authority revoked permanently at migration. |
 | V3.6.x | **V27 Treasury Lock + PDA Pool Validation.** 250M tokens locked at creation. IVS = 3BT/8, 13.44x multiplier. |
 | V3.7.0 | **V28 `update_authority` Removed.** Authority transfer via multisig tooling. 27 instructions. Minimal admin surface. |
+| V3.7.11 | **V29 On-Chain Metadata.** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1%. All tokens use Token-2022 metadata extensions exclusively. 28 instructions. |
 | V3.7.10 | **V20 Swap Fees to SOL.** New `swap_fees_to_sol` instruction sells harvested Token-2022 fees to SOL via Raydium. 28 instructions. Vault ordering bug fix in pool validation. |
 
 ---

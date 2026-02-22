@@ -6,7 +6,7 @@
 
 import { Connection, PublicKey } from '@solana/web3.js'
 import { BorshCoder, Idl } from '@coral-xyz/anchor'
-import { getAssociatedTokenAddressSync } from '@solana/spl-token'
+import { getAssociatedTokenAddressSync, getTokenMetadata as splGetTokenMetadata } from '@solana/spl-token'
 import {
   BondingCurve,
   Treasury,
@@ -51,6 +51,7 @@ import {
   LoanPositionInfo,
   VaultInfo,
   VaultWalletLinkInfo,
+  TokenMetadataResult,
 } from './types'
 
 // ============================================================================
@@ -294,6 +295,27 @@ export const getTokens = async (
     total: allTokens.length,
     limit: params.limit || 50,
     offset: params.offset || 0,
+  }
+}
+
+/**
+ * Get on-chain Token-2022 metadata for a token.
+ *
+ * Reads name, symbol, and uri directly from the mint's TokenMetadata extension.
+ * Returns null if the mint has no metadata (legacy pre-V29 tokens).
+ */
+export const getTokenMetadata = async (
+  connection: Connection,
+  mintStr: string,
+): Promise<TokenMetadataResult | null> => {
+  const mint = new PublicKey(mintStr)
+  const metadata = await splGetTokenMetadata(connection, mint, 'confirmed', TOKEN_2022_PROGRAM_ID)
+  if (!metadata) return null
+  return {
+    name: metadata.name,
+    symbol: metadata.symbol,
+    uri: metadata.uri,
+    mint: mintStr,
   }
 }
 
