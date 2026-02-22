@@ -2023,8 +2023,15 @@ export const buildSwapFeesToSolTransaction = async (
   await finalizeTransaction(connection, tx, payer)
 
   // Check if it fits in a single transaction
-  const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false })
-  if (serialized.length <= PACKET_DATA_SIZE) {
+  let fitsInSingleTx = false
+  try {
+    const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false })
+    fitsInSingleTx = serialized.length <= PACKET_DATA_SIZE
+  } catch {
+    // serialize() throws when tx exceeds size limit
+  }
+
+  if (fitsInSingleTx) {
     return {
       transaction: tx,
       message: `Swap harvested fees to SOL for ${mintStr.slice(0, 8)}...${harvest ? ' (harvest + swap)' : ''}`,

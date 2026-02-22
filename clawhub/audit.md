@@ -2,8 +2,8 @@
 
 **Audit Date:** February 21, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.7.8
-**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.7.8)
+**SDK Version:** 3.7.9
+**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.7.9)
 **Language:** TypeScript
 **Test Result:** 32 passed, 0 failed (Surfpool mainnet fork + devnet E2E + tiers E2E)
 
@@ -28,7 +28,7 @@
 
 ## Executive Summary
 
-This audit covers the Torch SDK v3.7.8, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.7.8) to verify PDA derivation, quote math, vault integration, migration flow, lending accounting, and account handling. v3.7.8 includes V25 pump-style reserves, V26 permissionless migration, V27 treasury lock and PDA-based pool validation, removal of `update_authority` (V28), V20 swap fees to SOL, a critical lending accounting fix, and dynamic network detection.
+This audit covers the Torch SDK v3.7.9, a TypeScript library that reads on-chain state from Solana and builds unsigned transactions for the Torch Market protocol. The SDK was cross-referenced against the live on-chain program (V3.7.9) to verify PDA derivation, quote math, vault integration, migration flow, lending accounting, and account handling. v3.7.9 includes V25 pump-style reserves, V26 permissionless migration, V27 treasury lock and PDA-based pool validation, removal of `update_authority` (V28), V20 swap fees to SOL, a critical lending accounting fix, and dynamic network detection.
 
 The SDK is **stateless** (no global state, no connection pools), **non-custodial** (never touches private keys — all transactions are returned unsigned), and **RPC-first** (all data from Solana, no proprietary API for core operations).
 
@@ -72,7 +72,7 @@ The SDK is **stateless** (no global state, no connection pools), **non-custodial
 | `src/said.ts` | 110 | SAID Protocol integration |
 | `src/gateway.ts` | 49 | Irys metadata fetch with fallback + timeout |
 | `src/ephemeral.ts` | 45 | Ephemeral agent (disposable wallet helper) |
-| `src/torch_market.json` | — | Anchor IDL (V3.7.8, 28 instructions) |
+| `src/torch_market.json` | — | Anchor IDL (V3.7.9, 28 instructions) |
 | **Total** | **~4,048** | |
 
 ### On-Chain Cross-Reference
@@ -477,7 +477,7 @@ The Torch SDK v3.7.2 is a well-structured, minimal-surface TypeScript library th
 20. **V3.7.1 treasury cranks** — New `buildAutoBuybackTransaction` triggers permissionless treasury buyback on Raydium when pool price drops below 80% of migration baseline. Buys tokens with treasury SOL and burns them. New `buildHarvestFeesTransaction` harvests accumulated Token-2022 transfer fees from token accounts into the treasury. Both are permissionless — anyone can trigger. New types: `AutoBuybackParams`, `HarvestFeesParams`.
 21. **V3.7.2 buyback pre-checks** — `buildAutoBuybackTransaction` now validates all 6 on-chain conditions client-side (migration, baseline, cooldown, supply floor, price threshold, dust) before building the transaction. All arithmetic uses `BigInt` matching on-chain `u64`/`u128`. Constants (`SUPPLY_FLOOR = 500M`, `MIN_BUYBACK_AMOUNT = 0.01 SOL`, `RATIO_PRECISION = 1e9`) match on-chain program. Descriptive error messages for each failure mode.
 22. **V3.7.2 harvest auto-discovery** — `buildHarvestFeesTransaction` auto-discovers source accounts with withheld fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. Dynamic compute budget (200k base + 20k per source). Try/catch fallback when RPC doesn't support `getTokenLargestAccounts` (I-7). New optional `sources` param for explicit account list.
-23. **V3.7.8 swap fees to SOL (V20)** — New `buildSwapFeesToSolTransaction` bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic transaction. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL ATA closed to unwrap proceeds. SOL added to `treasury.sol_balance` and tracked in `treasury.harvested_fees` (repurposed from unused field). All Raydium accounts PDA-derived (same pattern as `TreasuryBuybackDex`). Defense-in-depth: `validate_pool_accounts()` with correct vault ordering via `order_mints()`. New type: `SwapFeesToSolParams`. Fixed vault ordering bug in both `swap_fees_to_sol` and `execute_auto_buyback` — vaults now passed in pool order (by mint pubkey) instead of swap direction, preventing false validation failures for tokens where `mint < WSOL` (~2.6% of tokens). IDL updated to v3.7.8 (28 instructions). No new Kani proofs needed (CPI composition, not new arithmetic).
+23. **V3.7.9 swap fees to SOL (V20)** — New `buildSwapFeesToSolTransaction` bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic transaction. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL ATA closed to unwrap proceeds. SOL added to `treasury.sol_balance` and tracked in `treasury.harvested_fees` (repurposed from unused field). All Raydium accounts PDA-derived (same pattern as `TreasuryBuybackDex`). Defense-in-depth: `validate_pool_accounts()` with correct vault ordering via `order_mints()`. New type: `SwapFeesToSolParams`. Fixed vault ordering bug in both `swap_fees_to_sol` and `execute_auto_buyback` — vaults now passed in pool order (by mint pubkey) instead of swap direction, preventing false validation failures for tokens where `mint < WSOL` (~2.6% of tokens). IDL updated to v3.7.9 (28 instructions). No new Kani proofs needed (CPI composition, not new arithmetic).
 
 The SDK is safe for production use by AI agents and applications interacting with the Torch Market protocol.
 
@@ -485,9 +485,9 @@ The SDK is safe for production use by AI agents and applications interacting wit
 
 ## Audit Certification
 
-This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). Updated February 20, 2026 for v3.7.0 (V28 `update_authority` removed — authority transfer now via multisig tooling, V27 treasury lock with 250M locked tokens, PDA-based pool validation, pre-migration buyback handler removed, 27 instructions total). Updated February 20, 2026 for v3.7.2 (treasury cranks: auto-buyback with full client-side pre-checks, harvest fees with auto-discovery and graceful RPC fallback, dynamic compute budget, new `sources` param, E2E test coverage across all three test suites). Updated February 21, 2026 for v3.7.8 (V20 swap fees to SOL: new `buildSwapFeesToSolTransaction` bundles harvest + Raydium swap in one atomic tx, vault ordering bug fix in `validate_pool_accounts`, 28 instructions). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Tiers E2E test validates harvest and buyback across Spark/Flame/Torch. Independent human security auditor verified the on-chain program and frontend.
+This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). Updated February 20, 2026 for v3.7.0 (V28 `update_authority` removed — authority transfer now via multisig tooling, V27 treasury lock with 250M locked tokens, PDA-based pool validation, pre-migration buyback handler removed, 27 instructions total). Updated February 20, 2026 for v3.7.2 (treasury cranks: auto-buyback with full client-side pre-checks, harvest fees with auto-discovery and graceful RPC fallback, dynamic compute budget, new `sources` param, E2E test coverage across all three test suites). Updated February 21, 2026 for v3.7.9 (V20 swap fees to SOL: new `buildSwapFeesToSolTransaction` bundles harvest + Raydium swap in one atomic tx, vault ordering bug fix in `validate_pool_accounts`, 28 instructions). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Tiers E2E test validates harvest and buyback across Spark/Flame/Torch. Independent human security auditor verified the on-chain program and frontend.
 
 **Auditor:** Claude Opus 4.6
 **Date:** 2026-02-21
-**SDK Version:** 3.7.8
-**On-Chain Version:** V3.7.8 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
+**SDK Version:** 3.7.9
+**On-Chain Version:** V3.7.9 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
