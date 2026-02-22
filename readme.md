@@ -16,11 +16,11 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
-### v3.7.9
+### v3.7.10
 
 - **V20 Swap Fees to SOL** — New `buildSwapFeesToSolTransaction` bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic transaction. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL unwrapped to SOL, proceeds added to `treasury.sol_balance` and tracked in `treasury.harvested_fees`. Set `harvest=false` to skip harvest if already done separately. New type: `SwapFeesToSolParams`.
 - **Vault ordering bug fix** — Fixed `validate_pool_accounts` vault ordering in both `swap_fees_to_sol` and `execute_auto_buyback` handlers. Vaults are now passed in pool order (by mint pubkey) instead of swap direction, preventing false validation failures for tokens where `mint < WSOL` (~2.6% of tokens).
-- **28 instructions** — IDL updated to v3.7.9 (28 instructions, up from 27).
+- **28 instructions** — IDL updated to v3.7.10 (28 instructions, up from 27).
 
 ### v3.7.4
 

@@ -66,6 +66,7 @@ exports.BLACKLISTED_MINTS = [
     'GQKidAtE2RmEpMq7ciPShniHZ9fh8NSAaXp59M89X3tm', // Pre-V13 mainnet test token
     '7b7WHQdXQN4bR8eC47jaH9De6JYC4cze1BWJJcxU1Mtm', // Pre-V13 mainnet test token
     'FjERW8DSNB81GYWhrXwdfS3s74xTF8T5gjcKYSa1v7tm', // Duplicate test token (keep Second Torch only)
+    'GawKda5Vzm34HaDCkQrCLjnGUaQFVuYcTFpkDstNBRtm', // Failed mainnet token (relaunched)
 ];
 // Formatting helpers
 exports.LAMPORTS_PER_SOL = 1000000000;
