@@ -79,6 +79,7 @@ export const BLACKLISTED_MINTS: string[] = [
   '7b7WHQdXQN4bR8eC47jaH9De6JYC4cze1BWJJcxU1Mtm', // Pre-V13 mainnet test token
   'FjERW8DSNB81GYWhrXwdfS3s74xTF8T5gjcKYSa1v7tm', // Duplicate test token (keep Second Torch only)
   'GawKda5Vzm34HaDCkQrCLjnGUaQFVuYcTFpkDstNBRtm', // Failed mainnet token (relaunched)
+  '22fRDzkMUp8LW7RhPGa17FxifJJr6hR4PqyREAR6jitm', // Legacy mainnet token (relaunched)
 ]
 
 // Formatting helpers

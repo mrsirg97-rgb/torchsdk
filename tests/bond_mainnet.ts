@@ -39,7 +39,7 @@ const MAINNET_RPC = 'https://torch-market-rpc.mrsirg97.workers.dev'
 const WALLET_PATH = path.join(os.homedir(), 'Projects/burnfun/torch_market/keys/mainnet-deploy-wallet.json')
 
 const BUY_LAMPORTS = Math.floor(0.2 * LAMPORTS_PER_SOL)
-const MAX_SOL_SPEND = 50 * LAMPORTS_PER_SOL
+const MAX_SOL_SPEND = 59 * LAMPORTS_PER_SOL
 const FUND_BATCH = 20
 const TOKEN_DECIMALS = 6
 
