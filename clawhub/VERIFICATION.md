@@ -6,7 +6,7 @@ We used [Kani](https://model-checking.github.io/kani/), a formal verification to
 
 This is **not** a security audit. It proves the arithmetic is correct, but does not cover access control, account validation, or economic attacks. See [What Is NOT Verified](#what-is-not-verified) for full scope limitations.
 
-**36 proof harnesses. All passing. Zero failures.**
+**37 proof harnesses. All passing. Zero failures.**
 
 ---
 
@@ -15,8 +15,8 @@ This is **not** a security audit. It proves the arithmetic is correct, but does 
 torch_market's core arithmetic has been formally verified using [Kani](https://model-checking.github.io/kani/), a Rust model checker backed by the CBMC bounded model checker. Kani exhaustively proves properties hold for **all** valid inputs within constrained ranges -- not just sampled test cases.
 
 **Tool:** Kani Rust Verifier 0.67.0 / CBMC 6.8.0
-**Target:** `torch_market` v3.7.2
-**Harnesses:** 36 proof harnesses, all passing
+**Target:** `torch_market` v3.7.4
+**Harnesses:** 37 proof harnesses, all passing
 **Source:** `programs/torch_market/src/kani_proofs.rs`
 
 ## What Is Formally Verified
@@ -67,11 +67,12 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 |---------|----------|-------------|
 | `verify_user_share_bounded` | `user_share <= distributable` (no user can drain reward pool) | 500 SOL epoch, 50 SOL distributable |
 
-### Auto Buyback (Harnesses 20-21)
+### Auto Buyback & Ratio-Gated Sell (Harnesses 20-22)
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
-| `verify_ratio_fits_u64` | Pool ratio `(sol * 1e9) / tokens` fits in u64 | Up to 1000 SOL, tokens >= SUPPLY_FLOOR |
+| `verify_ratio_fits_u64` | Pool ratio `(sol * 1e9) / tokens` fits in u64 | Up to 1000 SOL, tokens >= 1 token |
+| `verify_sell_threshold_fits_u64` | [V30] Sell threshold `baseline_ratio * 12000 / 10000` fits in u64 | Same bounds as ratio proof, with 1.2x multiplier |
 | `verify_double_transfer_fee_positive` | Token amount remains positive after two consecutive transfer fees | 1 token to TOTAL_SUPPLY |
 
 ### Migration (Harnesses 22-25)
@@ -155,7 +156,7 @@ Eight harnesses were dropped during verification because they prove structurally
 | `verify_ltv_100_percent` | `(v * 10000) / v == 10000` is a mathematical tautology. SAT solvers cannot efficiently prove symbolic u128 division cancellation. |
 | `verify_buyback_respects_reserve` | Buyback reserve/amount constraints are enforced by handler-level checks, not arithmetic. Property is structural given the config validation. |
 
-These properties remain true by construction. The remaining 36 harnesses cover every non-tautological safety property.
+These properties remain true by construction. The remaining 37 harnesses cover every non-tautological safety property.
 
 ## What Is NOT Verified
 
@@ -196,14 +197,13 @@ cargo kani
 cargo kani --harness verify_buy_fee_conservation
 ```
 
-All 36 harnesses pass. Most complete in under 1 second; the slowest (`verify_transfer_fee_bounds`, `verify_treasury_rate_monotonic`) take 30-55 seconds due to larger SAT formula complexity.
+All 37 harnesses pass. Most complete in under 1 second; the slowest (`verify_transfer_fee_bounds`, `verify_treasury_rate_monotonic`) take 30-55 seconds due to larger SAT formula complexity.
 
 ## Constants Reference
 
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `TOTAL_SUPPLY` | 1,000,000,000,000,000 | 1 billion tokens (6 decimals) |
-| `SUPPLY_FLOOR` | 500,000,000,000,000 | 500M tokens -- buyback burn floor |
 | `BONDING_TARGET_SPARK` | 50,000,000,000 | 50 SOL bonding target (Spark tier) |
 | `BONDING_TARGET_FLAME` | 100,000,000,000 | 100 SOL bonding target (Flame tier) |
 | `BONDING_TARGET_TORCH` | 200,000,000,000 | 200 SOL bonding target (Torch tier, default) |
@@ -224,4 +224,7 @@ All 36 harnesses pass. Most complete in under 1 second; the slowest (`verify_tra
 | `DEFAULT_INTEREST_RATE_BPS` | 200 | 2% lending interest per epoch |
 | `DEFAULT_LIQUIDATION_BONUS_BPS` | 1000 | 10% liquidation bonus |
 | `RATIO_PRECISION` | 1,000,000,000 | 1e9 ratio scale factor |
+| `DEFAULT_SELL_THRESHOLD_BPS` | 12,000 | 120% -- sell triggers at 20% above baseline |
+| `DEFAULT_SELL_PERCENT_BPS` | 1,500 | 15% of held tokens sold per call |
+| `SELL_ALL_TOKEN_THRESHOLD` | 1,000,000,000,000 | 1M tokens -- sell 100% below this |
 | `MIN_SOL_AMOUNT` | 1,000,000 | 0.001 SOL minimum |
