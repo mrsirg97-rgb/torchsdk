@@ -1,6 +1,6 @@
 # Torch SDK — Design Document
 
-> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.11.
+> TypeScript SDK for the Torch Market protocol on Solana. Version 3.7.14.
 
 ## Overview
 
@@ -76,7 +76,7 @@ src/
 ├── said.ts             SAID Protocol integration (verify, confirm)
 ├── gateway.ts          Irys metadata fetch with fallback
 ├── ephemeral.ts        Ephemeral agent (disposable wallet helper)
-└── torch_market.json   Anchor IDL (v3.7.11, 28 instructions)
+└── torch_market.json   Anchor IDL (v3.7.14, 28 instructions)
 ```
 
 ### Dependency Graph
@@ -430,4 +430,4 @@ Expected result: **32 passed, 0 failed** (mainnet fork). Tiers test covers harve
 | 3.7.3 | **`fetchWithFallback` resilience.** Improved metadata fetch with gateway URL fallback. |
 | 3.7.6 | **V28 Migration Payer Reimbursement.** `buildBuyTransactionInternal` auto-migrate path collapsed into a single `buildMigrateTransaction()` call — program now handles treasury reimbursement internally (payer fronts ~1 SOL, treasury reimburses exact cost, net 0). Removed ~50 lines of inline migration builder. IDL updated to v3.7.1 (program v3.7.1: `MIN_MIGRATION_SOL` replaces `RAYDIUM_POOL_CREATION_FEE`, payer lamport snapshot + reimbursement in migration handler). 36 Kani proofs all passing on v3.7.1. |
 | 3.7.10 | **V20 Swap Fees to SOL.** New `buildSwapFeesToSolTransaction` — bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic tx. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL unwrapped to SOL, proceeds added to `treasury.sol_balance` and tracked in `treasury.harvested_fees`. New type: `SwapFeesToSolParams`. Fixed `validate_pool_accounts` vault ordering bug in `swap_fees_to_sol` and `execute_auto_buyback` — vaults now passed in pool order (by mint pubkey) instead of swap direction. IDL updated to v3.7.10 (28 instructions). |
-| 3.7.11 | **V29 On-Chain Metadata.** Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain (`TRANSFER_FEE_BPS` 100→10). New type: `TokenMetadataResult`. IDL updated to v3.7.11 (28 instructions). |
+| 3.7.14 | **V29 On-Chain Metadata.** Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain (`TRANSFER_FEE_BPS` 100→10). New type: `TokenMetadataResult`. IDL updated to v3.7.14 (28 instructions). |
