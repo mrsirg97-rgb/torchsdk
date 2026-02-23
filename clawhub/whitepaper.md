@@ -403,7 +403,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          TORCH MARKET PROTOCOL v3.7.14                                │
+│                          TORCH MARKET PROTOCOL v3.7.15                                │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
@@ -490,7 +490,7 @@ The protocol uses 12 on-chain account types, all deterministic PDAs:
 
 ### Instruction Set
 
-The V3.7.14 program exposes 28 instructions across 9 handler domains:
+The V3.7.15 program exposes 28 instructions across 9 handler domains:
 
 | Domain | Instructions |
 |--------|-------------|
@@ -509,7 +509,7 @@ The V3.7.14 program exposes 28 instructions across 9 handler domains:
 >
 > **Note (V3.7.10):** `swap_fees_to_sol` added. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless — anyone can call after migration. 28 instructions total.
 >
-> **Note (V3.7.14):** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1% (`TRANSFER_FEE_BPS` 100→10). All tokens now use Token-2022 metadata extensions exclusively. 28 instructions total.
+> **Note (V3.7.15):** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1% (`TRANSFER_FEE_BPS` 100→10). All tokens now use Token-2022 metadata extensions exclusively. 28 instructions total.
 
 ### Bonding Curve Formula
 
@@ -701,7 +701,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | V3.6.0 | **V26 Permissionless Migration + Authority Revocation.** Mint and freeze authority revoked permanently at migration. |
 | V3.6.x | **V27 Treasury Lock + PDA Pool Validation.** 250M tokens locked at creation. IVS = 3BT/8, 13.44x multiplier. |
 | V3.7.0 | **V28 `update_authority` Removed.** Authority transfer via multisig tooling. 27 instructions. Minimal admin surface. |
-| V3.7.14 | **V29 On-Chain Metadata.** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1%. All tokens use Token-2022 metadata extensions exclusively. 28 instructions. |
+| V3.7.15 | **V29 On-Chain Metadata.** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1%. All tokens use Token-2022 metadata extensions exclusively. 28 instructions. |
 | V3.7.10 | **V20 Swap Fees to SOL.** New `swap_fees_to_sol` instruction sells harvested Token-2022 fees to SOL via Raydium. 28 instructions. Vault ordering bug fix in pool validation. |
 
 ---
