@@ -125,9 +125,7 @@ async function main() {
 
   log(`Authority token balance: ${Number(authorityBalance) / 10 ** TOKEN_DECIMALS}`)
 
-  // Calculate proportional distribution
-  const totalPercent = snapshot.reduce((sum, s) => sum + s.percent, 0)
-
+  // Calculate distribution — use snapshot percentages directly (already clamped to 0.1%–2%)
   interface AirdropRecipient {
     wallet: string
     amount: bigint
@@ -138,8 +136,7 @@ async function main() {
   let totalDistribute = BigInt(0)
 
   for (const entry of snapshot) {
-    const normalizedPercent = entry.percent / totalPercent
-    const amount = BigInt(Math.floor(Number(authorityBalance) * normalizedPercent))
+    const amount = BigInt(Math.floor(Number(authorityBalance) * (entry.percent / 100)))
 
     if (amount < BigInt(DUST_THRESHOLD)) {
       continue // skip dust
