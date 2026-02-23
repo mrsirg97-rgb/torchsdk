@@ -39,7 +39,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.7.15",
+        "package": "torchsdk@^3.7.16",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }

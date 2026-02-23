@@ -1118,14 +1118,14 @@ exports.buildVaultSwapTransaction = buildVaultSwapTransaction;
 // Treasury Cranks
 // ============================================================================
 // Auto-buyback constants (must match the on-chain program)
-const SUPPLY_FLOOR = BigInt('500000000000000'); // 500M tokens at 6 decimals
 const MIN_BUYBACK_AMOUNT = BigInt('10000000'); // 0.01 SOL in lamports
 const RATIO_PRECISION = BigInt('1000000000'); // 1e9
 /**
  * Build an unsigned auto-buyback transaction.
  *
  * Permissionless crank — triggers a treasury buyback on Raydium when the pool
- * price has dropped below the treasury's ratio threshold. Burns bought tokens.
+ * price has dropped below the treasury's ratio threshold. Holds bought tokens
+ * in treasury ATA (swap_fees_to_sol recycles them).
  *
  * Pre-checks all on-chain conditions and throws descriptive errors so the
  * caller (e.g. frontend) knows exactly why a buyback can't fire.
@@ -1155,12 +1155,6 @@ const buildAutoBuybackTransaction = async (connection, params) => {
     if (BigInt(currentSlot) < nextBuybackSlot) {
         const slotsRemaining = Number(nextBuybackSlot - BigInt(currentSlot));
         throw new Error(`Buyback cooldown: ${slotsRemaining} slots remaining`);
-    }
-    // Pre-check 4: Supply floor
-    const mintInfo = await connection.getTokenSupply(mint, 'confirmed');
-    const currentSupply = BigInt(mintInfo.value.amount);
-    if (currentSupply <= SUPPLY_FLOOR) {
-        throw new Error('Supply at floor — buybacks paused');
     }
     // Raydium pool accounts
     const raydium = (0, program_1.getRaydiumMigrationAccounts)(mint);

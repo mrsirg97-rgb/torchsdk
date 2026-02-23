@@ -16,9 +16,9 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
-### v3.7.15
+### v3.7.16
 
-- **V29 On-Chain Metadata** — Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain. IDL updated to v3.7.15 (28 instructions).
+- **V29 On-Chain Metadata** — Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain. IDL updated to v3.7.16 (28 instructions).
 
 ### v3.7.10
 
