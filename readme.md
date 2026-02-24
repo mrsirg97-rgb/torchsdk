@@ -16,9 +16,13 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.17
+
+- **`getAllLoanPositions`** — New SDK function scans all on-chain LoanPosition accounts for a given mint. Returns active positions with computed health status (collateral value, LTV, health), sorted liquidatable-first. Fetches Raydium pool price once (not per-position) for efficient valuation. New types: `LoanPositionWithKey` (extends `LoanPositionInfo` with `borrower` address), `AllLoanPositionsResult`.
+
 ### v3.7.16
 
-- **V29 On-Chain Metadata** — Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain. IDL updated to v3.7.16 (28 instructions).
+- **V29 On-Chain Metadata** — Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain. IDL updated to v3.7.4 (28 instructions).
 
 ### v3.7.10
 
@@ -128,6 +132,7 @@ Multiple wallets can share one vault. Deposit from a hardware wallet, trade from
 | `getLendingInfo(connection, mint)` | Get lending parameters for a migrated token |
 | `getTokenMetadata(connection, mint)` | Get on-chain Token-2022 metadata (name, symbol, uri) |
 | `getLoanPosition(connection, mint, wallet)` | Get a wallet's loan position |
+| `getAllLoanPositions(connection, mint)` | Get all active loan positions for a token (sorted by health) |
 
 ### Vault Queries
 

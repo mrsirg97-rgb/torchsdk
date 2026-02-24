@@ -412,6 +412,15 @@ export interface LoanPositionInfo {
   warnings?: string[]
 }
 
+export interface LoanPositionWithKey extends LoanPositionInfo {
+  borrower: string
+}
+
+export interface AllLoanPositionsResult {
+  positions: LoanPositionWithKey[]
+  pool_price_sol: number | null
+}
+
 // ============================================================================
 // Messages
 // ============================================================================
