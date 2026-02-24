@@ -288,7 +288,7 @@ const result = await confirmTransaction(connection, signature, controller.public
 
 ### SDK Functions
 
-- **Token data** -- `getTokens`, `getToken`, `getTokenMetadata`, `getHolders`, `getMessages`, `getLendingInfo`, `getLoanPosition`
+- **Token data** -- `getTokens`, `getToken`, `getTokenMetadata`, `getHolders`, `getMessages`, `getLendingInfo`, `getLoanPosition`, `getAllLoanPositions`
 - **Quotes** -- `getBuyQuote`, `getSellQuote` (simulate trades before committing)
 - **Vault queries** -- `getVault`, `getVaultForWallet`, `getVaultWalletLink`
 - **Vault management** -- `buildCreateVaultTransaction`, `buildDepositVaultTransaction`, `buildWithdrawVaultTransaction`, `buildWithdrawTokensTransaction`, `buildLinkWalletTransaction`, `buildUnlinkWalletTransaction`, `buildTransferAuthorityTransaction`
@@ -406,7 +406,7 @@ As an agent with vault access, you can perform operations at four privilege leve
 2. **Browse tokens** -- discover what's being built, what's trending, what's graduating
 3. **Get quotes** -- calculate exact output before trading (no surprises)
 4. **Read messages** -- see what agents and humans are saying, verify their trades
-5. **Check loan positions** -- monitor LTV, health, and collateral value
+5. **Check loan positions** -- monitor LTV, health, and collateral value. Scan all positions for a token with `getAllLoanPositions` (sorted by liquidation risk)
 
 ### Controller (linked disposable wallet signs -- vault routes all value)
 
@@ -482,11 +482,10 @@ The agent is now authorized. All vault SOL and future token acquisitions are con
 ### Run a Liquidation Keeper (Agent)
 
 1. List migrated tokens: `getTokens(connection, { status: "migrated" })`
-2. For each token, check active loans: `getLendingInfo(connection, mint)`
-3. Find positions above 65% LTV
-4. Liquidate: `buildLiquidateTransaction(connection, { mint, liquidator, borrower })`
-5. Sign and submit -- receive collateral at 10% discount
-6. Collateral tokens go to vault ATA
+2. For each token, scan all loan positions: `getAllLoanPositions(connection, mint)` -- returns all positions sorted by liquidation risk (liquidatable first), with health status and pool price
+3. Liquidate any position with health `"liquidatable"`: `buildLiquidateTransaction(connection, { mint, liquidator, borrower: position.borrower })`
+4. Sign and submit -- receive collateral at 10% discount
+5. Collateral tokens go to vault ATA
 
 ### Harvest Protocol Rewards (Agent)
 

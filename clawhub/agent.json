@@ -173,6 +173,10 @@
       "description": "Get loan position details for a wallet -- collateral, debt, interest, LTV, health status"
     },
     {
+      "name": "TORCH_GET_ALL_LOAN_POSITIONS",
+      "description": "Scan all loan positions for a token -- returns all active positions with health status (healthy/at_risk/liquidatable), sorted by liquidation risk. Uses getProgramAccounts with discriminator + mint memcmp filters. Includes Raydium pool price for collateral valuation."
+    },
+    {
       "name": "TORCH_BORROW",
       "description": "Borrow SOL from treasury via vault (vault tokens locked as collateral, SOL goes to vault, up to 50% LTV, post-migration only)"
     },
@@ -280,7 +284,8 @@
       "TORCH_GET_MESSAGES",
       "TORCH_VERIFY_SAID",
       "TORCH_GET_LENDING_INFO",
-      "TORCH_GET_LOAN"
+      "TORCH_GET_LOAN",
+      "TORCH_GET_ALL_LOAN_POSITIONS"
     ],
     "controller": [
       "TORCH_BUY_TOKEN",

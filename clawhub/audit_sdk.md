@@ -62,18 +62,18 @@ The SDK is **stateless** (no global state, no connection pools), **non-custodial
 
 | File | Lines | Role |
 |------|-------|------|
-| `src/index.ts` | 112 | Public API surface (28 functions, ~35 types, 4 constants) |
-| `src/types.ts` | 406 | All TypeScript interfaces |
+| `src/index.ts` | 114 | Public API surface (29 functions, ~37 types, 4 constants) |
+| `src/types.ts` | 457 | All TypeScript interfaces |
 | `src/constants.ts` | 85 | Program ID, PDA seeds, token constants, blacklist, dynamic network detection |
 | `src/program.ts` | 461 | PDA derivation, Anchor types, quote math, Raydium PDAs |
-| `src/tokens.ts` | 836 | Read-only queries (tokens, vault, lending, holders, messages, pool price) |
+| `src/tokens.ts` | 980 | Read-only queries (tokens, vault, lending, loan positions, holders, messages, pool price) |
 | `src/transactions.ts` | ~2000 | Transaction builders (buy, sell, vault, lending, star, migrate, buyback, harvest, swap fees) |
 | `src/quotes.ts` | 102 | Buy/sell quote calculations |
 | `src/said.ts` | 110 | SAID Protocol integration |
 | `src/gateway.ts` | 49 | Irys metadata fetch with fallback + timeout |
 | `src/ephemeral.ts` | 45 | Ephemeral agent (disposable wallet helper) |
 | `src/torch_market.json` | — | Anchor IDL (V3.7.17, 28 instructions) |
-| **Total** | **~4,048** | |
+| **Total** | **~4,245** | |
 
 ### On-Chain Cross-Reference
 
@@ -453,7 +453,7 @@ The entire auto-discovery path is wrapped in a try/catch. If `getTokenLargestAcc
 
 ## Conclusion
 
-The Torch SDK v3.7.2 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.7.0 program. Key findings:
+The Torch SDK v3.7.17 is a well-structured, minimal-surface TypeScript library that correctly mirrors the on-chain Torch Market V3.7.17 program. Key findings:
 
 1. **PDA derivation is correct** — all 11 Torch PDAs and 5 Raydium PDAs match the on-chain seeds exactly.
 2. **Quote math is correct** — BigInt arithmetic matches the on-chain Rust `checked_mul`/`checked_div` behavior, including the dynamic treasury rate, 90/10 token split, and constant product formula.
@@ -481,15 +481,17 @@ The Torch SDK v3.7.2 is a well-structured, minimal-surface TypeScript library th
 
 24. **V3.7.17 on-chain metadata (V29)** — Metaplex `buildAddMetadataTransaction` removed (temporary backfill complete — all active tokens now use Token-2022 metadata extensions). New `getTokenMetadata(connection, mint)` read-only function returns `{ name, symbol, uri, mint }` from on-chain Token-2022 metadata. Transfer fee updated from 1% to 0.1% on-chain (`TRANSFER_FEE_BPS` changed from 100 to 10). All Metaplex program references, constants, and instruction builders removed from SDK. IDL updated to v3.7.17 (28 instructions).
 
+25. **V3.7.17 loan position scanner** — New `getAllLoanPositions(connection, mint)` scans all `LoanPosition` accounts for a token via `getProgramAccounts` with discriminator + mint memcmp filters. Decodes accounts using Anchor's BorshCoder, filters active positions (`borrowed_amount > 0`), fetches Raydium pool price once for collateral valuation, computes health status per position (`healthy`/`at_risk`/`liquidatable`/`none`), and returns sorted by liquidation risk (liquidatable first). New types: `LoanPositionWithKey` (extends `LoanPositionInfo` with `borrower` address), `AllLoanPositionsResult` (`positions` array + `pool_price_sol`). Read-only query — no on-chain instruction change. Uses same discriminator derivation pattern as `getTokens()` (Anchor IDL-derived, not hardcoded — per L-3 resolution). The `getProgramAccounts` call applies a 40-byte offset memcmp filter on the mint field, matching the `LoanPosition` account layout (8-byte discriminator + 32-byte mint).
+
 The SDK is safe for production use by AI agents and applications interacting with the Torch Market protocol.
 
 ---
 
 ## Audit Certification
 
-This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). Updated February 20, 2026 for v3.7.0 (V28 `update_authority` removed — authority transfer now via multisig tooling, V27 treasury lock with 250M locked tokens, PDA-based pool validation, pre-migration buyback handler removed, 27 instructions total). Updated February 20, 2026 for v3.7.2 (treasury cranks: auto-buyback with full client-side pre-checks, harvest fees with auto-discovery and graceful RPC fallback, dynamic compute budget, new `sources` param, E2E test coverage across all three test suites). Updated February 21, 2026 for v3.7.10 (V20 swap fees to SOL: new `buildSwapFeesToSolTransaction` bundles harvest + Raydium swap in one atomic tx, vault ordering bug fix in `validate_pool_accounts`, 28 instructions). Updated February 22, 2026 for v3.7.17 (V29 on-chain metadata: Metaplex `buildAddMetadataTransaction` removed, new `getTokenMetadata` read-only function, transfer fee 1%→0.1%, IDL updated to v3.7.17). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Tiers E2E test validates harvest and buyback across Spark/Flame/Torch. Independent human security auditor verified the on-chain program and frontend.
+This audit was performed by Claude Opus 4.6 (Anthropic). Original audit on February 12, 2026 (v3.2.3). Updated February 14, 2026 for v3.2.4 remediation. Updated February 15, 2026 for v3.3.0 (tiered bonding curves, harvest_fees security fix, Kani proof updates). Updated February 16, 2026 for v3.4.0 (tiered fee structure). Updated February 19, 2026 for v3.6.8 (V25 pump-style reserves, V26 permissionless migration, V27 pool validation, V28 authority transfer, lending accounting fix, utilization cap fix, live pool price, dynamic network detection, pre-migration buyback removal). Updated February 20, 2026 for v3.7.0 (V28 `update_authority` removed — authority transfer now via multisig tooling, V27 treasury lock with 250M locked tokens, PDA-based pool validation, pre-migration buyback handler removed, 27 instructions total). Updated February 20, 2026 for v3.7.2 (treasury cranks: auto-buyback with full client-side pre-checks, harvest fees with auto-discovery and graceful RPC fallback, dynamic compute budget, new `sources` param, E2E test coverage across all three test suites). Updated February 21, 2026 for v3.7.10 (V20 swap fees to SOL: new `buildSwapFeesToSolTransaction` bundles harvest + Raydium swap in one atomic tx, vault ordering bug fix in `validate_pool_accounts`, 28 instructions). Updated February 22, 2026 for v3.7.17 (V29 on-chain metadata: Metaplex `buildAddMetadataTransaction` removed, new `getTokenMetadata` read-only function, transfer fee 1%→0.1%, IDL updated to v3.7.17). Updated February 23, 2026 for v3.7.17 loan position scanner (`getAllLoanPositions` — batch scan all loan positions for a token with health computation). All source files were read in full and cross-referenced against the on-chain program. The E2E test suite (32/32 passed) validates the SDK against a Surfpool mainnet fork. Separate devnet E2E test validates the full lifecycle including V26 migration on Solana devnet. Tiers E2E test validates harvest and buyback across Spark/Flame/Torch. Independent human security auditor verified the on-chain program and frontend.
 
 **Auditor:** Claude Opus 4.6
-**Date:** 2026-02-22
+**Date:** 2026-02-23
 **SDK Version:** 3.7.17
 **On-Chain Version:** V3.7.17 (Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`)
