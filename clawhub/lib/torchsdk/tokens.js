@@ -41,7 +41,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchTokenRaw = exports.getVaultWalletLink = exports.getVaultForWallet = exports.getVault = exports.getLoanPosition = exports.getLendingInfo = exports.getMessages = exports.getHolders = exports.getToken = exports.getTokenMetadata = exports.getTokens = void 0;
+exports.fetchTokenRaw = exports.getVaultWalletLink = exports.getVaultForWallet = exports.getVault = exports.getAllLoanPositions = exports.getLoanPosition = exports.getLendingInfo = exports.getMessages = exports.getHolders = exports.getToken = exports.getTokenMetadata = exports.getTokens = void 0;
 const web3_js_1 = require("@solana/web3.js");
 const anchor_1 = require("@coral-xyz/anchor");
 const spl_token_1 = require("@solana/spl-token");
@@ -615,6 +615,121 @@ const getLoanPosition = async (connection, mintStr, walletStr) => {
     };
 };
 exports.getLoanPosition = getLoanPosition;
+/**
+ * Get all active loan positions for a given token mint.
+ *
+ * Scans on-chain LoanPosition accounts, computes health for each,
+ * and returns them sorted: liquidatable first, then at_risk, then healthy.
+ */
+const getAllLoanPositions = async (connection, mintStr) => {
+    const mint = new web3_js_1.PublicKey(mintStr);
+    const coder = new anchor_1.BorshCoder(torch_market_json_1.default);
+    // 1. Fetch all LoanPosition accounts for this mint
+    const loanDiscriminator = coder.accounts.accountDiscriminator('LoanPosition');
+    const bs58 = await Promise.resolve().then(() => __importStar(require('bs58')));
+    const accounts = await connection.getProgramAccounts(constants_1.PROGRAM_ID, {
+        filters: [
+            { memcmp: { offset: 0, bytes: bs58.default.encode(loanDiscriminator) } },
+            { memcmp: { offset: 8 + 32, bytes: mint.toBase58() } }, // mint at offset 40
+        ],
+    });
+    // 2. Decode and filter to active loans (borrowed_amount > 0)
+    const activeLoans = [];
+    for (const acc of accounts) {
+        try {
+            const loan = coder.accounts.decode('LoanPosition', acc.account.data);
+            const borrowed = Number(loan.borrowed_amount.toString());
+            if (borrowed > 0) {
+                activeLoans.push({
+                    borrower: loan.user.toString(),
+                    loan,
+                });
+            }
+        }
+        catch {
+            // Skip malformed accounts
+        }
+    }
+    // 3. Fetch Raydium pool price ONCE
+    let poolPriceSol = null;
+    let solReserves = 0;
+    let tokenReserves = 0;
+    try {
+        const raydium = (0, program_1.getRaydiumMigrationAccounts)(mint);
+        const [vault0Info, vault1Info] = await Promise.all([
+            connection.getTokenAccountBalance(raydium.token0Vault),
+            connection.getTokenAccountBalance(raydium.token1Vault),
+        ]);
+        const vault0Amount = Number(vault0Info.value.amount);
+        const vault1Amount = Number(vault1Info.value.amount);
+        if (raydium.isWsolToken0) {
+            solReserves = vault0Amount;
+            tokenReserves = vault1Amount;
+        }
+        else {
+            solReserves = vault1Amount;
+            tokenReserves = vault0Amount;
+        }
+        if (tokenReserves > 0) {
+            poolPriceSol = solReserves / tokenReserves;
+        }
+    }
+    catch {
+        // Pool price unavailable
+    }
+    // 4. Compute health for each position
+    const positions = activeLoans.map(({ borrower, loan }) => {
+        const collateral = Number(loan.collateral_amount.toString());
+        const borrowed = Number(loan.borrowed_amount.toString());
+        const interest = Number(loan.accrued_interest.toString());
+        const totalOwed = borrowed + interest;
+        let collateralValueSol = null;
+        if (poolPriceSol !== null && tokenReserves > 0) {
+            collateralValueSol = (collateral * solReserves) / tokenReserves;
+        }
+        let currentLtvBps;
+        if (collateralValueSol === null) {
+            currentLtvBps = null;
+        }
+        else if (collateralValueSol > 0) {
+            currentLtvBps = Math.floor((totalOwed / collateralValueSol) * 10000);
+        }
+        else {
+            currentLtvBps = totalOwed > 0 ? 10000 : 0;
+        }
+        let health;
+        if (borrowed === 0 && interest === 0) {
+            health = 'none';
+        }
+        else if (currentLtvBps === null) {
+            health = 'healthy';
+        }
+        else if (currentLtvBps >= LIQUIDATION_THRESHOLD_BPS) {
+            health = 'liquidatable';
+        }
+        else if (currentLtvBps >= MAX_LTV_BPS) {
+            health = 'at_risk';
+        }
+        else {
+            health = 'healthy';
+        }
+        return {
+            borrower,
+            collateral_amount: collateral,
+            borrowed_amount: borrowed,
+            accrued_interest: interest,
+            total_owed: totalOwed,
+            collateral_value_sol: collateralValueSol,
+            current_ltv_bps: currentLtvBps,
+            health,
+        };
+    });
+    // 5. Sort: liquidatable first, then at_risk, then healthy
+    const healthOrder = { liquidatable: 0, at_risk: 1, healthy: 2, none: 3 };
+    positions.sort((a, b) => (healthOrder[a.health] ?? 3) - (healthOrder[b.health] ?? 3));
+    return { positions, pool_price_sol: poolPriceSol };
+};
+exports.getAllLoanPositions = getAllLoanPositions;
 // ============================================================================
 // Vault Queries (V2.0)
 // ============================================================================
