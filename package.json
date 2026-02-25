@@ -1,6 +1,6 @@
 {
   "name": "torchsdk",
-  "version": "3.7.19",
+  "version": "3.7.20",
   "description": "Torch Market SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

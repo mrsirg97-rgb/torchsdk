@@ -111,4 +111,4 @@ export type {
 } from './types'
 
 // Constants (for advanced usage)
-export { PROGRAM_ID, LAMPORTS_PER_SOL, TOKEN_MULTIPLIER, TOTAL_SUPPLY } from './constants'
+export { PROGRAM_ID, LAMPORTS_PER_SOL, TOKEN_MULTIPLIER, TOTAL_SUPPLY, LEGACY_MINTS } from './constants'

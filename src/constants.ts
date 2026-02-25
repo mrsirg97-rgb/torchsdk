@@ -66,8 +66,8 @@ export const TREASURY_LOCK_SEED = 'treasury_lock' // V27: Treasury lock PDA
 export const TOTAL_SUPPLY = BigInt('1000000000000000') // 1B with 6 decimals
 export const TOKEN_DECIMALS = 6
 
-// Blacklisted tokens (legacy test tokens, etc.)
-export const BLACKLISTED_MINTS: string[] = [
+// Legacy tokens (old test tokens, failed launches, etc.) — shown greyed out in UI
+export const LEGACY_MINTS: string[] = [
   '6JkGdXSKzUHTNwR5w7jce4WxjczUGpqheBJsP1if5htm', // Legacy SPL test token (pre-prod-beta)
   'Nu5xbqZvZd4JerG2aNyxQfUiHBnM59w7CHzyVx5Vztm', // Legacy SPL devnet test token
   '8wzap6FUtL4ko6LnnELt8ZoM6ksy6jPJ9veFkwGB56tm', // Legacy SPL devnet test token

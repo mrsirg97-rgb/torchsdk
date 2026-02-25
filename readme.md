@@ -16,6 +16,10 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.20
+
+- **Legacy Tokens** - blacklisted tokens now marked legacy and withdraw only.
+
 ### v3.7.18
 
 - **V31 Zero-Burn Migration** — IDL updated to v3.7.5 (program v3.7.5). CURVE_SUPPLY 750M → 700M, TREASURY_LOCK_TOKENS 250M → 300M. Zero tokens burned at migration — vault remainder exactly equals price-matched pool allocation. Transfer fee 0.1% → 0.25% for new tokens. Vote return now redirects to treasury lock (community reserve) instead of Raydium LP. `buildMigrateTransaction` passes `treasuryLock` PDA and `treasuryLockTokenAccount` to the new on-chain context. 38 Kani proofs all passing (including 3 new zero-excess-burn proofs and Flame price-match proof). All three tiers (Spark/Flame/Torch) preserved.
