@@ -82,6 +82,27 @@ export const BLACKLISTED_MINTS: string[] = [
   '22fRDzkMUp8LW7RhPGa17FxifJJr6hR4PqyREAR6jitm', // Legacy mainnet token (relaunched)
   '2DSdhnjTZVCnVEdYrJDxdrdmeedooGCd4A2dDqjH9ctm', // Relaunched token
   'DFM5jCjtnEaHnBzfMExiT4rUGnAj7t7kvxci8BgA64tm', // Blacklisted
+  'WBMWGzvV2fSQEc8DbKQsbX4ueeUdg7buMJNpvVWk9tm',
+  'E5MNMgWzs1DveEftiq4By6Sv95MdsEVyU5iXZ8y3F9tm',
+  'GuLvJnT7dNVKT4hMxBEBSR84fXFkpu8su8seTWXJVqtm',
+  '5n4Pwzw2u23Jo4fL6DTmHnmqVa4gHiH2TFeaAGypwVtm',
+  '4871X12frXyXHup44Ji5L5BTBK7MNKdq3HYshPuJkhtm',
+  'Ao49PDxkUF4YRuaxxoh31dj3QdZD6W8reAooHZEnRqtm',
+  'ATp6vuxnL4ysnA8WWnRJ6XLCQsgnDWB3GyR5UD8YFbtm',
+  'C2etphp3yh5aTx9gBiQ3tJ6vA2AUioXP9ApzjQTzWdtm',
+  'G1UuoUbqUSWTrYMF1DcedazvPuReSc75t6yoUgbyHWtm',
+  '9QZ66iAjJ9FkP79M7f5KCVTJ732E52qybrGp6F5B97tm',
+  'w5kr3WJ5cqty33h7k4E36bysWsoiiZRfjm7zUBzPCtm',
+  '3w2tZkQHZPksbj1bbq7mkJP16UPLbYWoDekMWootYKtm',
+  '6qZeyoNhXJuQQiKRPVutuTojneBEVZ9UnDfJi1CJovtm',
+  'J9vfPGJAWYTBVo3fBzAe5dk4DfmzybTKXumGbEi3a1tm',
+  'Txi1N4zY6Gu8HmqPXdRVXoQ6R9TxUTYfQqsLTMawHtm',
+  '5mVJc3PPWmJvJX3FsomxisDUG8Dr6coWVbnBZvYqCktm',
+  '6VJbgHycoYb1y5VvaXZH9isB5sheuVT9ubU5rrkGvJtm',
+  'ACgsqLCQfDbMe721pQQRTR9uXJHea3ZPdFdjKYBVkotm',
+  '83yV9zfEuH116zNxZFbEzzpVZBae6MxabANRmdXhAwtm',
+  'BiRMKYyqgwLfrKJEsdjAM7C7WJK3LoqDPNKQTy7CA9tm',
+  'AmoCUAhSWdUbihSoGnddf1VurXZUgRZifJUoB54xGntm'
 ]
 
 // Formatting helpers

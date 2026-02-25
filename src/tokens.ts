@@ -112,8 +112,8 @@ const toTokenSummary = (raw: RawToken): TokenSummary => {
   const price = calculatePrice(virtualSol, virtualTokens)
   const priceInSol = (price * TOKEN_MULTIPLIER) / LAMPORTS_PER_SOL
 
-  const circulating = TOTAL_SUPPLY - realTokens - voteVault
-  const marketCapSol = (priceInSol * Number(circulating)) / TOKEN_MULTIPLIER
+  // Market cap = fully diluted (total supply × price), matching pump.fun convention
+  const marketCapSol = (priceInSol * Number(TOTAL_SUPPLY)) / TOKEN_MULTIPLIER
 
   return {
     mint: raw.mint,
@@ -185,18 +185,19 @@ const buildTokenDetail = (
 
   let priceInSol: number
   let marketCapSol: number
-  const circulating = TOTAL_SUPPLY - realTokens - voteVault
 
   if (bc.migrated && poolPrice && poolPrice.tokenReserves > 0) {
     // Use live Raydium pool price for migrated tokens
     priceInSol = poolPrice.solReserves / poolPrice.tokenReserves
-    marketCapSol = priceInSol * (Number(circulating) / TOKEN_MULTIPLIER)
   } else {
     // Use bonding curve virtual reserves for pre-migration tokens
     const price = calculatePrice(virtualSol, virtualTokens)
     priceInSol = (price * TOKEN_MULTIPLIER) / LAMPORTS_PER_SOL
-    marketCapSol = (priceInSol * Number(circulating)) / TOKEN_MULTIPLIER
   }
+
+  // Market cap = fully diluted (total supply × price), matching pump.fun convention
+  marketCapSol = (priceInSol * Number(TOTAL_SUPPLY)) / TOKEN_MULTIPLIER
+  const circulating = TOTAL_SUPPLY - realTokens - voteVault
 
   const treasurySol = treasury ? Number(treasury.sol_balance.toString()) / LAMPORTS_PER_SOL : 0
   const treasuryTokens = treasury ? Number(treasury.tokens_held.toString()) / TOKEN_MULTIPLIER : 0
