@@ -1,7 +1,3 @@
 dist
 node_modules
 .surfpool
-
-2ivHcz7Nbs9nJAyGBBJ6H2GPW8nbMoSXTDKB3Zb5rRtm
-
-npx tsx tests/relaunch_2DS.ts 2ivHcz7Nbs9nJAyGBBJ6H2GPW8nbMoSXTDKB3Zb5rRtm --seed-buy --execute
