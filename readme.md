@@ -16,6 +16,10 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.18
+
+- **V31 Zero-Burn Migration** — IDL updated to v3.7.5 (program v3.7.5). CURVE_SUPPLY 750M → 700M, TREASURY_LOCK_TOKENS 250M → 300M. Zero tokens burned at migration — vault remainder exactly equals price-matched pool allocation. Transfer fee 0.1% → 0.25% for new tokens. Vote return now redirects to treasury lock (community reserve) instead of Raydium LP. `buildMigrateTransaction` passes `treasuryLock` PDA and `treasuryLockTokenAccount` to the new on-chain context. 38 Kani proofs all passing (including 3 new zero-excess-burn proofs and Flame price-match proof). All three tiers (Spark/Flame/Torch) preserved.
+
 ### v3.7.17
 
 - **`getAllLoanPositions`** — New SDK function scans all on-chain LoanPosition accounts for a given mint. Returns active positions with computed health status (collateral value, LTV, health), sorted liquidatable-first. Fetches Raydium pool price once (not per-position) for efficient valuation. New types: `LoanPositionWithKey` (extends `LoanPositionInfo` with `borrower` address), `AllLoanPositionsResult`.
@@ -54,7 +58,7 @@ SDK version tracks the on-chain program IDL version.
 
 - **`update_authority` Removed (V28)** — The `update_authority` admin instruction has been removed from the on-chain program. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
 - **Pre-migration Buyback Removed** — Only post-migration `execute_auto_buyback` (on Raydium DEX) remains. The pre-migration bonding curve buyback handler and context have been removed.
-- **V27 Treasury Lock + PDA Pool Validation** — 250M tokens (25%) locked in TreasuryLock PDA at creation; 750M (75%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation in `Borrow`, `Liquidate`, `TreasuryBuybackDex`, and `VaultSwap` contexts.
+- **V27 Treasury Lock + PDA Pool Validation** — 300M tokens (30%) locked in TreasuryLock PDA at creation; 700M (70%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation in `Borrow`, `Liquidate`, `TreasuryBuybackDex`, and `VaultSwap` contexts.
 - **36 Kani Proof Harnesses** — All passing. Including V25 supply conservation, V26 SOL wrapping conservation, lending lifecycle with interest.
 - **IDL updated to v3.7.0** (27 instructions).
 

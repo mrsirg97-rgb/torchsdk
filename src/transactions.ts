@@ -1363,6 +1363,9 @@ export const buildMigrateTransaction = async (
   const [globalConfigPda] = getGlobalConfigPda()
   const [treasuryPda] = getTokenTreasuryPda(mint)
   const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
+  // [V31] Treasury lock PDA and its token ATA (receives vote-return tokens)
+  const [treasuryLock] = getTreasuryLockPda(mint)
+  const treasuryLockTokenAccount = getTreasuryLockTokenAccount(mint, treasuryLock)
 
   // Token vault = bonding curve's Token-2022 ATA
   const tokenVault = getAssociatedTokenAddressSync(
@@ -1434,6 +1437,8 @@ export const buildMigrateTransaction = async (
       treasury: treasuryPda,
       tokenVault,
       treasuryTokenAccount,
+      treasuryLockTokenAccount,
+      treasuryLock,
       bcWsol,
       payerWsol,
       payerToken,

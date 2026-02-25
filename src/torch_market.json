@@ -2,7 +2,7 @@
   "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
   "metadata": {
     "name": "torch_market",
-    "version": "3.7.4",
+    "version": "3.7.5",
     "spec": "0.1.0",
     "description": "torch.market"
   },
@@ -1104,41 +1104,6 @@
                   114,
                   118,
                   101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ]
-          }
-        },
-        {
-          "name": "treasury_lock",
-          "docs": [
-            "Required account (not optional) to prevent griefing:",
-            "- data_len > 0: V27 token (PDA initialized), revival threshold = 3BT/8",
-            "- data_len == 0: legacy token (PDA not initialized), revival threshold = BT/8",
-            "Passing the wrong address fails seeds check. Can't skip or fake."
-          ],
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  114,
-                  101,
-                  97,
-                  115,
-                  117,
-                  114,
-                  121,
-                  95,
-                  108,
-                  111,
-                  99,
-                  107
                 ]
               },
               {
@@ -2887,6 +2852,45 @@
                 89
               ]
             }
+          }
+        },
+        {
+          "name": "treasury_lock_token_account",
+          "docs": [
+            "[V31] Treasury lock's token account — receives vote-return tokens."
+          ],
+          "writable": true
+        },
+        {
+          "name": "treasury_lock",
+          "docs": [
+            "[V31] Treasury lock PDA — authority over locked tokens"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  95,
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
           }
         },
         {
@@ -5457,6 +5461,11 @@
       "code": 6059,
       "name": "InvalidBondingTarget",
       "msg": "Invalid bonding target: must be 50, 100, or 200 SOL"
+    },
+    {
+      "code": 6060,
+      "name": "InvalidTokenAccount",
+      "msg": "Invalid token account - must be treasury lock's Token-2022 ATA"
     }
   ],
   "types": [

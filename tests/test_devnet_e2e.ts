@@ -415,8 +415,8 @@ const main = async () => {
       const tr = postMigData!.treasury!
 
       const TOTAL_SUPPLY = 1_000_000_000
-      const TREASURY_LOCK = 250_000_000  // V27: 250M locked
-      const CURVE_SUPPLY = 750_000_000   // V27: 750M for curve + pool
+      const TREASURY_LOCK = 300_000_000  // V31: 300M locked
+      const CURVE_SUPPLY = 700_000_000   // V31: 700M for curve + pool
       const tokenVaultPost = isWsolToken0 ? vault1 : vault0
       const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
       const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
@@ -427,7 +427,16 @@ const main = async () => {
       const poolSolBal = await connection.getTokenAccountBalance(isWsolToken0 ? vault0 : vault1)
       const poolSol = Number(poolSolBal.value.amount) / LAMPORTS_PER_SOL
 
-      log(`\n  ┌─── V27 Post-Migration Distribution ─────────────────────┐`)
+      // Spark tier: IVS = 18.75 SOL, IVT = 756.25M
+      const ivs = 18.75
+      const ivt = 756_250_000
+      const entryPrice = ivs / ivt
+      const exitPrice = poolSol / poolTokens
+      const multiplier = exitPrice / entryPrice
+      const initialMcSol = TOTAL_SUPPLY * entryPrice
+      const finalMcSol = TOTAL_SUPPLY * exitPrice
+
+      log(`\n  ┌─── V31 Post-Migration Distribution ─────────────────────┐`)
       log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
       log(`  │  Treasury Lock:    ${TREASURY_LOCK.toLocaleString().padStart(15)} tokens  │`)
       log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
@@ -437,6 +446,12 @@ const main = async () => {
       log(`  ├────────────────────────────────────────────────────────────┤`)
       log(`  │  Pool SOL:         ${poolSol.toFixed(4).padStart(15)} SOL     │`)
       log(`  │  Treasury SOL:     ${treasurySol.toFixed(4).padStart(15)} SOL     │`)
+      log(`  ├────────────────────────────────────────────────────────────┤`)
+      log(`  │  Entry Price:      ${entryPrice.toExponential(4).padStart(15)} SOL/tok │`)
+      log(`  │  Exit Price:       ${exitPrice.toExponential(4).padStart(15)} SOL/tok │`)
+      log(`  │  Multiplier:       ${multiplier.toFixed(1).padStart(15)}x        │`)
+      log(`  │  Initial MC:       ${initialMcSol.toFixed(2).padStart(15)} SOL     │`)
+      log(`  │  Final MC:         ${finalMcSol.toFixed(2).padStart(15)} SOL     │`)
       log(`  └────────────────────────────────────────────────────────────┘`)
     } catch { /* non-critical */ }
 

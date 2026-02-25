@@ -81,6 +81,7 @@ export const BLACKLISTED_MINTS: string[] = [
   'GawKda5Vzm34HaDCkQrCLjnGUaQFVuYcTFpkDstNBRtm', // Failed mainnet token (relaunched)
   '22fRDzkMUp8LW7RhPGa17FxifJJr6hR4PqyREAR6jitm', // Legacy mainnet token (relaunched)
   '2DSdhnjTZVCnVEdYrJDxdrdmeedooGCd4A2dDqjH9ctm', // Relaunched token
+  'DFM5jCjtnEaHnBzfMExiT4rUGnAj7t7kvxci8BgA64tm', // Blacklisted
 ]
 
 // Formatting helpers

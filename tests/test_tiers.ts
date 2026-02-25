@@ -350,8 +350,8 @@ const main = async () => {
         const tr = postMigData!.treasury!
 
         const TOTAL_SUPPLY = 1_000_000_000 // 1B tokens (display units)
-        const TREASURY_LOCK = 250_000_000  // 250M locked in treasury lock PDA
-        const CURVE_SUPPLY = 750_000_000   // 750M for curve + pool
+        const TREASURY_LOCK = 300_000_000  // 300M locked in treasury lock PDA
+        const CURVE_SUPPLY = 700_000_000   // 700M for curve + pool
         const tokenVaultPost = isWsolToken0 ? vault1 : vault0
         const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
         const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
@@ -376,8 +376,10 @@ const main = async () => {
         const entryPrice = ivs / ivt
         const exitPrice = poolSol / poolTokens
         const multiplier = exitPrice / entryPrice
+        const initialMcSol = TOTAL_SUPPLY * entryPrice
+        const finalMcSol = TOTAL_SUPPLY * exitPrice
 
-        log(`\n  ┌─── V27 Post-Migration Token Distribution ───────────────┐`)
+        log(`\n  ┌─── V31 Post-Migration Token Distribution ───────────────┐`)
         log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
         log(`  │  Treasury Lock:    ${TREASURY_LOCK.toLocaleString().padStart(15)} tokens  │`)
         log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
@@ -394,27 +396,29 @@ const main = async () => {
         log(`  │  Entry Price:      ${entryPrice.toExponential(4).padStart(15)} SOL/tok │`)
         log(`  │  Exit Price:       ${exitPrice.toExponential(4).padStart(15)} SOL/tok │`)
         log(`  │  Multiplier:       ${multiplier.toFixed(1).padStart(15)}x        │`)
+        log(`  │  Initial MC:       ${initialMcSol.toFixed(2).padStart(15)} SOL     │`)
+        log(`  │  Final MC:         ${finalMcSol.toFixed(2).padStart(15)} SOL     │`)
         log(`  │  Sold %:           ${((tokensSold / CURVE_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
         log(`  │  Excess Burn %:    ${((excessBurned / CURVE_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
         log(`  └────────────────────────────────────────────────────────────┘`)
 
-        // Verify V27 expectations: ~80% sold, <15% excess burn, ~13.44x multiplier
+        // Verify V31 expectations: ~79% sold, 0% excess burn (zero-burn migration), ~13.44x multiplier
         const soldPct = (tokensSold / CURVE_SUPPLY) * 100
         const burnPct = (excessBurned / CURVE_SUPPLY) * 100
         if (soldPct > 70 && soldPct < 90) {
-          ok('V27 tokens sold %', `${soldPct.toFixed(1)}% (expected ~80%)`)
+          ok('V31 tokens sold %', `${soldPct.toFixed(1)}% (expected ~79%)`)
         } else {
-          fail('V27 tokens sold %', { message: `${soldPct.toFixed(1)}% — expected 70-90%` })
+          fail('V31 tokens sold %', { message: `${soldPct.toFixed(1)}% — expected 70-90%` })
         }
-        if (burnPct < 15) {
-          ok('V27 excess burn %', `${burnPct.toFixed(1)}% (expected <15%)`)
+        if (burnPct < 1) {
+          ok('V31 zero burn', `${burnPct.toFixed(1)}% (expected 0%)`)
         } else {
-          fail('V27 excess burn %', { message: `${burnPct.toFixed(1)}% — expected <15%` })
+          fail('V31 zero burn', { message: `${burnPct.toFixed(1)}% — expected 0% (zero-burn migration)` })
         }
         if (multiplier > 8 && multiplier < 20) {
-          ok('V27 price multiplier', `${multiplier.toFixed(1)}x (expected ~13.44x)`)
+          ok('V31 price multiplier', `${multiplier.toFixed(1)}x (expected ~13.44x)`)
         } else {
-          fail('V27 price multiplier', { message: `${multiplier.toFixed(1)}x — expected 8-20x` })
+          fail('V31 price multiplier', { message: `${multiplier.toFixed(1)}x — expected 8-20x` })
         }
       } catch (e: any) {
         fail('V27 distribution breakdown', e)

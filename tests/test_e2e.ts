@@ -656,8 +656,8 @@ const main = async () => {
         const tr = postMigData!.treasury!
 
         const TOTAL_SUPPLY = 1_000_000_000 // 1B tokens (display units)
-        const TREASURY_LOCK = 250_000_000  // 250M locked in treasury lock PDA
-        const CURVE_SUPPLY = 750_000_000   // 750M for curve + pool
+        const TREASURY_LOCK = 300_000_000  // 300M locked in treasury lock PDA
+        const CURVE_SUPPLY = 700_000_000   // 700M for curve + pool
         const tokenVaultPost = isWsolToken0 ? vault1 : vault0
         const poolTokenBalPost = await connection.getTokenAccountBalance(tokenVaultPost)
         const poolTokens = Number(poolTokenBalPost.value.amount) / 1e6
@@ -681,8 +681,10 @@ const main = async () => {
         const entryPrice = ivs / ivt
         const exitPrice = poolSol2 / poolTokens
         const multiplier = exitPrice / entryPrice
+        const initialMcSol = TOTAL_SUPPLY * entryPrice
+        const finalMcSol = TOTAL_SUPPLY * exitPrice
 
-        log(`\n  ┌─── V27 Post-Migration Token Distribution ─────────────────┐`)
+        log(`\n  ┌─── V31 Post-Migration Token Distribution ─────────────────┐`)
         log(`  │  Total Supply:     ${TOTAL_SUPPLY.toLocaleString().padStart(15)} tokens  │`)
         log(`  │  Treasury Lock:    ${TREASURY_LOCK.toLocaleString().padStart(15)} tokens  │`)
         log(`  │  Tokens Sold:      ${tokensSold.toFixed(0).padStart(15)} tokens  │`)
@@ -698,6 +700,8 @@ const main = async () => {
         log(`  │  Entry Price:      ${entryPrice.toExponential(4).padStart(15)} SOL/tok │`)
         log(`  │  Exit Price:       ${exitPrice.toExponential(4).padStart(15)} SOL/tok │`)
         log(`  │  Multiplier:       ${multiplier.toFixed(1).padStart(15)}x        │`)
+        log(`  │  Initial MC:       ${initialMcSol.toFixed(2).padStart(15)} SOL     │`)
+        log(`  │  Final MC:         ${finalMcSol.toFixed(2).padStart(15)} SOL     │`)
         log(`  │  Sold %:           ${((tokensSold / CURVE_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
         log(`  │  Excess Burn %:    ${((excessBurned / CURVE_SUPPLY) * 100).toFixed(1).padStart(14)}%         │`)
         log(`  └────────────────────────────────────────────────────────────┘`)
