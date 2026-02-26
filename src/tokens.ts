@@ -26,6 +26,7 @@ import {
 } from './program'
 import {
   PROGRAM_ID,
+  BLACKLISTED_MINTS,
   LAMPORTS_PER_SOL,
   TOKEN_MULTIPLIER,
   TOTAL_SUPPLY,
@@ -84,7 +85,7 @@ const fetchAllRawTokens = async (connection: Connection): Promise<RawToken[]> =>
       const decoded = coder.accounts.decode('BondingCurve', acc.account.data)
       const mintStr = decoded.mint.toString()
 
-      // Legacy mints are no longer filtered — frontend tags them as 'legacy'
+      if (BLACKLISTED_MINTS.includes(mintStr)) continue
       if (decoded.reclaimed) continue
 
       tokens.push({
