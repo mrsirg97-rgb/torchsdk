@@ -27,7 +27,7 @@ Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`
 |----------|-------|---------|
 | Critical | 0 | -- |
 | High | 0 | -- |
-| Medium | 3 | Lending enabled by default (accepted); Token-2022 transfer fee on collateral (inherent, reduced to 0.003%); Epoch rewards race condition (accepted) |
+| Medium | 3 | Lending enabled by default (accepted); Token-2022 transfer fee on collateral (inherent, reduced to 0.03%); Epoch rewards race condition (accepted) |
 | Low | 7 | fund_vault_wsol decoupled accounting; Stranded WSOL lamports; Vault sol_balance drift; Sell no position check; Slot-based interest; Revival no virtual reserve update; Treasury lock ATA not Anchor-constrained (CPI validated, see V31 notes) |
 | Informational | 23 | Various carried findings + 3 new V3.7.1 + 2 new V3.7.2 + 2 new V3.7.3 + 2 new V3.7.5 (I-20: zero-burn migration design; I-21: AccountInfo stack pressure mitigation) + 1 new V3.7.6 (I-22: reserve floor zeroed, fee split rebalanced) + 1 new V3.7.7 (I-23: buyback removed, lending cap increased) |
 
@@ -41,7 +41,7 @@ Key strengths:
 - **V31 zero-burn migration**: Curve supply reduced from 750M to 700M. At graduation, `vault_remaining == tokens_for_pool` exactly -- zero excess tokens to burn. Cleaner migration with no deflationary side effect
 - **V31 vote return → treasury lock**: Vote-return tokens now transfer to TreasuryLock PDA instead of Raydium LP injection. Preserves tokens for future governance release instead of diluting the pool
 - **V31 supply split**: 700M curve (70%) + 300M locked (30%) = 1B total. Treasury lock increased from 250M to 300M for stronger community reserve
-- **V31 transfer fee**: Reduced from 10 bps (0.1%) to 3 bps (0.003%). Round-trip cost ~0.006% instead of ~0.2%
+- **V31 transfer fee**: Reduced from 10 bps (0.1%) to 3 bps (0.03%). Round-trip cost ~0.006% instead of ~0.2%
 - **V29 on-chain metadata**: Token-2022 MetadataPointer + TokenMetadata extensions replace Metaplex dependency. Metadata immutably stored on the mint itself. Pointer authority is `None` (permanently immutable). SDK tests verify name/symbol/uri round-trip via `getTokenMetadata()`
 - **V29 Metaplex removal**: `add_metadata` (Metaplex backfill for legacy tokens) was temporary -- 13/24 succeeded, remaining 11 have old account layouts. All Metaplex code removed: `METAPLEX_PROGRAM_ID` constant, `build_create_metaplex_metadata_instruction`, `AddMetadata` context, `add_metadata` handler, `InvalidMetadataAccount` error. L-9 (untyped mint AccountInfo) is now moot
 - **V20 swap_fees_to_sol**: Closed economic loop verified -- treasury tokens sold on Raydium, WSOL unwrapped, SOL credited back to same treasury. No external routing possible
@@ -66,7 +66,7 @@ Key strengths:
 
 ### Overview
 
-New instruction that sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless -- anyone can call post-migration. Completes the fee lifecycle: transfer fees (0.003%) accumulate as tokens, `harvest_fees` collects them, `swap_fees_to_sol` converts to SOL for lending yield and epoch rewards.
+New instruction that sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless -- anyone can call post-migration. Completes the fee lifecycle: transfer fees (0.03%) accumulate as tokens, `harvest_fees` collects them, `swap_fees_to_sol` converts to SOL for lending yield and epoch rewards.
 
 **Files audited:**
 - `handlers/treasury.rs` (lines 82-207) -- handler logic
@@ -212,7 +212,7 @@ Correctly passes vaults in **pool order** (vault_0/vault_1 by mint pubkey compar
 
 ### Overview
 
-V29 makes two changes: (1) new tokens store metadata on-chain via Token-2022 MetadataPointer + TokenMetadata extensions, replacing the Metaplex dependency; (2) transfer fee reduced from 1% (100 bps) to 0.003% (3 bps) with fee config authority revoked at migration. The `add_metadata` instruction (Metaplex backfill for legacy tokens) was temporary and has been removed -- all Metaplex code is deleted.
+V29 makes two changes: (1) new tokens store metadata on-chain via Token-2022 MetadataPointer + TokenMetadata extensions, replacing the Metaplex dependency; (2) transfer fee reduced from 1% (100 bps) to 0.03% (3 bps) with fee config authority revoked at migration. The `add_metadata` instruction (Metaplex backfill for legacy tokens) was temporary and has been removed -- all Metaplex code is deleted.
 
 **Files audited:**
 - `handlers/token.rs` -- create_token with Token-2022 metadata extensions
@@ -257,12 +257,12 @@ set_authority(
 )?;
 ```
 
-**Verified:** This follows the same pattern as the existing mint authority and freeze authority revocations (lines 354-375). `AuthorityType::TransferFeeConfig` with `new_authority = None` is irreversible -- Token-2022 rejects `SetAuthority` when the current authority is `None`. The 0.003% fee rate is locked forever post-migration.
+**Verified:** This follows the same pattern as the existing mint authority and freeze authority revocations (lines 354-375). `AuthorityType::TransferFeeConfig` with `new_authority = None` is irreversible -- Token-2022 rejects `SetAuthority` when the current authority is `None`. The 0.03% fee rate is locked forever post-migration.
 
 **Three authorities now revoked at migration:**
 1. Mint authority → `None` (supply capped)
 2. Freeze authority → `None` (free trading guaranteed)
-3. Transfer fee config authority → `None` (0.003% fee rate locked)
+3. Transfer fee config authority → `None` (0.03% fee rate locked)
 
 ### V29 New Findings
 
@@ -284,7 +284,7 @@ The mint account is created with 346 bytes (TransferFeeConfig + MetadataPointer)
 
 ### Overview
 
-V31 makes three changes: (1) curve supply reduced from 750M to 700M, treasury lock increased from 250M to 300M -- at graduation, `vault_remaining == tokens_for_pool` exactly, eliminating the ~50M excess token burn; (2) vote-return tokens now transfer to TreasuryLock PDA instead of Raydium LP injection; (3) transfer fee reduced from 10 bps to 3 bps (0.003%).
+V31 makes three changes: (1) curve supply reduced from 750M to 700M, treasury lock increased from 250M to 300M -- at graduation, `vault_remaining == tokens_for_pool` exactly, eliminating the ~50M excess token burn; (2) vote-return tokens now transfer to TreasuryLock PDA instead of Raydium LP injection; (3) transfer fee reduced from 10 bps to 3 bps (0.03%).
 
 **Files audited:**
 - `contexts.rs` -- `MigrateToDex` account context (treasury_lock_token_account downgraded to AccountInfo)
@@ -602,7 +602,7 @@ The V2.0 rewrite eliminated the most significant security finding from V1.6. The
 - **Treasury fee swap is a closed loop.** `swap_fees_to_sol` sells treasury tokens on Raydium and returns SOL to the same treasury. All accounts (input, output, destination) are constrained to treasury-owned PDAs and ATAs. No external wallet is referenced at any point in the fund flow.
 - **[V33] Buyback removed -- reduced attack surface.** The `execute_auto_buyback` instruction (~330 lines of handler + context) was removed. One fewer CPI-heavy instruction to audit, one fewer Raydium interaction path, one fewer way treasury SOL can be spent. Treasury now accumulates SOL unidirectionally via sell cycle.
 - **Treasury lock is permanent.** 300M tokens (30% of supply) locked at creation with no withdrawal instruction. Release deferred to future governance.
-- **Authority revocation is irreversible.** Mint, freeze, and transfer fee config authorities all set to `None` at migration. Supply is capped, trading is unrestricted, and the 0.003% fee rate is locked forever.
+- **Authority revocation is irreversible.** Mint, freeze, and transfer fee config authorities all set to `None` at migration. Supply is capped, trading is unrestricted, and the 0.03% fee rate is locked forever.
 - **Zero-burn migration.** V31 tokens have `vault_remaining == tokens_for_pool` at graduation -- no excess tokens to burn. Supply is fully predictable from creation through migration.
 - **On-chain metadata is immutable.** Token-2022 MetadataPointer authority is `None` -- metadata stored on the mint itself can never be redirected. No Metaplex dependency. All Metaplex code has been removed.
 - **No dangerouslySetInnerHTML.** Zero instances in the entire frontend. All user content is React-escaped.
@@ -613,8 +613,8 @@ The V2.0 rewrite eliminated the most significant security finding from V1.6. The
 ### What's Accepted (Design Trade-offs)
 
 - **Lending enabled by default** with immutable parameters. No per-token disable. Conservative defaults mitigate risk.
-- **Token-2022 transfer fee** applies to collateral deposits/withdrawals (~0.006% round-trip cost at 0.003% per transfer).
-- **Token-2022 transfer fee on swap input** -- when `swap_fees_to_sol` sells tokens on Raydium, the 0.003% transfer fee is assessed on the input (reducing effective sell amount by ~0.003%). Inherent to Token-2022, not exploitable.
+- **Token-2022 transfer fee** applies to collateral deposits/withdrawals (~0.006% round-trip cost at 0.03% per transfer).
+- **Token-2022 transfer fee on swap input** -- when `swap_fees_to_sol` sells tokens on Raydium, the 0.03% transfer fee is assessed on the input (reducing effective sell amount by ~0.03%). Inherent to Token-2022, not exploitable.
 - **Spot price oracle** for lending collateral valuation. TWAP would be more resistant to manipulation but is not implemented.
 
 ### Immutable Protocol Parameters (V2.4.1)

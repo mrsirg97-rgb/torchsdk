@@ -202,7 +202,7 @@
     },
     {
       "name": "TORCH_HARVEST_FEES",
-      "description": "Harvest accumulated Token-2022 transfer fees (0.003%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
+      "description": "Harvest accumulated Token-2022 transfer fees (0.03%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
     },
     {
       "name": "TORCH_SWAP_FEES_TO_SOL",

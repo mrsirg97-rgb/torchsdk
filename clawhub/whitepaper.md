@@ -36,7 +36,7 @@ Per-Token Economy:
   │                            Migration ──── Raydium DEX Pool
   │
   └── Token-2022 Extensions
-       ├── Transfer Fee (0.003%)
+       ├── Transfer Fee (0.03%)
        └── Confidential Transfer (optional)
 
 Protocol Layer:
@@ -133,7 +133,7 @@ New buyers may also be more likely to purchase a token seeing that it is "safer"
 
 - The fee structure itself (sybiling costs more in fees)
 - The community treasury (even sybil buyers fund the collective)
-- Post-migration transfer fees (every transfer costs 0.003%)
+- Post-migration transfer fees (every transfer costs 0.03%)
 
 ---
 
@@ -148,7 +148,7 @@ Migration is **permissionless** — any wallet can trigger the migration for any
 The migration is executed as a two-step atomic process within a single transaction:
 
 1. **Fund WSOL**: Wrap the bonding curve's SOL reserves into a WSOL token account
-2. **Migrate to DEX**: Vote finalization, pool creation on Raydium CPMM, liquidity provision (SOL + tokens), LP token burn (liquidity locked forever), transfer fee activation (0.003% on all future transfers)
+2. **Migrate to DEX**: Vote finalization, pool creation on Raydium CPMM, liquidity provision (SOL + tokens), LP token burn (liquidity locked forever), transfer fee activation (0.03% on all future transfers)
 
 When your token bonds, anyone can complete the migration. The community is not dependent on the creator or any centralized operator.
 
@@ -156,16 +156,16 @@ When your token bonds, anyone can complete the migration. The community is not d
 
 ## 5. Post-Migration: Treasury Accumulation Loop
 
-Once a token migrates to Raydium, the treasury continues growing through the **0.003% transfer fee** and **lending yield**.
+Once a token migrates to Raydium, the treasury continues growing through the **0.03% transfer fee** and **lending yield**.
 
-### The 0.003% Transfer Fee (Token-2022)
+### The 0.03% Transfer Fee (Token-2022)
 
-All `torch.market` tokens use Solana's Token-2022 standard with a built-in **0.003% transfer fee** (3 basis points). This fee is collected on every transfer — wallet to wallet, DEX trades, everything.
+All `torch.market` tokens use Solana's Token-2022 standard with a built-in **0.03% transfer fee** (3 basis points). This fee is collected on every transfer — wallet to wallet, DEX trades, everything.
 
 ```
 User transfers 100,000 tokens
         │
-        └── 0.003% (3 tokens) → Withheld in mint
+        └── 0.03% (3 tokens) → Withheld in mint
                             │
                             └── Harvested → Token Treasury
 ```
@@ -194,7 +194,7 @@ The treasury accumulates SOL through fee harvesting and lending interest, creati
 | Phase | SOL Source | Token Destination |
 |-------|-----------|-------------------|
 | Bonding | 1% fee + 20%→5% of buys (dynamic) | Community treasury (vote vault) |
-| DEX | 0.003% transfer fee → sell to SOL | Treasury SOL → lending pool + epoch rewards |
+| DEX | 0.03% transfer fee → sell to SOL | Treasury SOL → lending pool + epoch rewards |
 
 ---
 
@@ -422,7 +422,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 │  │  │    Token     │    │   Bonding    │    │   Treasury   │                   │    │
 │  │  │   (Mint)     │───▶│    Curve     │───▶│  (lending,   │                   │    │
 │  │  │  Token-2022  │    │  (pricing,   │    │   stars,     │                   │    │
-│  │  │ 0.003% xfer │    │   voting)    │    │   lending)   │                   │    │
+│  │  │ 0.03% xfer │    │   voting)    │    │   lending)   │                   │    │
 │  │  └──────────────┘    └──────┬───────┘    └──────────────┘                   │    │
 │  │                             │                                                │    │
 │  │         ┌───────────────────┼───────────────────┐                           │    │
@@ -506,7 +506,7 @@ The V3.7.7 program exposes 27 instructions across 9 handler domains:
 
 > **Note (V3.7.0):** `update_authority` was removed. Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
 >
-> **Note (V3.7.5):** V31 zero-burn migration. CURVE_SUPPLY 750M→700M, TREASURY_LOCK 250M→300M. Transfer fee 0.1%→0.003%. Vote return → treasury lock.
+> **Note (V3.7.5):** V31 zero-burn migration. CURVE_SUPPLY 750M→700M, TREASURY_LOCK 250M→300M. Transfer fee 0.1%→0.03%. Vote return → treasury lock.
 >
 > **Note (V3.7.6):** V32 protocol treasury rebalance. Reserve floor removed (0 SOL). Volume eligibility 10→2 SOL. Min claim 0.1 SOL. Fee split 90/10 (was 75/25). 39 Kani proofs.
 >
@@ -620,7 +620,7 @@ Pool accounts were reported as unconstrained. Assessment: `validate_pool_account
 CREATE → BONDING → COMPLETE → VOTE → MIGRATE → DEX
    │                                              │
    │                                              ▼
-   │                                   [0.003% Transfer Fee]
+   │                                   [0.03% Transfer Fee]
    │                                              │
    │                                              ▼
    │                                    HARVEST → SWAP TO SOL → LENDING → YIELD
@@ -658,7 +658,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Treasury SOL Share | 20%→5% | Dynamic: decays as bonding progresses |
 | Token Treasury Fee | 1% | Fee on all buys (lifetime) |
 | Protocol Fee | 1% | Fee during bonding (90% treasury, 10% dev) |
-| Transfer Fee | 0.003% (3 bps) | Post-migration fee on all transfers (immutable per mint) |
+| Transfer Fee | 0.03% (3 bps) | Post-migration fee on all transfers (immutable per mint) |
 | Inactivity Period | 7 days | Time before failed token can be reclaimed |
 | Revival Threshold (V27) | 3BT/8 per tier (18.75 / 37.5 / 75 SOL) | SOL needed to revive a reclaimed token |
 | Voting Duration | ~24 hours | Time for community to vote on burn/return |
@@ -702,7 +702,7 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | V3.6.0 | **V26 Permissionless Migration + Authority Revocation.** Mint and freeze authority revoked permanently at migration. |
 | V3.6.x | **V27 Treasury Lock + PDA Pool Validation.** 250M tokens locked at creation. IVS = 3BT/8, 13.44x multiplier. |
 | V3.7.0 | **V28 `update_authority` Removed.** Authority transfer via multisig tooling. 27 instructions. Minimal admin surface. |
-| V3.7.5 | **V31 Zero-Burn Migration.** CURVE_SUPPLY 750M→700M, TREASURY_LOCK 250M→300M. Transfer fee 0.1%→0.003%. Vote return → treasury lock. |
+| V3.7.5 | **V31 Zero-Burn Migration.** CURVE_SUPPLY 750M→700M, TREASURY_LOCK 250M→300M. Transfer fee 0.1%→0.03%. Vote return → treasury lock. |
 | V3.7.6 | **V32 Protocol Treasury Rebalance.** Reserve floor removed. Volume eligibility 10→2 SOL. Min claim 0.1 SOL. Fee split 90/10. 39 Kani proofs. |
 | V3.7.7 | **V33 Buyback Removed, Lending Extended.** `execute_auto_buyback` removed (27 instructions). Lending utilization cap 50%→70%. Treasury simplified to: fee harvest → sell → SOL → lending yield + epoch rewards. |
 

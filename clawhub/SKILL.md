@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.7.11"
+version: "4.7.12"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -36,7 +36,7 @@ metadata:
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.7.11"
+  version: "4.7.12"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -533,7 +533,7 @@ Every token page has an on-chain message board. Messages are SPL Memo transactio
 | Utilization Cap | 70% of treasury |
 | Min Borrow | 0.1 SOL |
 
-Collateral value is calculated from Raydium pool reserves. The 0.003% Token-2022 transfer fee applies on collateral deposits and withdrawals (~0.006% round-trip).
+Collateral value is calculated from Raydium pool reserves. The 0.03% Token-2022 transfer fee applies on collateral deposits and withdrawals (~0.006% round-trip).
 
 ### Protocol Constants
 
@@ -545,7 +545,7 @@ Collateral value is calculated from Raydium pool reserves. The 0.003% Token-2022
 | Protocol Fee | 1% on buys, 0% on sells |
 | Max Wallet | 2% during bonding |
 | Star Cost | 0.05 SOL |
-| Token-2022 Transfer Fee | 0.003% on all transfers (post-migration) |
+| Token-2022 Transfer Fee | 0.03% on all transfers (post-migration) |
 | Vanity Suffix | All token addresses end in `tm` |
 
 ### Formal Verification
