@@ -90,8 +90,8 @@ const toTokenSummary = (raw) => {
     const voteVault = BigInt(bc.vote_vault_balance.toString());
     const price = (0, program_1.calculatePrice)(virtualSol, virtualTokens);
     const priceInSol = (price * constants_1.TOKEN_MULTIPLIER) / constants_1.LAMPORTS_PER_SOL;
-    const circulating = constants_1.TOTAL_SUPPLY - realTokens - voteVault;
-    const marketCapSol = (priceInSol * Number(circulating)) / constants_1.TOKEN_MULTIPLIER;
+    // Market cap = fully diluted (total supply × price), matching pump.fun convention
+    const marketCapSol = (priceInSol * Number(constants_1.TOTAL_SUPPLY)) / constants_1.TOKEN_MULTIPLIER;
     return {
         mint: raw.mint,
         name: (0, program_1.decodeString)(bc.name),
@@ -140,20 +140,21 @@ const buildTokenDetail = (mint, bc, treasury, metadata, holdersCount, solPriceUs
     const burned = BigInt(bc.permanently_burned_tokens?.toString() || '0');
     let priceInSol;
     let marketCapSol;
-    const circulating = constants_1.TOTAL_SUPPLY - realTokens - voteVault;
     if (bc.migrated && poolPrice && poolPrice.tokenReserves > 0) {
         // Use live Raydium pool price for migrated tokens
         priceInSol = poolPrice.solReserves / poolPrice.tokenReserves;
-        marketCapSol = priceInSol * (Number(circulating) / constants_1.TOKEN_MULTIPLIER);
     }
     else {
         // Use bonding curve virtual reserves for pre-migration tokens
         const price = (0, program_1.calculatePrice)(virtualSol, virtualTokens);
         priceInSol = (price * constants_1.TOKEN_MULTIPLIER) / constants_1.LAMPORTS_PER_SOL;
-        marketCapSol = (priceInSol * Number(circulating)) / constants_1.TOKEN_MULTIPLIER;
     }
+    // Market cap = fully diluted (total supply × price), matching pump.fun convention
+    marketCapSol = (priceInSol * Number(constants_1.TOTAL_SUPPLY)) / constants_1.TOKEN_MULTIPLIER;
+    const circulating = constants_1.TOTAL_SUPPLY - realTokens - voteVault;
     const treasurySol = treasury ? Number(treasury.sol_balance.toString()) / constants_1.LAMPORTS_PER_SOL : 0;
     const treasuryTokens = treasury ? Number(treasury.tokens_held.toString()) / constants_1.TOKEN_MULTIPLIER : 0;
+    // V33: buyback removed — these fields are deprecated (always 0 for new tokens)
     const boughtBack = treasury ? Number(treasury.total_bought_back.toString()) / constants_1.TOKEN_MULTIPLIER : 0;
     const buybackCount = treasury ? Number(treasury.buyback_count.toString()) : 0;
     const stars = treasury ? Number(treasury.total_stars.toString()) : 0;

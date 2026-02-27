@@ -16,6 +16,11 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.22
+
+- **V33 Buyback Removal + Lending Cap Increase** — `buildAutoBuybackTransaction` removed (~180 lines of SDK code). The on-chain `execute_auto_buyback` instruction was removed in V33 (program v3.7.7, 27 instructions). Treasury simplified to: fee harvest → sell high → SOL → lending yield + epoch rewards. Lending utilization cap increased from 50% to 70%. `AutoBuybackParams` type removed. IDL updated to v3.7.7. 39 Kani proofs all passing. Binary size reduced ~6% (850 KB → 804 KB).
+- **V32 Protocol Fee Change**
+
 ### v3.7.20
 
 - **Legacy Tokens** - blacklisted tokens now marked legacy and withdraw only.
@@ -35,8 +40,8 @@ SDK version tracks the on-chain program IDL version.
 ### v3.7.10
 
 - **V20 Swap Fees to SOL** — New `buildSwapFeesToSolTransaction` bundles `create_idempotent(treasury_wsol)` + `harvest_fees` + `swap_fees_to_sol` in one atomic transaction. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Treasury PDA signs the swap, WSOL unwrapped to SOL, proceeds added to `treasury.sol_balance` and tracked in `treasury.harvested_fees`. Set `harvest=false` to skip harvest if already done separately. New type: `SwapFeesToSolParams`.
-- **Vault ordering bug fix** — Fixed `validate_pool_accounts` vault ordering in both `swap_fees_to_sol` and `execute_auto_buyback` handlers. Vaults are now passed in pool order (by mint pubkey) instead of swap direction, preventing false validation failures for tokens where `mint < WSOL` (~2.6% of tokens).
-- **28 instructions** — IDL updated to v3.7.10 (28 instructions, up from 27).
+- **Vault ordering bug fix** — Fixed `validate_pool_accounts` vault ordering in `swap_fees_to_sol` handler. Vaults are now passed in pool order (by mint pubkey) instead of swap direction, preventing false validation failures for tokens where `mint < WSOL` (~2.6% of tokens).
+- **28 instructions** — IDL updated to v3.7.10 (28 instructions, up from 27). *(27 instructions as of v3.7.22 — buyback removed in V33)*
 
 ### v3.7.4
 
@@ -48,21 +53,21 @@ SDK version tracks the on-chain program IDL version.
 
 ### v3.7.2
 
-- **Auto-Buyback Client-Side Pre-Checks** — `buildAutoBuybackTransaction` now validates all on-chain conditions before building the transaction. Pre-checks: migration status, baseline initialization, cooldown interval, supply floor (500M), price vs baseline threshold (80%), and minimum buyback amount (0.01 SOL). Throws descriptive errors so callers know exactly why a buyback can't fire (e.g. `"Buyback cooldown: 142 slots remaining"`, `"Price is healthy — no buyback needed (current: 95.2% of baseline, threshold: 80.0%)"`). Return message now includes the actual SOL buyback amount.
+- **Auto-Buyback Client-Side Pre-Checks** — `buildAutoBuybackTransaction` added with 6-point client-side validation. *(Removed in v3.7.22 — buyback instruction removed from on-chain program in V33)*
 - **Harvest Fees Auto-Discovery** — `buildHarvestFeesTransaction` auto-discovers token accounts with withheld Token-2022 transfer fees via `getTokenLargestAccounts` + `unpackAccount` + `getTransferFeeAmount`. New optional `sources` field on `HarvestFeesParams` for explicit source accounts. Compute budget scales dynamically (base 200k + 20k per source account). Source accounts passed as `remainingAccounts` to the on-chain program. Graceful fallback if RPC doesn't support `getTokenLargestAccounts` (e.g. Surfpool local validators).
-- **E2E Test Coverage** — New test sections for harvest fees and auto-buyback across all three test suites (mainnet fork, devnet, tiers). Buyback tests include cooldown verification. Harvest tests validate treasury token balance changes.
+- **E2E Test Coverage** — New test sections for harvest fees across all three test suites (mainnet fork, devnet, tiers). Harvest tests validate treasury token balance changes.
 
 ### v3.7.1
 
-- **`buildAutoBuybackTransaction`** — New SDK function for permissionless treasury buybacks on Raydium. Triggers when pool price drops below the treasury's ratio threshold. Buys tokens with treasury SOL and burns them.
+- **`buildAutoBuybackTransaction`** — Added for permissionless treasury buybacks on Raydium. *(Removed in v3.7.22 — on-chain instruction removed in V33)*
 - **`buildHarvestFeesTransaction`** — New SDK function for permissionless Token-2022 transfer fee harvesting. Collects accumulated 0.1% transfer fees from token accounts into the treasury.
-- **New types** — `AutoBuybackParams`, `HarvestFeesParams` exported.
+- **New types** — `HarvestFeesParams` exported.
 
 ### v3.7.0
 
 - **`update_authority` Removed (V28)** — The `update_authority` admin instruction has been removed from the on-chain program. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. 27 instructions total (down from 28). Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
-- **Pre-migration Buyback Removed** — Only post-migration `execute_auto_buyback` (on Raydium DEX) remains. The pre-migration bonding curve buyback handler and context have been removed.
-- **V27 Treasury Lock + PDA Pool Validation** — 300M tokens (30%) locked in TreasuryLock PDA at creation; 700M (70%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation in `Borrow`, `Liquidate`, `TreasuryBuybackDex`, and `VaultSwap` contexts.
+- **Pre-migration Buyback Removed** — Pre-migration bonding curve buyback handler and context removed. *(Post-migration `execute_auto_buyback` also removed in V33)*
+- **V27 Treasury Lock + PDA Pool Validation** — 300M tokens (30%) locked in TreasuryLock PDA at creation; 700M (70%) for bonding curve. IVS = 3BT/8, IVT = 756.25M tokens — 13.44x multiplier. PDA-based Raydium pool validation replaces runtime validation in `Borrow`, `Liquidate`, and `VaultSwap` contexts.
 - **36 Kani Proof Harnesses** — All passing. Including V25 supply conservation, V26 SOL wrapping conservation, lending lifecycle with interest.
 - **IDL updated to v3.7.0** (27 instructions).
 
@@ -198,7 +203,6 @@ All builders return `{ transaction: Transaction, message: string }`. You sign an
 
 | Function | Description |
 |----------|-------------|
-| `buildAutoBuybackTransaction(connection, params)` | Trigger treasury buyback when price < 80% of baseline. Pre-checks all conditions client-side. |
 | `buildHarvestFeesTransaction(connection, params)` | Harvest Token-2022 transfer fees into treasury. Auto-discovers source accounts or accepts explicit list. |
 | `buildSwapFeesToSolTransaction(connection, params)` | Swap harvested transfer fee tokens to SOL via Raydium. Bundles harvest + swap in one atomic tx. |
 
@@ -403,9 +407,9 @@ npx tsx tests/test_e2e.ts
 
 Expected output: `RESULTS: 32 passed, 0 failed`
 
-Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), harvest transfer fees (auto-discovery), swap fees to SOL (harvest + Raydium swap in one tx), auto-buyback (pre-checks + cooldown verification), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
+Test coverage: create token, vault lifecycle (create/deposit/query/withdraw/withdraw tokens), buy (direct + vault), link/unlink wallet, sell, star, messages, confirm, full bonding to graduation (50/100/200 SOL tiers), permissionless Raydium migration (V26 two-step), harvest transfer fees (auto-discovery), swap fees to SOL (harvest + Raydium swap in one tx), borrow, repay, vault swap (buy + sell on Raydium DEX), vault-routed liquidation, protocol reward claims (epoch volume + vault-routed claim).
 
-A separate devnet E2E test (`tests/test_devnet_e2e.ts`) validates the full lifecycle against Solana devnet with `TORCH_NETWORK=devnet`. A tiers test (`tests/test_tiers.ts`) validates the full lifecycle across all three graduation tiers (Spark/Flame/Torch) including harvest and buyback.
+A separate devnet E2E test (`tests/test_devnet_e2e.ts`) validates the full lifecycle against Solana devnet with `TORCH_NETWORK=devnet`. A tiers test (`tests/test_tiers.ts`) validates the full lifecycle across all three graduation tiers (Spark/Flame/Torch) including harvest and lending.
 
 ## License
 

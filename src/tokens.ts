@@ -201,6 +201,7 @@ const buildTokenDetail = (
 
   const treasurySol = treasury ? Number(treasury.sol_balance.toString()) / LAMPORTS_PER_SOL : 0
   const treasuryTokens = treasury ? Number(treasury.tokens_held.toString()) / TOKEN_MULTIPLIER : 0
+  // V33: buyback removed — these fields are deprecated (always 0 for new tokens)
   const boughtBack = treasury ? Number(treasury.total_bought_back.toString()) / TOKEN_MULTIPLIER : 0
   const buybackCount = treasury ? Number(treasury.buyback_count.toString()) : 0
   const stars = treasury ? Number(treasury.total_stars.toString()) : 0

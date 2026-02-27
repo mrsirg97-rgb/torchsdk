@@ -43,7 +43,6 @@ import {
   buildUnlinkWalletTransaction,
   buildVaultSwapTransaction,
   buildHarvestFeesTransaction,
-  buildAutoBuybackTransaction,
   confirmTransaction,
   createEphemeralAgent,
   getTokenMetadata,
@@ -930,89 +929,7 @@ const main = async () => {
       }
 
       // ------------------------------------------------------------------
-      // 19. Auto Buyback
-      // ------------------------------------------------------------------
-      log('\n[19] Auto Buyback')
-      try {
-        // Do sells to depress price below baseline threshold
-        const { getAssociatedTokenAddressSync: gataB } = require('@solana/spl-token')
-        const TOKEN_2022_B = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
-        const { getTorchVaultPda: gvpB } = require('../src/program')
-        const [vaultPdaB] = gvpB(wallet.publicKey)
-        const vaultAtaB = gataB(new PublicKey(mint), vaultPdaB, true, TOKEN_2022_B)
-        const tokenBalB = await connection.getTokenAccountBalance(vaultAtaB)
-        const totalTokensB = Number(tokenBalB.value.amount)
-
-        // Sell 70% of vault tokens in batches to push price down
-        const sellPerBatchB = Math.floor(totalTokensB * 0.175)
-        for (let i = 0; i < 4; i++) {
-          if (sellPerBatchB < 1_000_000) break
-          try {
-            const sellResult = await buildVaultSwapTransaction(connection, {
-              mint,
-              signer: walletAddr,
-              vault_creator: walletAddr,
-              amount_in: sellPerBatchB,
-              minimum_amount_out: 1,
-              is_buy: false,
-            })
-            const { ComputeBudgetProgram: CBPB } = require('@solana/web3.js')
-            sellResult.transaction.instructions.unshift(
-              CBPB.setComputeUnitLimit({ units: 400_000 }),
-            )
-            await signAndSend(connection, wallet, sellResult.transaction)
-          } catch (e: any) {
-            log(`  Sell ${i + 1} skipped: ${e.message?.substring(0, 80)}`)
-          }
-        }
-
-        // Snapshot treasury before buyback
-        const preBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
-        const preBuybackSol = Number(preBuybackData?.treasury?.sol_balance?.toString() || '0')
-        const preBuybackCount = Number(preBuybackData?.treasury?.buyback_count?.toString() || '0')
-
-        try {
-          const buybackResult = await buildAutoBuybackTransaction(connection, {
-            mint,
-            payer: walletAddr,
-          })
-          const buybackSig = await signAndSend(connection, wallet, buybackResult.transaction)
-
-          const postBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
-          const postBuybackSol = Number(postBuybackData?.treasury?.sol_balance?.toString() || '0')
-          const postBuybackCount = Number(postBuybackData?.treasury?.buyback_count?.toString() || '0')
-
-          if (postBuybackCount > preBuybackCount) {
-            ok('buildAutoBuybackTransaction', `${buybackResult.message} sol: ${(preBuybackSol / 1e9).toFixed(4)}→${(postBuybackSol / 1e9).toFixed(4)}, count: ${preBuybackCount}→${postBuybackCount} sig=${buybackSig.slice(0, 8)}...`)
-          } else {
-            ok('buildAutoBuybackTransaction', `${buybackResult.message} — tx succeeded sig=${buybackSig.slice(0, 8)}...`)
-          }
-
-          // Test cooldown: call again immediately
-          try {
-            await buildAutoBuybackTransaction(connection, { mint, payer: walletAddr })
-            fail('Buyback cooldown', 'should have thrown')
-          } catch (cooldownErr: any) {
-            if (cooldownErr.message?.includes('cooldown') || cooldownErr.message?.includes('healthy')) {
-              ok('Buyback cooldown/pre-check', cooldownErr.message)
-            } else {
-              ok('Buyback re-check', cooldownErr.message)
-            }
-          }
-        } catch (e: any) {
-          if (e.message?.includes('healthy') || e.message?.includes('too low') || e.message?.includes('cooldown') || e.message?.includes('floor')) {
-            ok('Auto buyback pre-check', `correctly prevented: ${e.message}`)
-          } else {
-            fail('buildAutoBuybackTransaction', e)
-          }
-        }
-      } catch (e: any) {
-        fail('Auto buyback lifecycle', e)
-        if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
-      }
-
-      // ------------------------------------------------------------------
-      // 20. Vault-Routed Liquidation
+      // 19. Vault-Routed Liquidation (was 20, buyback section removed in V33)
       // ------------------------------------------------------------------
       log('\n[20] Vault-Routed Liquidation (borrow → time travel → liquidate via vault)')
 

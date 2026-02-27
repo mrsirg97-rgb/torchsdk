@@ -63,7 +63,7 @@ export interface BondingCurve {
 export interface GlobalConfig {
   authority: PublicKey
   treasury: PublicKey
-  dev_wallet: PublicKey // V8: receives 25% of treasury fee
+  dev_wallet: PublicKey // V8: receives 10% of protocol fee (V32: was 25%)
   _deprecated_platform_treasury: PublicKey // V4: deprecated V3.2 — merged into protocol treasury
   protocol_fee_bps: number
   paused: boolean
@@ -270,7 +270,7 @@ export const calculateTokensOut = (
   virtualSolReserves: bigint,
   virtualTokenReserves: bigint,
   realSolReserves: bigint = BigInt(0), // V2.3: needed for dynamic rate calculation
-  protocolFeeBps: number = 100, // 1% protocol fee (75% protocol treasury, 25% dev)
+  protocolFeeBps: number = 100, // 1% protocol fee (90% protocol treasury, 10% dev)
   treasuryFeeBps: number = 100, // 1% treasury fee
   bondingTarget: bigint = BigInt('200000000000'), // [V24] per-token target (0 = 200 SOL)
 ): {

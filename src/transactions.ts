@@ -59,7 +59,6 @@ import {
   LiquidateParams,
   ClaimProtocolRewardsParams,
   VaultSwapParams,
-  AutoBuybackParams,
   HarvestFeesParams,
   SwapFeesToSolParams,
   CreateVaultParams,
@@ -1194,7 +1193,7 @@ export const buildLiquidateTransaction = async (
  * Build an unsigned claim protocol rewards transaction.
  *
  * Claims the user's proportional share of protocol treasury rewards
- * based on trading volume in the previous epoch. Requires >= 10 SOL volume.
+ * based on trading volume in the previous epoch. Requires >= 2 SOL volume. Min claim: 0.1 SOL.
  *
  * @param connection - Solana RPC connection
  * @param params - Claim parameters (user, optional vault)
@@ -1608,169 +1607,6 @@ export const buildVaultSwapTransaction = async (
 // ============================================================================
 // Treasury Cranks
 // ============================================================================
-
-// Auto-buyback constants (must match the on-chain program)
-const MIN_BUYBACK_AMOUNT = BigInt('10000000') // 0.01 SOL in lamports
-const RATIO_PRECISION = BigInt('1000000000') // 1e9
-
-/**
- * Build an unsigned auto-buyback transaction.
- *
- * Permissionless crank — triggers a treasury buyback on Raydium when the pool
- * price has dropped below the treasury's ratio threshold. Holds bought tokens
- * in treasury ATA (swap_fees_to_sol recycles them).
- *
- * Pre-checks all on-chain conditions and throws descriptive errors so the
- * caller (e.g. frontend) knows exactly why a buyback can't fire.
- */
-export const buildAutoBuybackTransaction = async (
-  connection: Connection,
-  params: AutoBuybackParams,
-): Promise<TransactionResult> => {
-  const { mint: mintStr, payer: payerStr, minimum_amount_out = 1 } = params
-
-  const mint = new PublicKey(mintStr)
-  const payer = new PublicKey(payerStr)
-
-  // Fetch on-chain state for pre-checks
-  const tokenData = await fetchTokenRaw(connection, mint)
-  if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
-  const { bondingCurve, treasury } = tokenData
-
-  // Pre-check 1: Token must be migrated
-  if (!bondingCurve.migrated) {
-    throw new Error('Token not yet migrated')
-  }
-
-  // Pre-check 2: Baseline must be initialized
-  if (!treasury || !treasury.baseline_initialized) {
-    throw new Error('Buyback baseline not initialized')
-  }
-
-  // Pre-check 3: Cooldown check
-  const currentSlot = await connection.getSlot('confirmed')
-  const lastBuybackSlot = BigInt(treasury.last_buyback_slot.toString())
-  const minInterval = BigInt(treasury.min_buyback_interval_slots.toString())
-  const nextBuybackSlot = lastBuybackSlot + minInterval
-  if (BigInt(currentSlot) < nextBuybackSlot) {
-    const slotsRemaining = Number(nextBuybackSlot - BigInt(currentSlot))
-    throw new Error(`Buyback cooldown: ${slotsRemaining} slots remaining`)
-  }
-
-  // Raydium pool accounts
-  const raydium = getRaydiumMigrationAccounts(mint)
-
-  // Pre-check 5: Price check — read pool vault balances
-  const solVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault
-  const tokenVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault
-  const [solVaultInfo, tokenVaultInfo] = await Promise.all([
-    connection.getTokenAccountBalance(solVault),
-    connection.getTokenAccountBalance(tokenVault),
-  ])
-  const poolSol = BigInt(solVaultInfo.value.amount)
-  const poolTokens = BigInt(tokenVaultInfo.value.amount)
-
-  const baselineSol = BigInt(treasury.baseline_sol_reserves.toString())
-  const baselineTokens = BigInt(treasury.baseline_token_reserves.toString())
-  const thresholdBps = BigInt(treasury.ratio_threshold_bps)
-
-  if (poolTokens > BigInt(0) && baselineTokens > BigInt(0)) {
-    const currentRatio = (poolSol * RATIO_PRECISION) / poolTokens
-    const baselineRatio = (baselineSol * RATIO_PRECISION) / baselineTokens
-    const thresholdRatio = (baselineRatio * thresholdBps) / BigInt(10000)
-
-    if (currentRatio >= thresholdRatio) {
-      const currentPct = Number((currentRatio * BigInt(10000)) / baselineRatio) / 100
-      const thresholdPct = Number(thresholdBps) / 100
-      throw new Error(
-        `Price is healthy — no buyback needed (current: ${currentPct.toFixed(1)}% of baseline, threshold: ${thresholdPct.toFixed(1)}%)`,
-      )
-    }
-  }
-
-  // Pre-check 6: Dust check — compute buyback_amount
-  const treasurySolBalance = BigInt(treasury.sol_balance.toString())
-  const reserveRatioBps = BigInt(treasury.reserve_ratio_bps)
-  const buybackPercentBps = BigInt(treasury.buyback_percent_bps)
-
-  const availableSol = (treasurySolBalance * (BigInt(10000) - reserveRatioBps)) / BigInt(10000)
-  const buybackAmount = (availableSol * buybackPercentBps) / BigInt(10000)
-
-  if (buybackAmount < MIN_BUYBACK_AMOUNT) {
-    const availableSolNum = Number(availableSol) / 1e9
-    throw new Error(
-      `Treasury SOL too low for buyback (available: ${availableSolNum.toFixed(4)} SOL, need >= 0.01 SOL after reserves)`,
-    )
-  }
-
-  // All pre-checks passed — build the transaction
-  const [bondingCurvePda] = getBondingCurvePda(mint)
-  const [treasuryPda] = getTokenTreasuryPda(mint)
-  const treasuryTokenAccount = getTreasuryTokenAccount(mint, treasuryPda)
-
-  // Treasury's WSOL ATA (SPL Token)
-  const treasuryWsol = getAssociatedTokenAddressSync(
-    WSOL_MINT,
-    treasuryPda,
-    true,
-    TOKEN_PROGRAM_ID,
-  )
-
-  // For buyback: input = WSOL (SOL side), output = token
-  const inputVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault
-  const outputVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault
-
-  const tx = new Transaction()
-
-  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-
-  // Create treasury WSOL ATA if needed
-  tx.add(
-    createAssociatedTokenAccountIdempotentInstruction(
-      payer,
-      treasuryWsol,
-      treasuryPda,
-      WSOL_MINT,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID,
-    ),
-  )
-
-  const provider = makeDummyProvider(connection, payer)
-  const program = new Program(idl as unknown, provider)
-
-  const buybackIx = await program.methods
-    .executeAutoBuyback(new BN(minimum_amount_out.toString()))
-    .accounts({
-      payer,
-      mint,
-      bondingCurve: bondingCurvePda,
-      treasury: treasuryPda,
-      treasuryWsol,
-      treasuryToken: treasuryTokenAccount,
-      raydiumProgram: getRaydiumCpmmProgram(),
-      raydiumAuthority: raydium.raydiumAuthority,
-      ammConfig: getRaydiumAmmConfig(),
-      poolState: raydium.poolState,
-      inputVault,
-      outputVault,
-      wsolMint: WSOL_MINT,
-      observationState: raydium.observationState,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      token2022Program: TOKEN_2022_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-    } as any)
-    .instruction()
-
-  tx.add(buybackIx)
-  await finalizeTransaction(connection, tx, payer)
-
-  const buybackSol = Number(buybackAmount) / 1e9
-  return {
-    transaction: tx,
-    message: `Auto-buyback ${buybackSol.toFixed(4)} SOL for ${mintStr.slice(0, 8)}...`,
-  }
-}
 
 /**
  * Build an unsigned harvest-fees transaction.

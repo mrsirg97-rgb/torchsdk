@@ -107,12 +107,12 @@ const { transaction: claimTx } = await buildClaimProtocolRewardsTransaction(conn
 const { tokens } = await getTokens(connection, { status: "migrated" });
 for (const token of tokens) {
   const detail = await getToken(connection, token.mint);
-  // extract: treasury_sol, lending_utilization, supply_burned, buyback_count
+  // extract: treasury_sol, lending_utilization, supply_burned, harvested_fees
   // compute health score
 }
 ```
 
-**Deliverable:** A dashboard or API that returns all tokens ranked by treasury strength, lending utilization, buyback frequency, and supply deflation.
+**Deliverable:** A dashboard or API that returns all tokens ranked by treasury strength, lending utilization, fee harvest volume, and lending yield.
 
 ---
 
@@ -141,14 +141,14 @@ for (const token of tokens) {
 **SDK:**
 ```typescript
 const token = await getToken(connection, mint);
-// compare raydium_price vs treasury_buyback_price
-// if market price < buyback floor, buy before next buyback
+// compare raydium_price vs treasury_lending_capacity
+// if market price is undervalued relative to treasury health, buy the dip
 const { transaction } = await buildVaultSwapTransaction(connection, {
   mint, wallet, vault: vaultCreator, side: "buy", amount_sol: lamports, slippage_bps: 300
 });
 ```
 
-**Deliverable:** An agent that monitors all migrated tokens for mispricing between market price and treasury-implied floor, trades through vault to capture spread.
+**Deliverable:** An agent that monitors all migrated tokens for mispricing relative to treasury health and lending capacity, trades through vault to capture spread.
 
 ---
 
@@ -215,7 +215,7 @@ for (const token of tokens) {
 
 ### 9. Fee Harvester + Swap to SOL (Public Good)
 
-**What:** Transfer fees accumulate in token mints as tokens. Harvest them and swap to SOL so the treasury can fund buybacks.
+**What:** Transfer fees accumulate in token mints as tokens. Harvest them and swap to SOL so the treasury can grow its lending pool.
 
 **SDK:**
 ```typescript

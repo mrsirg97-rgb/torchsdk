@@ -2,7 +2,7 @@
     "address": "8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT",
     "metadata": {
         "name": "torch_market",
-        "version": "3.7.4",
+        "version": "3.7.7",
         "spec": "0.1.0",
         "description": "torch.market"
     },
@@ -1114,41 +1114,6 @@
                     }
                 },
                 {
-                    "name": "treasury_lock",
-                    "docs": [
-                        "Required account (not optional) to prevent griefing:",
-                        "- data_len > 0: V27 token (PDA initialized), revival threshold = 3BT/8",
-                        "- data_len == 0: legacy token (PDA not initialized), revival threshold = BT/8",
-                        "Passing the wrong address fails seeds check. Can't skip or fake."
-                    ],
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121,
-                                    95,
-                                    108,
-                                    111,
-                                    99,
-                                    107
-                                ]
-                            },
-                            {
-                                "kind": "account",
-                                "path": "mint"
-                            }
-                        ]
-                    }
-                },
-                {
                     "name": "system_program",
                     "address": "11111111111111111111111111111111"
                 }
@@ -1497,233 +1462,6 @@
             "args": [
                 {
                     "name": "sol_amount",
-                    "type": "u64"
-                }
-            ]
-        },
-        {
-            "name": "execute_auto_buyback",
-            "docs": [
-                "[V9] Execute automatic treasury buyback on Raydium DEX.",
-                "Monitors pool ratio and triggers buyback when price drops below threshold.",
-                "Permissionless - anyone can call (keeper/crank)."
-            ],
-            "discriminator": [
-                191,
-                2,
-                228,
-                246,
-                241,
-                139,
-                119,
-                21
-            ],
-            "accounts": [
-                {
-                    "name": "payer",
-                    "docs": [
-                        "Anyone can trigger buyback (permissionless)"
-                    ],
-                    "writable": true,
-                    "signer": true
-                },
-                {
-                    "name": "mint",
-                    "docs": [
-                        "Token mint (mutable for burning)"
-                    ],
-                    "writable": true
-                },
-                {
-                    "name": "bonding_curve",
-                    "docs": [
-                        "Bonding curve (must be migrated)"
-                    ],
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    98,
-                                    111,
-                                    110,
-                                    100,
-                                    105,
-                                    110,
-                                    103,
-                                    95,
-                                    99,
-                                    117,
-                                    114,
-                                    118,
-                                    101
-                                ]
-                            },
-                            {
-                                "kind": "account",
-                                "path": "mint"
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "treasury",
-                    "docs": [
-                        "Token treasury (has SOL for buybacks)"
-                    ],
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    116,
-                                    114,
-                                    101,
-                                    97,
-                                    115,
-                                    117,
-                                    114,
-                                    121
-                                ]
-                            },
-                            {
-                                "kind": "account",
-                                "path": "mint"
-                            }
-                        ]
-                    }
-                },
-                {
-                    "name": "treasury_wsol",
-                    "docs": [
-                        "[V27] Treasury's WSOL account — constrained as treasury's WSOL ATA"
-                    ],
-                    "writable": true
-                },
-                {
-                    "name": "treasury_token",
-                    "docs": [
-                        "Treasury's token account for receiving bought tokens"
-                    ],
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "account",
-                                "path": "treasury"
-                            },
-                            {
-                                "kind": "account",
-                                "path": "token_2022_program"
-                            },
-                            {
-                                "kind": "account",
-                                "path": "mint"
-                            }
-                        ],
-                        "program": {
-                            "kind": "const",
-                            "value": [
-                                140,
-                                151,
-                                37,
-                                143,
-                                78,
-                                36,
-                                137,
-                                241,
-                                187,
-                                61,
-                                16,
-                                41,
-                                20,
-                                142,
-                                13,
-                                131,
-                                11,
-                                90,
-                                19,
-                                153,
-                                218,
-                                255,
-                                16,
-                                132,
-                                4,
-                                142,
-                                123,
-                                216,
-                                219,
-                                233,
-                                248,
-                                89
-                            ]
-                        }
-                    }
-                },
-                {
-                    "name": "raydium_program",
-                    "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
-                },
-                {
-                    "name": "raydium_authority"
-                },
-                {
-                    "name": "amm_config",
-                    "docs": [
-                        "Raydium AMM config — constrained to prevent pool substitution attacks"
-                    ],
-                    "address": "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
-                },
-                {
-                    "name": "pool_state",
-                    "docs": [
-                        "[V27] Raydium pool state — constrained via PDA derivation"
-                    ],
-                    "writable": true
-                },
-                {
-                    "name": "input_vault",
-                    "docs": [
-                        "[V27] Pool's input vault (WSOL vault) — constrained via PDA derivation"
-                    ],
-                    "writable": true
-                },
-                {
-                    "name": "output_vault",
-                    "docs": [
-                        "[V27] Pool's output vault (token vault) — constrained via PDA derivation"
-                    ],
-                    "writable": true
-                },
-                {
-                    "name": "wsol_mint",
-                    "docs": [
-                        "WSOL mint"
-                    ],
-                    "address": "So11111111111111111111111111111111111111112"
-                },
-                {
-                    "name": "observation_state",
-                    "docs": [
-                        "[V27] Raydium observation state — constrained via PDA derivation"
-                    ],
-                    "writable": true
-                },
-                {
-                    "name": "token_program"
-                },
-                {
-                    "name": "token_2022_program"
-                },
-                {
-                    "name": "system_program",
-                    "address": "11111111111111111111111111111111"
-                }
-            ],
-            "args": [
-                {
-                    "name": "minimum_amount_out",
                     "type": "u64"
                 }
             ]
@@ -2887,6 +2625,45 @@
                                 89
                             ]
                         }
+                    }
+                },
+                {
+                    "name": "treasury_lock_token_account",
+                    "docs": [
+                        "[V31] Treasury lock's token account — receives vote-return tokens."
+                    ],
+                    "writable": true
+                },
+                {
+                    "name": "treasury_lock",
+                    "docs": [
+                        "[V31] Treasury lock PDA — authority over locked tokens"
+                    ],
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    116,
+                                    114,
+                                    101,
+                                    97,
+                                    115,
+                                    117,
+                                    114,
+                                    121,
+                                    95,
+                                    108,
+                                    111,
+                                    99,
+                                    107
+                                ]
+                            },
+                            {
+                                "kind": "account",
+                                "path": "mint"
+                            }
+                        ]
                     }
                 },
                 {
@@ -5361,7 +5138,7 @@
         {
             "code": 6040,
             "name": "InsufficientVolumeForRewards",
-            "msg": "Insufficient volume for protocol rewards (need >= 10 SOL/epoch)"
+            "msg": "Insufficient volume for protocol rewards (need >= 2 SOL/epoch)"
         },
         {
             "code": 6041,
@@ -5457,6 +5234,16 @@
             "code": 6059,
             "name": "InvalidBondingTarget",
             "msg": "Invalid bonding target: must be 50, 100, or 200 SOL"
+        },
+        {
+            "code": 6060,
+            "name": "InvalidTokenAccount",
+            "msg": "Invalid token account - must be treasury lock's Token-2022 ATA"
+        },
+        {
+            "code": 6061,
+            "name": "ClaimBelowMinimum",
+            "msg": "Claim amount below minimum (0.1 SOL)"
         }
     ],
     "types": [

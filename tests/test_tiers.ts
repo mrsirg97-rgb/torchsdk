@@ -26,7 +26,6 @@ import {
   buildBorrowTransaction,
   buildRepayTransaction,
   buildHarvestFeesTransaction,
-  buildAutoBuybackTransaction,
   buildVaultSwapTransaction,
   buildCreateVaultTransaction,
   buildDepositVaultTransaction,
@@ -558,99 +557,7 @@ const main = async () => {
       }
 
       // ==================================================================
-      // 8. Auto Buyback
-      // ==================================================================
-      log('\n[8] Auto Buyback')
-      try {
-        // Do several sells to push price down >20% from baseline
-        const { getTorchVaultPda: gvpTier } = require('../src/program')
-        const { getAssociatedTokenAddressSync: gataTier } = require('@solana/spl-token')
-        const TOKEN_2022 = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
-        const [vaultPdaTier] = gvpTier(wallet.publicKey)
-        const vaultAtaTier = gataTier(new PublicKey(sparkMint), vaultPdaTier, true, TOKEN_2022)
-
-        const tokenBalTier = await connection.getTokenAccountBalance(vaultAtaTier)
-        const totalTokensTier = Number(tokenBalTier.value.amount)
-        log(`  Vault tokens: ${(totalTokensTier / 1e6).toFixed(0)}`)
-
-        // Sell 80% of vault tokens in 4 batches to drive price down
-        const sellPerBatch = Math.floor(totalTokensTier * 0.2)
-        for (let i = 0; i < 4; i++) {
-          if (sellPerBatch < 1_000_000) break
-          try {
-            const sellResult = await buildVaultSwapTransaction(connection, {
-              mint: sparkMint,
-              signer: walletAddr,
-              vault_creator: walletAddr,
-              amount_in: sellPerBatch,
-              minimum_amount_out: 1,
-              is_buy: false,
-            })
-            sellResult.transaction.instructions.unshift(
-              ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-            )
-            await signAndSend(connection, wallet, sellResult.transaction)
-          } catch (e: any) {
-            log(`  Sell ${i + 1} skipped: ${e.message?.substring(0, 80)}`)
-          }
-        }
-        ok('Price depression sells', '4 batches to push price below threshold')
-
-        // Snapshot treasury state before buyback
-        const preBuyback = await fetchTokenRaw(connection, new PublicKey(sparkMint))
-        const preSol = Number(preBuyback?.treasury?.sol_balance?.toString() || '0')
-        const preBuybackCount = Number(preBuyback?.treasury?.buyback_count?.toString() || '0')
-        const preBurned = Number(preBuyback?.treasury?.total_burned_from_buyback?.toString() || '0')
-
-        // Attempt buyback
-        try {
-          const buybackResult = await buildAutoBuybackTransaction(connection, {
-            mint: sparkMint,
-            payer: walletAddr,
-          })
-          await signAndSend(connection, wallet, buybackResult.transaction)
-
-          // Verify state changes
-          const postBuyback = await fetchTokenRaw(connection, new PublicKey(sparkMint))
-          const postSol = Number(postBuyback?.treasury?.sol_balance?.toString() || '0')
-          const postBuybackCount = Number(postBuyback?.treasury?.buyback_count?.toString() || '0')
-          const postBurned = Number(postBuyback?.treasury?.total_burned_from_buyback?.toString() || '0')
-
-          if (postBuybackCount > preBuybackCount) {
-            ok('Auto buyback executed', `${buybackResult.message} — sol: ${(preSol / 1e9).toFixed(4)}→${(postSol / 1e9).toFixed(4)}, count: ${preBuybackCount}→${postBuybackCount}, burned: ${preBurned}→${postBurned}`)
-          } else {
-            ok('Auto buyback', `${buybackResult.message} — tx succeeded`)
-          }
-
-          // Test cooldown error: call again immediately
-          try {
-            await buildAutoBuybackTransaction(connection, {
-              mint: sparkMint,
-              payer: walletAddr,
-            })
-            fail('Buyback cooldown', 'should have thrown')
-          } catch (cooldownErr: any) {
-            if (cooldownErr.message?.includes('cooldown')) {
-              ok('Buyback cooldown check', cooldownErr.message)
-            } else {
-              // Other error is also acceptable (e.g. price recovered, dust)
-              ok('Buyback re-check', cooldownErr.message)
-            }
-          }
-        } catch (e: any) {
-          // Pre-check threw — this is expected if price didn't drop enough
-          if (e.message?.includes('healthy') || e.message?.includes('too low') || e.message?.includes('cooldown')) {
-            ok('Auto buyback pre-check', `correctly prevented: ${e.message}`)
-          } else {
-            fail('Auto buyback', e)
-          }
-        }
-      } catch (e: any) {
-        fail('Auto buyback lifecycle', e)
-      }
-
-      // ==================================================================
-      // 9. Borrow against Spark token (lending)
+      // 8. Borrow against Spark token (lending, was 9 — buyback section removed in V33)
       // ==================================================================
       log('\n[9] Borrow against Spark token')
       try {

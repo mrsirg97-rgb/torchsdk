@@ -6,7 +6,7 @@ We used [Kani](https://model-checking.github.io/kani/), a formal verification to
 
 This is **not** a security audit. It proves the arithmetic is correct, but does not cover access control, account validation, or economic attacks. See [What Is NOT Verified](#what-is-not-verified) for full scope limitations.
 
-**37 proof harnesses. All passing. Zero failures.**
+**39 proof harnesses. All passing. Zero failures.**
 
 ---
 
@@ -15,8 +15,8 @@ This is **not** a security audit. It proves the arithmetic is correct, but does 
 torch_market's core arithmetic has been formally verified using [Kani](https://model-checking.github.io/kani/), a Rust model checker backed by the CBMC bounded model checker. Kani exhaustively proves properties hold for **all** valid inputs within constrained ranges -- not just sampled test cases.
 
 **Tool:** Kani Rust Verifier 0.67.0 / CBMC 6.8.0
-**Target:** `torch_market` v3.7.4
-**Harnesses:** 37 proof harnesses, all passing
+**Target:** `torch_market` v3.7.7
+**Harnesses:** 39 proof harnesses, all passing
 **Source:** `programs/torch_market/src/kani_proofs.rs`
 
 ## What Is Formally Verified
@@ -61,13 +61,14 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 | `verify_interest_no_overflow` | Interest calculation doesn't overflow; interest <= principal | Up to 1000 SOL, 2%/epoch, 1 epoch |
 | `verify_liquidation_bonus_increases_seizure` | Liquidation bonus increases collateral seized | 100 SOL pool, up to 50 SOL debt |
 
-### Protocol Rewards (Harness 19)
+### Protocol Rewards (Harnesses 19-20)
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
 | `verify_user_share_bounded` | `user_share <= distributable` (no user can drain reward pool) | 500 SOL epoch, 50 SOL distributable |
+| `verify_min_claim_enforcement` | [V32] Claims passing MIN_CLAIM_AMOUNT check are genuinely >= 0.1 SOL; claim never exceeds distributable | 10-10,000 SOL total volume, up to 1,000 SOL distributable |
 
-### Auto Buyback & Ratio-Gated Sell (Harnesses 20-22)
+### Ratio Math & Sell Cycle (Harnesses 21-23)
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
@@ -75,38 +76,39 @@ The proofs cover the **pure arithmetic layer** -- every fee calculation, bonding
 | `verify_sell_threshold_fits_u64` | [V30] Sell threshold `baseline_ratio * 12000 / 10000` fits in u64 | Same bounds as ratio proof, with 1.2x multiplier |
 | `verify_double_transfer_fee_positive` | Token amount remains positive after two consecutive transfer fees | 1 token to TOTAL_SUPPLY |
 
-### Migration (Harnesses 22-25)
+### Migration (Harnesses 22-26)
 
-These harnesses verify the V26 permissionless migration: SOL wrapping conservation, price-matched pool creation, and token burn accounting. Updated for V27 per-tier virtual reserves.
+These harnesses verify the V26 permissionless migration: SOL wrapping conservation, price-matched pool creation, and token burn accounting. Updated for V31 per-tier virtual reserves and zero-burn migration.
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
 | `verify_sol_wrapping_conservation` | [V26] `bc_debited == wsol_credited`, total lamports conserved (bonding curve SOL → payer WSOL) | 0 to 200 SOL reserves, rent up to 10M lamports |
-| `verify_price_matched_pool_spark` | [V27] Pool ratio matches curve ratio (truncation error < 1 unit) | Spark tier (50 SOL), 3 representative token values |
-| `verify_price_matched_pool_torch` | [V27] Pool ratio matches curve ratio (truncation error < 1 unit) | Torch tier (200 SOL), 3 representative token values |
-| `verify_excess_token_burn_conservation` | [V27] `pool_tokens + burned_tokens == vault_total` (no tokens created or lost) | Spark tier, vault up to CURVE_SUPPLY |
+| `verify_price_matched_pool_spark` | [V31] Pool ratio matches curve ratio (truncation error < 1 unit) | Spark tier (50 SOL), 3 representative token values |
+| `verify_price_matched_pool_flame` | [V31] Pool ratio matches curve ratio (truncation error < 1 unit) | Flame tier (100 SOL), 3 representative token values |
+| `verify_price_matched_pool_torch` | [V31] Pool ratio matches curve ratio (truncation error < 1 unit) | Torch tier (200 SOL), 3 representative token values |
+| `verify_excess_token_burn_conservation` | [V31] `pool_tokens + burned_tokens == vault_total` (no tokens created or lost) | Spark tier, vault up to CURVE_SUPPLY |
 
-### V27 Treasury Lock Distribution (Harnesses 26-32)
+### V31 Zero-Burn Distribution (Harnesses 27-34)
 
-These harnesses verify the V27 token distribution model where IVS = 3*bonding_target/8, IVT = 756.25M tokens, CURVE_SUPPLY = 750M (75%), and TREASURY_LOCK_TOKENS = 250M (25%). Proves full supply conservation (curve tokens + treasury lock == TOTAL_SUPPLY) and bounded excess burn across all tiers.
+These harnesses verify the V31 token distribution model where IVS = 3*bonding_target/8, IVT = 756.25M tokens, CURVE_SUPPLY = 700M (70%), and TREASURY_LOCK_TOKENS = 300M (30%). V31 tunes the curve/lock split so that vault_remaining == tokens_for_pool at graduation — proving zero excess burn and full 1B supply preservation.
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
-| `verify_v27_full_supply_conservation_spark` | `wallets + vote_vault + pool + burned + treasury_lock == TOTAL_SUPPLY` | Spark tier (50 SOL), exact graduation state |
-| `verify_v27_full_supply_conservation_flame` | Same conservation for Flame tier | Flame tier (100 SOL), exact graduation state |
-| `verify_v27_full_supply_conservation_torch` | Same conservation for Torch tier | Torch tier (200 SOL), exact graduation state |
-| `verify_v27_pool_tokens_positive_and_bounded` | Pool tokens > 0 and <= real_token_reserves at graduation | All tiers, exact graduation state |
-| `verify_v27_excess_burn_bounded_spark` | Excess burn < 20% of CURVE_SUPPLY (~6.7% actual) | Spark tier, exact graduation state |
-| `verify_v27_excess_burn_bounded_flame` | Excess burn < 20% of CURVE_SUPPLY (~6.7% actual) | Flame tier, exact graduation state |
-| `verify_v27_excess_burn_bounded_torch` | Excess burn < 20% of CURVE_SUPPLY (~6.7% actual) | Torch tier, exact graduation state |
+| `verify_v31_full_supply_conservation_spark` | `wallets + vote_vault + pool + burned + treasury_lock == TOTAL_SUPPLY` | Spark tier (50 SOL), exact graduation state |
+| `verify_v31_full_supply_conservation_flame` | Same conservation for Flame tier | Flame tier (100 SOL), exact graduation state |
+| `verify_v31_full_supply_conservation_torch` | Same conservation for Torch tier | Torch tier (200 SOL), exact graduation state |
+| `verify_v31_pool_tokens_positive_and_bounded` | Pool tokens > 0 and <= real_token_reserves at graduation | All tiers, exact graduation state |
+| `verify_v31_zero_excess_burn_spark` | `excess_burned == 0` at graduation (zero-burn migration) | Spark tier, exact graduation state |
+| `verify_v31_zero_excess_burn_flame` | `excess_burned == 0` at graduation (zero-burn migration) | Flame tier, exact graduation state |
+| `verify_v31_zero_excess_burn_torch` | `excess_burned == 0` at graduation (zero-burn migration) | Torch tier, exact graduation state |
 
-### Sell Fee (Harness 33)
+### Sell Fee (Harness 35)
 
 | Harness | Property | Input Range |
 |---------|----------|-------------|
 | `verify_sell_fee_always_zero` | `SELL_FEE_BPS == 0` and computed fee == 0 for all valid sol_out | 0.001-200 SOL |
 
-### Lending Lifecycle (Harnesses 34-36)
+### Lending Lifecycle (Harnesses 36-38)
 
 These harnesses verify end-to-end lending correctness: borrow → (optional interest accrual) → repay, proving treasury SOL conservation, correct interest-first repayment ordering, and loan zeroing.
 
@@ -131,9 +133,9 @@ Each harness constrains symbolic inputs to realistic protocol bounds:
 - **SOL amounts:** `MIN_SOL_AMOUNT` (0.001 SOL) to `BONDING_TARGET_LAMPORTS` (200 SOL)
 - **Token amounts:** Up to `TOTAL_SUPPLY` (1 billion tokens, 6 decimals)
 - **Legacy pool reserves:** `INITIAL_VIRTUAL_SOL` (30 SOL) to `INITIAL_VIRTUAL_SOL + BONDING_TARGET_LAMPORTS` (230 SOL)
-- **V27 pool reserves:** `3*bonding_target/8` initial virtual SOL (18.75-75 SOL), `INITIAL_VIRTUAL_TOKENS_V27` (756.25M tokens)
-- **Token reserves:** Up to `INITIAL_VIRTUAL_TOKENS` (107.3T raw units, legacy) or `INITIAL_VIRTUAL_TOKENS_V27` (756.25T raw units, V27)
-- **Curve supply:** `CURVE_SUPPLY` (750M tokens) for V27 bonding curve + pool allocation
+- **V31 pool reserves:** `3*bonding_target/8` initial virtual SOL (18.75-75 SOL), `INITIAL_VIRTUAL_TOKENS_V27` (756.25M tokens)
+- **Token reserves:** Up to `INITIAL_VIRTUAL_TOKENS` (107.3T raw units, legacy) or `INITIAL_VIRTUAL_TOKENS_V27` (756.25T raw units, V31)
+- **Curve supply:** `CURVE_SUPPLY` (700M tokens) for V31 bonding curve + pool allocation
 - **Lending pools:** Concrete post-migration pool states (50-500 SOL, 50B-200T tokens)
 - **Interest rates:** Up to `DEFAULT_INTEREST_RATE_BPS` (2% per epoch)
 
@@ -143,7 +145,7 @@ Some harnesses use concrete pool states instead of fully symbolic parameters. Th
 - **Concrete inputs** fix specific values (e.g., `pool_sol = 100_000_000_000`), eliminating those variables from the SAT formula entirely. Properties are verified exactly at those values rather than universally.
 - **Representative concrete values** are a middle ground used for the migration price-match harnesses. Instead of a single symbolic `virtual_tokens` spanning 47 bits (which the solver cannot handle), three concrete values are tested at key pool states: bonding completion, midpoint, and maximum. This reduces solve time from intractable to sub-100ms while covering the important points.
 
-The concrete values are chosen to represent realistic protocol conditions: post-migration pool states for lending, bonding completion states for migration, and protocol-default rates for buyback.
+The concrete values are chosen to represent realistic protocol conditions: post-migration pool states for lending, bonding completion states for migration, and protocol-default rates for the sell cycle.
 
 ### Dropped Harnesses (Design Rationale)
 
@@ -156,7 +158,7 @@ Eight harnesses were dropped during verification because they prove structurally
 | `verify_ltv_100_percent` | `(v * 10000) / v == 10000` is a mathematical tautology. SAT solvers cannot efficiently prove symbolic u128 division cancellation. |
 | `verify_buyback_respects_reserve` | Buyback reserve/amount constraints are enforced by handler-level checks, not arithmetic. Property is structural given the config validation. |
 
-These properties remain true by construction. The remaining 37 harnesses cover every non-tautological safety property.
+These properties remain true by construction. The remaining 39 harnesses cover every non-tautological safety property.
 
 ## What Is NOT Verified
 
@@ -197,7 +199,7 @@ cargo kani
 cargo kani --harness verify_buy_fee_conservation
 ```
 
-All 37 harnesses pass. Most complete in under 1 second; the slowest (`verify_transfer_fee_bounds`, `verify_treasury_rate_monotonic`) take 30-55 seconds due to larger SAT formula complexity.
+All 39 harnesses pass. Most complete in under 1 second; the slowest (`verify_transfer_fee_bounds`, `verify_treasury_rate_monotonic`) take 30-55 seconds due to larger SAT formula complexity.
 
 ## Constants Reference
 
@@ -209,22 +211,24 @@ All 37 harnesses pass. Most complete in under 1 second; the slowest (`verify_tra
 | `BONDING_TARGET_TORCH` | 200,000,000,000 | 200 SOL bonding target (Torch tier, default) |
 | `INITIAL_VIRTUAL_SOL` | 30,000,000,000 | 30 SOL initial virtual reserves (legacy) |
 | `INITIAL_VIRTUAL_TOKENS` | 107,300,000,000,000 | Initial virtual token reserves (legacy) |
-| `INITIAL_VIRTUAL_TOKENS_V25` | 900,000,000,000,000 | 900M tokens initial virtual reserves (V25, legacy revival only) |
 | `INITIAL_VIRTUAL_TOKENS_V27` | 756,250,000,000,000 | 756.25M tokens initial virtual reserves (V27) |
-| `TREASURY_LOCK_TOKENS` | 250,000,000,000,000 | 250M tokens locked in treasury (25% of supply) |
-| `CURVE_SUPPLY` | 750,000,000,000,000 | 750M tokens for curve + pool (75% of supply) |
+| `TREASURY_LOCK_TOKENS` | 300,000,000,000,000 | 300M tokens locked in treasury (30% of supply) |
+| `CURVE_SUPPLY` | 700,000,000,000,000 | 700M tokens for curve + pool (70% of supply) |
 | V27 IVS | `3 * bonding_target / 8` | 18.75 SOL (Spark), 37.5 SOL (Flame), 75 SOL (Torch) |
 | `PROTOCOL_FEE_BPS` | 100 | 1% protocol fee |
 | `TREASURY_FEE_BPS` | 100 | 1% token treasury fee |
 | `TREASURY_SOL_MIN_BPS` | 500 | 5% min treasury SOL rate (flat, all tiers) |
 | `TREASURY_SOL_MAX_BPS` | 2000 | 20% max treasury SOL rate (flat, all tiers) |
-| `DEV_WALLET_SHARE_BPS` | 2500 | 25% of protocol fee to dev |
+| `DEV_WALLET_SHARE_BPS` | 1000 | [V32] 10% of protocol fee to dev (was 25%) |
 | `BURN_RATE_BPS` | 1000 | 10% token burn on buy |
-| `TRANSFER_FEE_BPS` | 10 | 0.1% Token-2022 transfer fee |
+| `TRANSFER_FEE_BPS` | 3 | 0.03% Token-2022 transfer fee |
 | `DEFAULT_INTEREST_RATE_BPS` | 200 | 2% lending interest per epoch |
 | `DEFAULT_LIQUIDATION_BONUS_BPS` | 1000 | 10% liquidation bonus |
+| `DEFAULT_LENDING_UTILIZATION_CAP_BPS` | 7000 | [V33] 70% max treasury SOL lendable (was 50%) |
 | `RATIO_PRECISION` | 1,000,000,000 | 1e9 ratio scale factor |
 | `DEFAULT_SELL_THRESHOLD_BPS` | 12,000 | 120% -- sell triggers at 20% above baseline |
 | `DEFAULT_SELL_PERCENT_BPS` | 1,500 | 15% of held tokens sold per call |
 | `SELL_ALL_TOKEN_THRESHOLD` | 1,000,000,000,000 | 1M tokens -- sell 100% below this |
+| `MIN_EPOCH_VOLUME_ELIGIBILITY` | 2,000,000,000 | [V32] 2 SOL min epoch volume for rewards (was 10 SOL) |
+| `MIN_CLAIM_AMOUNT` | 100,000,000 | [V32] 0.1 SOL min claim amount |
 | `MIN_SOL_AMOUNT` | 1,000,000 | 0.001 SOL minimum |

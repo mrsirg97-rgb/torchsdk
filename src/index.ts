@@ -48,7 +48,6 @@ export {
   buildTransferAuthorityTransaction,
   buildWithdrawTokensTransaction,
   buildVaultSwapTransaction,
-  buildAutoBuybackTransaction,
   buildHarvestFeesTransaction,
   buildSwapFeesToSolTransaction,
 } from './transactions'
@@ -104,7 +103,6 @@ export type {
   TransferAuthorityParams,
   WithdrawTokensParams,
   VaultSwapParams,
-  AutoBuybackParams,
   HarvestFeesParams,
   SwapFeesToSolParams,
   TokenMetadataResult,

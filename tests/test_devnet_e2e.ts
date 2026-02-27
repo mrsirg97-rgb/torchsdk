@@ -42,7 +42,6 @@ import {
   buildDepositVaultTransaction,
   buildVaultSwapTransaction,
   buildHarvestFeesTransaction,
-  buildAutoBuybackTransaction,
   getToken,
   getVault,
 } from '../src/index'
@@ -654,49 +653,10 @@ const main = async () => {
 
     await sleep(500)
 
-    // ==================================================================
-    // 11. Auto Buyback
-    // ==================================================================
-    log('\n[11] Auto Buyback')
-    try {
-      // After section 9 sells, check if price dropped enough for buyback
-      const preBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
-      const preBuybackSol = Number(preBuybackData?.treasury?.sol_balance?.toString() || '0')
-      const preBuybackCount = Number(preBuybackData?.treasury?.buyback_count?.toString() || '0')
-
-      try {
-        const buybackResult = await buildAutoBuybackTransaction(connection, {
-          mint,
-          payer: walletAddr,
-        })
-        const buybackSig = await signAndSend(connection, wallet, buybackResult.transaction)
-
-        const postBuybackData = await fetchTokenRaw(connection, new PublicKey(mint))
-        const postBuybackCount = Number(postBuybackData?.treasury?.buyback_count?.toString() || '0')
-        const postBuybackSol = Number(postBuybackData?.treasury?.sol_balance?.toString() || '0')
-
-        if (postBuybackCount > preBuybackCount) {
-          ok('Auto buyback', `${buybackResult.message} count: ${preBuybackCount}→${postBuybackCount} sig=${buybackSig.slice(0, 8)}...`)
-        } else {
-          ok('Auto buyback', `${buybackResult.message} — tx succeeded sig=${buybackSig.slice(0, 8)}...`)
-        }
-      } catch (e: any) {
-        // Pre-check threw — expected on devnet if sells didn't push price down enough
-        if (e.message?.includes('healthy') || e.message?.includes('too low') || e.message?.includes('cooldown') || e.message?.includes('floor') || e.message?.includes('not yet migrated') || e.message?.includes('baseline')) {
-          ok('Auto buyback pre-check', `correctly prevented: ${e.message}`)
-        } else {
-          fail('Auto buyback', e)
-        }
-      }
-    } catch (e: any) {
-      fail('Auto buyback lifecycle', e)
-      if (e.logs) console.error('  Logs:', e.logs.slice(-5).join('\n        '))
-    }
-
     await sleep(500)
 
     // ==================================================================
-    // 12. Borrow via vault (post-migration lending)
+    // 11. Borrow via vault (post-migration lending, was 12 — buyback section removed in V33)
     // ==================================================================
     log('\n[12] Borrow via vault (post-migration)')
     try {

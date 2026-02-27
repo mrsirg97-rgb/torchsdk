@@ -201,16 +201,12 @@
       "description": "Claim protocol trading rewards via vault (epoch-based, requires >= 10 SOL volume in previous epoch). SOL rewards go to vault."
     },
     {
-      "name": "TORCH_AUTO_BUYBACK",
-      "description": "Trigger permissionless treasury buyback on Raydium when pool price < 80% of migration baseline. Pre-checks all conditions client-side (migration, baseline, cooldown, supply floor, price, dust). Buys tokens with treasury SOL and burns them."
-    },
-    {
       "name": "TORCH_HARVEST_FEES",
-      "description": "Harvest accumulated Token-2022 transfer fees (0.1%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
+      "description": "Harvest accumulated Token-2022 transfer fees (0.003%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
     },
     {
       "name": "TORCH_SWAP_FEES_TO_SOL",
-      "description": "Swap harvested transfer fee tokens to SOL via Raydium CPMM. Permissionless -- anyone can trigger after migration. Bundles harvest + swap in one atomic transaction. SOL proceeds added to treasury for buybacks."
+      "description": "Swap harvested transfer fee tokens to SOL via Raydium CPMM. Permissionless -- anyone can trigger after migration. Bundles harvest + swap in one atomic transaction. SOL proceeds added to treasury for lending yield and epoch rewards."
     }
   ],
   "constants": {
@@ -241,7 +237,7 @@
     "lending_liquidation_threshold_percent": 65,
     "lending_interest_rate_per_epoch_percent": 2,
     "lending_liquidation_bonus_percent": 10,
-    "lending_utilization_cap_percent": 50,
+    "lending_utilization_cap_percent": 70,
     "min_borrow_sol": 0.1
   },
   "safety": {
@@ -310,7 +306,6 @@
       "TORCH_DEPOSIT_VAULT",
       "TORCH_LIQUIDATE",
       "TORCH_MIGRATE",
-      "TORCH_AUTO_BUYBACK",
       "TORCH_HARVEST_FEES",
       "TORCH_SWAP_FEES_TO_SOL"
     ]
@@ -333,7 +328,7 @@
     "protocol-rewards",
     "epoch-rewards",
     "treasury-management",
-    "auto-buyback",
+    "treasury-yield",
     "liquidation",
     "collateral-lending",
     "token-2022",

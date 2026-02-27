@@ -9,7 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildSwapFeesToSolTransaction = exports.buildHarvestFeesTransaction = exports.buildAutoBuybackTransaction = exports.buildVaultSwapTransaction = exports.buildMigrateTransaction = exports.buildWithdrawTokensTransaction = exports.buildClaimProtocolRewardsTransaction = exports.buildLiquidateTransaction = exports.buildRepayTransaction = exports.buildBorrowTransaction = exports.buildTransferAuthorityTransaction = exports.buildUnlinkWalletTransaction = exports.buildLinkWalletTransaction = exports.buildWithdrawVaultTransaction = exports.buildDepositVaultTransaction = exports.buildCreateVaultTransaction = exports.buildStarTransaction = exports.buildCreateTokenTransaction = exports.buildSellTransaction = exports.buildDirectBuyTransaction = exports.buildBuyTransaction = void 0;
+exports.buildSwapFeesToSolTransaction = exports.buildHarvestFeesTransaction = exports.buildVaultSwapTransaction = exports.buildMigrateTransaction = exports.buildWithdrawTokensTransaction = exports.buildClaimProtocolRewardsTransaction = exports.buildLiquidateTransaction = exports.buildRepayTransaction = exports.buildBorrowTransaction = exports.buildTransferAuthorityTransaction = exports.buildUnlinkWalletTransaction = exports.buildLinkWalletTransaction = exports.buildWithdrawVaultTransaction = exports.buildDepositVaultTransaction = exports.buildCreateVaultTransaction = exports.buildStarTransaction = exports.buildCreateTokenTransaction = exports.buildSellTransaction = exports.buildDirectBuyTransaction = exports.buildBuyTransaction = void 0;
 const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
 const anchor_1 = require("@coral-xyz/anchor");
@@ -840,7 +840,7 @@ exports.buildLiquidateTransaction = buildLiquidateTransaction;
  * Build an unsigned claim protocol rewards transaction.
  *
  * Claims the user's proportional share of protocol treasury rewards
- * based on trading volume in the previous epoch. Requires >= 10 SOL volume.
+ * based on trading volume in the previous epoch. Requires >= 2 SOL volume. Min claim: 0.1 SOL.
  *
  * @param connection - Solana RPC connection
  * @param params - Claim parameters (user, optional vault)
@@ -960,6 +960,9 @@ const buildMigrateTransaction = async (connection, params) => {
     const [globalConfigPda] = (0, program_1.getGlobalConfigPda)();
     const [treasuryPda] = (0, program_1.getTokenTreasuryPda)(mint);
     const treasuryTokenAccount = (0, program_1.getTreasuryTokenAccount)(mint, treasuryPda);
+    // [V31] Treasury lock PDA and its token ATA (receives vote-return tokens)
+    const [treasuryLock] = (0, program_1.getTreasuryLockPda)(mint);
+    const treasuryLockTokenAccount = (0, program_1.getTreasuryLockTokenAccount)(mint, treasuryLock);
     // Token vault = bonding curve's Token-2022 ATA
     const tokenVault = (0, spl_token_1.getAssociatedTokenAddressSync)(mint, bondingCurvePda, true, spl_token_1.TOKEN_2022_PROGRAM_ID);
     // Bonding curve's WSOL ATA (SPL Token, not Token-2022)
@@ -1000,6 +1003,8 @@ const buildMigrateTransaction = async (connection, params) => {
         treasury: treasuryPda,
         tokenVault,
         treasuryTokenAccount,
+        treasuryLockTokenAccount,
+        treasuryLock,
         bcWsol,
         payerWsol,
         payerToken,
@@ -1117,125 +1122,6 @@ exports.buildVaultSwapTransaction = buildVaultSwapTransaction;
 // ============================================================================
 // Treasury Cranks
 // ============================================================================
-// Auto-buyback constants (must match the on-chain program)
-const MIN_BUYBACK_AMOUNT = BigInt('10000000'); // 0.01 SOL in lamports
-const RATIO_PRECISION = BigInt('1000000000'); // 1e9
-/**
- * Build an unsigned auto-buyback transaction.
- *
- * Permissionless crank — triggers a treasury buyback on Raydium when the pool
- * price has dropped below the treasury's ratio threshold. Holds bought tokens
- * in treasury ATA (swap_fees_to_sol recycles them).
- *
- * Pre-checks all on-chain conditions and throws descriptive errors so the
- * caller (e.g. frontend) knows exactly why a buyback can't fire.
- */
-const buildAutoBuybackTransaction = async (connection, params) => {
-    const { mint: mintStr, payer: payerStr, minimum_amount_out = 1 } = params;
-    const mint = new web3_js_1.PublicKey(mintStr);
-    const payer = new web3_js_1.PublicKey(payerStr);
-    // Fetch on-chain state for pre-checks
-    const tokenData = await (0, tokens_1.fetchTokenRaw)(connection, mint);
-    if (!tokenData)
-        throw new Error(`Token not found: ${mintStr}`);
-    const { bondingCurve, treasury } = tokenData;
-    // Pre-check 1: Token must be migrated
-    if (!bondingCurve.migrated) {
-        throw new Error('Token not yet migrated');
-    }
-    // Pre-check 2: Baseline must be initialized
-    if (!treasury || !treasury.baseline_initialized) {
-        throw new Error('Buyback baseline not initialized');
-    }
-    // Pre-check 3: Cooldown check
-    const currentSlot = await connection.getSlot('confirmed');
-    const lastBuybackSlot = BigInt(treasury.last_buyback_slot.toString());
-    const minInterval = BigInt(treasury.min_buyback_interval_slots.toString());
-    const nextBuybackSlot = lastBuybackSlot + minInterval;
-    if (BigInt(currentSlot) < nextBuybackSlot) {
-        const slotsRemaining = Number(nextBuybackSlot - BigInt(currentSlot));
-        throw new Error(`Buyback cooldown: ${slotsRemaining} slots remaining`);
-    }
-    // Raydium pool accounts
-    const raydium = (0, program_1.getRaydiumMigrationAccounts)(mint);
-    // Pre-check 5: Price check — read pool vault balances
-    const solVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault;
-    const tokenVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault;
-    const [solVaultInfo, tokenVaultInfo] = await Promise.all([
-        connection.getTokenAccountBalance(solVault),
-        connection.getTokenAccountBalance(tokenVault),
-    ]);
-    const poolSol = BigInt(solVaultInfo.value.amount);
-    const poolTokens = BigInt(tokenVaultInfo.value.amount);
-    const baselineSol = BigInt(treasury.baseline_sol_reserves.toString());
-    const baselineTokens = BigInt(treasury.baseline_token_reserves.toString());
-    const thresholdBps = BigInt(treasury.ratio_threshold_bps);
-    if (poolTokens > BigInt(0) && baselineTokens > BigInt(0)) {
-        const currentRatio = (poolSol * RATIO_PRECISION) / poolTokens;
-        const baselineRatio = (baselineSol * RATIO_PRECISION) / baselineTokens;
-        const thresholdRatio = (baselineRatio * thresholdBps) / BigInt(10000);
-        if (currentRatio >= thresholdRatio) {
-            const currentPct = Number((currentRatio * BigInt(10000)) / baselineRatio) / 100;
-            const thresholdPct = Number(thresholdBps) / 100;
-            throw new Error(`Price is healthy — no buyback needed (current: ${currentPct.toFixed(1)}% of baseline, threshold: ${thresholdPct.toFixed(1)}%)`);
-        }
-    }
-    // Pre-check 6: Dust check — compute buyback_amount
-    const treasurySolBalance = BigInt(treasury.sol_balance.toString());
-    const reserveRatioBps = BigInt(treasury.reserve_ratio_bps);
-    const buybackPercentBps = BigInt(treasury.buyback_percent_bps);
-    const availableSol = (treasurySolBalance * (BigInt(10000) - reserveRatioBps)) / BigInt(10000);
-    const buybackAmount = (availableSol * buybackPercentBps) / BigInt(10000);
-    if (buybackAmount < MIN_BUYBACK_AMOUNT) {
-        const availableSolNum = Number(availableSol) / 1e9;
-        throw new Error(`Treasury SOL too low for buyback (available: ${availableSolNum.toFixed(4)} SOL, need >= 0.01 SOL after reserves)`);
-    }
-    // All pre-checks passed — build the transaction
-    const [bondingCurvePda] = (0, program_1.getBondingCurvePda)(mint);
-    const [treasuryPda] = (0, program_1.getTokenTreasuryPda)(mint);
-    const treasuryTokenAccount = (0, program_1.getTreasuryTokenAccount)(mint, treasuryPda);
-    // Treasury's WSOL ATA (SPL Token)
-    const treasuryWsol = (0, spl_token_1.getAssociatedTokenAddressSync)(constants_1.WSOL_MINT, treasuryPda, true, spl_token_1.TOKEN_PROGRAM_ID);
-    // For buyback: input = WSOL (SOL side), output = token
-    const inputVault = raydium.isWsolToken0 ? raydium.token0Vault : raydium.token1Vault;
-    const outputVault = raydium.isWsolToken0 ? raydium.token1Vault : raydium.token0Vault;
-    const tx = new web3_js_1.Transaction();
-    tx.add(web3_js_1.ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
-    // Create treasury WSOL ATA if needed
-    tx.add((0, spl_token_1.createAssociatedTokenAccountIdempotentInstruction)(payer, treasuryWsol, treasuryPda, constants_1.WSOL_MINT, spl_token_1.TOKEN_PROGRAM_ID, spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID));
-    const provider = makeDummyProvider(connection, payer);
-    const program = new anchor_1.Program(torch_market_json_1.default, provider);
-    const buybackIx = await program.methods
-        .executeAutoBuyback(new anchor_1.BN(minimum_amount_out.toString()))
-        .accounts({
-        payer,
-        mint,
-        bondingCurve: bondingCurvePda,
-        treasury: treasuryPda,
-        treasuryWsol,
-        treasuryToken: treasuryTokenAccount,
-        raydiumProgram: (0, constants_1.getRaydiumCpmmProgram)(),
-        raydiumAuthority: raydium.raydiumAuthority,
-        ammConfig: (0, constants_1.getRaydiumAmmConfig)(),
-        poolState: raydium.poolState,
-        inputVault,
-        outputVault,
-        wsolMint: constants_1.WSOL_MINT,
-        observationState: raydium.observationState,
-        tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
-        token2022Program: spl_token_1.TOKEN_2022_PROGRAM_ID,
-        systemProgram: web3_js_1.SystemProgram.programId,
-    })
-        .instruction();
-    tx.add(buybackIx);
-    await finalizeTransaction(connection, tx, payer);
-    const buybackSol = Number(buybackAmount) / 1e9;
-    return {
-        transaction: tx,
-        message: `Auto-buyback ${buybackSol.toFixed(4)} SOL for ${mintStr.slice(0, 8)}...`,
-    };
-};
-exports.buildAutoBuybackTransaction = buildAutoBuybackTransaction;
 /**
  * Build an unsigned harvest-fees transaction.
  *

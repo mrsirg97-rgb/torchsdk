@@ -12,7 +12,7 @@ Brightside Solutions, 2026
 
 The protocol treats Solana not as a blockchain, but as a distributed computing substrate coupled with storage. On-chain accounts form a directed graph of economic relationships. PDA seeds define the edges. Handlers define the legal traversals. The result is a composable economic graph where anyone can launch a token and receive a complete, self-reinforcing financial ecosystem out of the box.
 
-Unlike traditional launchpads that extract value from participants, `torch.market` is non-extractive by topology — there is no edge in the graph that removes value from the system. Fees become buybacks. Buybacks become deflation. Failed tokens become protocol rewards. Every outflow is an inflow somewhere else. This is not a zero-sum game by design.
+Unlike traditional launchpads that extract value from participants, `torch.market` is non-extractive by topology — there is no edge in the graph that removes value from the system. Fees become lending yield. Lending yield becomes community liquidity. Failed tokens become protocol rewards. Every outflow is an inflow somewhere else. This is not a zero-sum game by design.
 
 The architecture works as follows:
 
@@ -27,7 +27,7 @@ Per-Token Economy:
 
   Mint ──── Bonding Curve ──── Treasury
   │              │                 │
-  │         Token Vault       Buybacks ──── Burn / Hold
+  │         Token Vault       Lending ──── Yield / Rewards
   │              │                 │
   │         User Positions    Lending ──── Collateral Vault
   │              │                 │
@@ -36,7 +36,7 @@ Per-Token Economy:
   │                            Migration ──── Raydium DEX Pool
   │
   └── Token-2022 Extensions
-       ├── Transfer Fee (0.1%)
+       ├── Transfer Fee (0.003%)
        └── Confidential Transfer (optional)
 
 Protocol Layer:
@@ -70,8 +70,8 @@ The token treasury is the core mechanic of `torch.market`. Everyone talks supply
 User spends 1 SOL
         │
         ├── 1% → Protocol Fee (pre-bonding only)
-        │         ├── 75% → Protocol Treasury
-        │         └── 25% → Dev Wallet
+        │         ├── 90% → Protocol Treasury
+        │         └── 10% → Dev Wallet
         │
         ├── 1% → Token Treasury Fee (lifetime)
         │
@@ -96,11 +96,11 @@ This creates a different mindset to how newly minted tokens are created. Users a
 
 The token treasury creates a positive-sum dynamic where every participant's actions strengthen the entire ecosystem:
 
-1. **Automatic Price Support**: The treasury accumulates SOL with every buy. This SOL is used to execute buybacks when the token is on DEX, creating constant buy pressure that supports the price floor.
-2. **Supply Reduction**: Tokens acquired through buybacks are burned (until a 500M floor is reached), permanently reducing circulating supply. This deflationary pressure benefits all holders proportionally.
+1. **Treasury Accumulation**: The treasury accumulates SOL with every buy. Post-migration, harvested transfer fees are sold to SOL, growing the treasury's lending pool and earning yield through community borrowing.
+2. **Lending Yield**: Treasury SOL is lent to token holders who borrow against their collateral. Interest paid by borrowers flows back into the treasury, compounding its value over time.
 3. **No Insider Advantage**: Unlike traditional launches where team allocations can dump on retail, the treasury mechanism ensures that value flows back to all participants. There is no creator allocation, only a 100% fair launch.
 4. **Community-Funded Migration**: The treasury pays the 0.15 SOL Raydium pool creation fee automatically. Early supporters collectively fund the DEX migration without any single party bearing the cost.
-5. **Long-term Alignment**: Because the treasury continuously performs buybacks, early sellers forfeit future buyback benefits. This incentivizes holding and community building over quick flips.
+5. **Long-term Alignment**: Because the treasury continuously earns lending yield and epoch rewards, early sellers forfeit future treasury benefits. This incentivizes holding and community building over quick flips.
 
 ---
 
@@ -110,8 +110,8 @@ Each user casts a vote prelaunch to determine what happens to 10% of their token
 
 Once a token reaches its bonding target (50, 100, or 200 SOL depending on tier), the community votes to decide what happens to the tokens held in the community treasury (vote vault). The voters can decide to:
 
-- **Burn**: Destroy the tokens forever, reducing total supply from 1B to 900M
-- **Return to LP**: Add the tokens back to the migrated DEX pool for deeper liquidity
+- **Burn**: Destroy the tokens forever, reducing total supply from 1B to ~945M
+- **Return to Treasury Lock**: Transfer the tokens to the treasury lock PDA for future governance release
 
 Providing a group proposal solidifies project community before the DEX launch and gives all wallets a say:
 
@@ -133,7 +133,7 @@ New buyers may also be more likely to purchase a token seeing that it is "safer"
 
 - The fee structure itself (sybiling costs more in fees)
 - The community treasury (even sybil buyers fund the collective)
-- Post-migration transfer fees (every transfer costs 0.1%)
+- Post-migration transfer fees (every transfer costs 0.003%)
 
 ---
 
@@ -148,60 +148,59 @@ Migration is **permissionless** — any wallet can trigger the migration for any
 The migration is executed as a two-step atomic process within a single transaction:
 
 1. **Fund WSOL**: Wrap the bonding curve's SOL reserves into a WSOL token account
-2. **Migrate to DEX**: Vote finalization, pool creation on Raydium CPMM, liquidity provision (SOL + tokens), LP token burn (liquidity locked forever), transfer fee activation (0.1% on all future transfers)
+2. **Migrate to DEX**: Vote finalization, pool creation on Raydium CPMM, liquidity provision (SOL + tokens), LP token burn (liquidity locked forever), transfer fee activation (0.003% on all future transfers)
 
 When your token bonds, anyone can complete the migration. The community is not dependent on the creator or any centralized operator.
 
 ---
 
-## 5. Post-Migration: Automatic Buybacks and Burns
+## 5. Post-Migration: Treasury Accumulation Loop
 
-Once a token migrates to Raydium, the treasury mechanics continue working for holders through the **0.1% transfer fee**.
+Once a token migrates to Raydium, the treasury continues growing through the **0.003% transfer fee** and **lending yield**.
 
-### The 0.1% Transfer Fee (Token-2022)
+### The 0.003% Transfer Fee (Token-2022)
 
-All `torch.market` tokens use Solana's Token-2022 standard with a built-in **0.1% transfer fee**. This fee is collected on every transfer — wallet to wallet, DEX trades, everything.
+All `torch.market` tokens use Solana's Token-2022 standard with a built-in **0.003% transfer fee** (3 basis points). This fee is collected on every transfer — wallet to wallet, DEX trades, everything.
 
 ```
-User transfers 100 tokens
+User transfers 100,000 tokens
         │
-        └── 0.1% (0.1 token) → Withheld in mint
+        └── 0.003% (3 tokens) → Withheld in mint
                             │
                             └── Harvested → Token Treasury
 ```
 
-The transfer fee is not extracted from the sender or receiver as a separate charge — it's automatically withheld from the transferred amount. If you send 1000 tokens, the recipient receives 999 and 1 is held for the treasury.
+The transfer fee is not extracted from the sender or receiver as a separate charge — it's automatically withheld from the transferred amount at the Solana runtime level. The rate is immutable once set at token creation.
 
-### Harvest and Buyback Cycle
+### Harvest and Sell Cycle
 
-The accumulated transfer fees create a perpetual buyback engine:
+The accumulated transfer fees create a perpetual treasury growth engine:
 
 1. **Harvest** (permissionless): Anyone can call `harvest_fees` to collect withheld tokens from transfers into the token treasury's token account.
 2. **Swap to SOL** (permissionless): Anyone can call `swap_fees_to_sol` to sell the harvested tokens back to SOL via Raydium, adding the proceeds to the treasury's SOL balance. The SDK bundles harvest + swap in one atomic transaction via `buildSwapFeesToSolTransaction`.
-3. **Buyback** (permissionless): Anyone can call `execute_auto_buyback` to execute a market buy using treasury SOL when price dips. The bought tokens are burned.
-4. **Burn**: Acquired tokens are permanently burned, reducing supply. When supply reaches the 500M floor, tokens are held in treasury instead (preventing hyper-deflation).
+3. **Lend**: Treasury SOL is available for community members to borrow against their token collateral (see Section 6).
+4. **Earn**: Interest from borrowers flows back into the treasury, compounding its value.
 
-### Buyback Parameters
+### Sell Cycle Parameters
 
-- **Interval**: Minimum ~18 minutes between buybacks
-- **Amount**: 15% of available treasury SOL per buyback
-- **Reserve**: 30% of treasury SOL is held in reserve
-- **Supply Floor**: Burning stops at 500M tokens (50% of initial supply)
+- **Interval**: Minimum ~18 minutes between sells (cooldown)
+- **Sell Amount**: 15% of held tokens per call (100% if <= 1M tokens)
+- **Sell Trigger**: Price > 120% of migration baseline
 
-This creates a continuous deflationary pressure. Every time someone trades the token on any DEX or transfers between wallets, the treasury grows stronger and future buybacks become larger.
+The treasury accumulates SOL through fee harvesting and lending interest, creating a self-sustaining growth loop.
 
 ### Treasury Behavior Summary
 
 | Phase | SOL Source | Token Destination |
 |-------|-----------|-------------------|
 | Bonding | 1% fee + 20%→5% of buys (dynamic) | Community treasury (vote vault) |
-| DEX | 0.1% transfer fee (harvested) | Burned (or held at floor) |
+| DEX | 0.003% transfer fee → sell to SOL | Treasury SOL → lending pool + epoch rewards |
 
 ---
 
 ## 6. Treasury Lending
 
-After migration, the token treasury holds SOL that fuels buybacks. Holders can also **borrow SOL against their tokens**, turning idle treasury capital into productive liquidity while maintaining the buyback flywheel.
+After migration, the token treasury holds SOL accumulated from fee harvesting. Holders can **borrow SOL against their tokens**, turning idle treasury capital into productive liquidity while earning yield for the treasury.
 
 ### How It Works
 
@@ -216,15 +215,15 @@ After migration, the token treasury holds SOL that fuels buybacks. Holders can a
 - **Liquidation Threshold**: 65% — position is liquidatable when debt exceeds 65% of collateral value
 - **Interest Rate**: 2% per epoch (~7 days)
 - **Liquidation Bonus**: 10% — liquidators receive collateral at a 10% discount
-- **Utilization Cap**: 50% — at most half of treasury SOL can be lent out at any time
+- **Utilization Cap**: 70% — at most 70% of treasury SOL can be lent out at any time
 
 ### Collateral Pricing
 
 Token prices are derived from the Raydium pool reserves. The protocol reads the pool's SOL and token balances on-chain and computes the spot price. No external oracles are required — pricing is fully on-chain and permissionless.
 
-### Synergy with Buybacks
+### Virtuous Cycle
 
-Interest paid by borrowers flows back into the token treasury. This additional SOL fuels larger buybacks, creating a positive feedback loop: more lending → more interest → more buybacks → higher token price → more borrowing capacity.
+Interest paid by borrowers flows back into the token treasury, compounding its SOL balance. Community members borrow SOL → buy tokens → generate volume → generate transfer fees → fees harvested and sold to SOL → treasury grows → more SOL available for lending. The treasury becomes a self-reinforcing liquidity engine.
 
 > **Immutable Parameters**: All lending parameters (LTV, liquidation threshold, interest rate, bonus, utilization cap) are set at pool creation and are immutable on-chain. No admin key can change them after deployment.
 
@@ -238,26 +237,26 @@ The protocol level fees don't just go to the development team, they're redistrib
 
 During the bonding phase, 1% of every buy goes to the protocol. This is split:
 
-- 75% → Protocol Treasury (for user rewards)
-- 25% → Dev Wallet (for development)
+- 90% → Protocol Treasury (for user rewards)
+- 10% → Dev Wallet (for development)
 
 The Protocol Treasury accumulates SOL and distributes it to active traders every *7 days (1 epoch)*.
 
 ### Epoch Reward Distribution
 
-1. **Reserve Floor**: The protocol treasury maintains a 1,500 SOL reserve floor. Only SOL above this threshold is distributed.
-2. **Volume Eligibility**: To claim rewards, a user must have traded at least *10 SOL in volume* during the previous epoch.
-3. **Pro-Rata Share**: Eligible users receive rewards proportional to their trading volume:
+1. **No Reserve Floor**: All accumulated fees are distributed each epoch. No SOL held back.
+2. **Volume Eligibility**: To claim rewards, a user must have traded at least *2 SOL in volume* during the previous epoch.
+3. **Minimum Claim**: Claims below 0.1 SOL are rejected (prevents dust drain).
+4. **Pro-Rata Share**: Eligible users receive rewards proportional to their trading volume:
    ```
    user_reward = (user_volume / total_volume) × distributable_amount
    ```
-4. **Claim**: Users must actively claim their rewards. Unclaimed rewards roll into the next epoch.
+5. **Claim**: Users must actively claim their rewards. Unclaimed rewards roll into the next epoch.
 
 ### Example
 
-If the protocol treasury has 2,000 SOL:
-- Reserve floor: 1,500 SOL (untouchable)
-- Distributable: 500 SOL
+If the protocol treasury has 500 SOL after an epoch:
+- Distributable: 500 SOL (all of it — no reserve floor)
 
 If total eligible volume was 50,000 SOL and you traded 5,000 SOL:
 - Your share: 5,000 / 50,000 = 10%
@@ -403,7 +402,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          TORCH MARKET PROTOCOL v3.7.17                                │
+│                          TORCH MARKET PROTOCOL v3.7.7                                 │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
@@ -411,7 +410,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 │  │  ┌─────────────────┐  ┌──────────────────────────────────────┐              │    │
 │  │  │  GlobalConfig   │  │        ProtocolTreasury               │              │    │
 │  │  │  (authority,    │  │  (1% fees + reclaimed SOL,            │              │    │
-│  │  │   settings)     │  │   1500 SOL floor, epoch rewards)      │              │    │
+│  │  │   settings)     │  │   no floor, epoch rewards)            │              │    │
 │  │  └─────────────────┘  └──────────────────────────────────────┘              │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                       │                                              │
@@ -421,9 +420,9 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 │  │                                                                              │    │
 │  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │    │
 │  │  │    Token     │    │   Bonding    │    │   Treasury   │                   │    │
-│  │  │   (Mint)     │───▶│    Curve     │───▶│  (buybacks,  │                   │    │
+│  │  │   (Mint)     │───▶│    Curve     │───▶│  (lending,   │                   │    │
 │  │  │  Token-2022  │    │  (pricing,   │    │   stars,     │                   │    │
-│  │  │ 0.1% xfer fee│    │   voting)    │    │   lending)   │                   │    │
+│  │  │ 0.003% xfer │    │   voting)    │    │   lending)   │                   │    │
 │  │  └──────────────┘    └──────┬───────┘    └──────────────┘                   │    │
 │  │                             │                                                │    │
 │  │         ┌───────────────────┼───────────────────┐                           │    │
@@ -458,7 +457,7 @@ The on-chain program is a directed graph of economic relationships. PDA seeds de
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                      │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│  INSTRUCTION HANDLERS (28 total)                                                     │
+│  INSTRUCTION HANDLERS (27 total)                                                     │
 │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐      │
 │  │ admin  │ │ token  │ │ market │ │treasury│ │ dex    │ │rewards │ │reclaim │      │
 │  │        │ │        │ │        │ │/lending│ │migrate │ │        │ │/revival│      │
@@ -478,11 +477,11 @@ The protocol uses 12 on-chain account types, all deterministic PDAs:
 |---------|-----------|---------|
 | **GlobalConfig** | `["global_config"]` | Protocol-wide settings (authority, fees, pause flag) |
 | **BondingCurve** | `["bonding_curve", mint]` | Per-token pricing state, reserves, votes, bonding target |
-| **Treasury** | `["treasury", mint]` | Per-token treasury (SOL for buybacks, star balance, lending pool) |
-| **TreasuryLock** | `["treasury_lock", mint]` | [V27] Holds 250M locked tokens (25% of supply) |
+| **Treasury** | `["treasury", mint]` | Per-token treasury (SOL for lending, star balance, fee accumulation) |
+| **TreasuryLock** | `["treasury_lock", mint]` | [V31] Holds 300M locked tokens (30% of supply) |
 | **UserPosition** | `["user_position", bc, user]` | Per-user per-token holdings and vote |
 | **UserStats** | `["user_stats", user]` | Platform-wide volume and reward tracking |
-| **ProtocolTreasury** | `["protocol_treasury_v11"]` | Single treasury: fees + reclaims, 1500 SOL floor, epoch rewards |
+| **ProtocolTreasury** | `["protocol_treasury_v11"]` | Single treasury: fees + reclaims, no floor, epoch rewards (V32) |
 | **StarRecord** | `["star_record", user, mint]` | Prevents double-starring |
 | **LoanPosition** | `["loan", mint, user]` | Per-user per-token lending position |
 | **TorchVault** | `["torch_vault", creator]` | Per-creator full-custody SOL + token escrow |
@@ -490,7 +489,7 @@ The protocol uses 12 on-chain account types, all deterministic PDAs:
 
 ### Instruction Set
 
-The V3.7.17 program exposes 28 instructions across 9 handler domains:
+The V3.7.7 program exposes 27 instructions across 9 handler domains:
 
 | Domain | Instructions |
 |--------|-------------|
@@ -498,18 +497,20 @@ The V3.7.17 program exposes 28 instructions across 9 handler domains:
 | **Token** | `create_token` |
 | **Market** | `buy`, `sell` |
 | **Treasury** | `harvest_fees`, `swap_fees_to_sol` |
-| **Migration** | `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback` |
+| **Migration** | `fund_migration_wsol`, `migrate_to_dex` |
 | **Rewards** | `advance_protocol_epoch`, `claim_protocol_rewards`, `star_token` |
 | **Reclaim/Revival** | `reclaim_failed_token`, `contribute_revival` |
 | **Vault** | `create_vault`, `deposit_vault`, `withdraw_vault`, `link_wallet`, `unlink_wallet`, `transfer_authority`, `withdraw_tokens` |
 | **Swap** | `fund_vault_wsol`, `vault_swap` |
 | **Lending** | `borrow`, `repay`, `liquidate` |
 
-> **Note (V3.7.0):** `update_authority` was removed. Authority transfer is now done at deployment time via multisig tooling rather than an on-chain instruction, reducing the protocol's admin attack surface. Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
+> **Note (V3.7.0):** `update_authority` was removed. Minimal admin surface: only `initialize` and `update_dev_wallet` require authority.
 >
-> **Note (V3.7.10):** `swap_fees_to_sol` added. Sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless — anyone can call after migration. 28 instructions total.
+> **Note (V3.7.5):** V31 zero-burn migration. CURVE_SUPPLY 750M→700M, TREASURY_LOCK 250M→300M. Transfer fee 0.1%→0.003%. Vote return → treasury lock.
 >
-> **Note (V3.7.17):** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1% (`TRANSFER_FEE_BPS` 100→10). All tokens now use Token-2022 metadata extensions exclusively. 28 instructions total.
+> **Note (V3.7.6):** V32 protocol treasury rebalance. Reserve floor removed (0 SOL). Volume eligibility 10→2 SOL. Min claim 0.1 SOL. Fee split 90/10 (was 75/25). 39 Kani proofs.
+>
+> **Note (V3.7.7):** V33 buyback removed, lending extended. `execute_auto_buyback` instruction removed (27 instructions). Lending utilization cap 50%→70%. Treasury simplified to fee harvest → sell → SOL → lending yield + epoch rewards.
 
 ### Bonding Curve Formula
 
@@ -525,9 +526,9 @@ Price: price      = virtual_sol_reserves / virtual_token_reserves
 
 | Tier | Target | IVS (3BT/8) | IVT | Curve Supply | Treasury Lock |
 |------|--------|-------------|-----|-------------|---------------|
-| **Spark** | 50 SOL | 18.75 SOL | 756.25M | 750M (75%) | 250M (25%) |
-| **Flame** | 100 SOL | 37.5 SOL | 756.25M | 750M (75%) | 250M (25%) |
-| **Torch** | 200 SOL | 75 SOL | 756.25M | 750M (75%) | 250M (25%) |
+| **Spark** | 50 SOL | 18.75 SOL | 756.25M | 700M (70%) | 300M (30%) |
+| **Flame** | 100 SOL | 37.5 SOL | 756.25M | 700M (70%) | 300M (30%) |
+| **Torch** | 200 SOL | 75 SOL | 756.25M | 700M (70%) | 300M (30%) |
 
 ### Fee Flow
 
@@ -553,7 +554,7 @@ Price: price      = virtual_sol_reserves / virtual_token_reserves
 ┌─────────┐ ┌─────────┐   ┌──────────┐   ┌───────────┐ ┌───────────┐
 │Protocol │ │  Dev    │   │  Token   │   │  Token   │ │  Bonding  │
 │Treasury │ │ Wallet  │   │ Treasury │   │ Treasury │ │   Curve   │
-│  (75%)  │ │  (25%)  │   │  (100%)  │   │(20%→5%)  │ │(80%→95%)  │
+│  (90%)  │ │  (10%)  │   │  (100%)  │   │(20%→5%)  │ │(80%→95%)  │
 └─────────┘ └─────────┘   └────┬─────┘   └───────────┘ └─────┬─────┘
                                │                             │
                                │                              ▼
@@ -566,8 +567,8 @@ Price: price      = virtual_sol_reserves / virtual_token_reserves
                                │                      │                 │
                                ▼                      ▼                 ▼
                         ┌─────────────┐        ┌─────────────┐   ┌───────────┐
-                        │  BUYBACKS   │        │   BUYER     │   │ COMMUNITY │
-                        │  (on dips)  │        │   (90%)     │   │ TREASURY  │
+                        │  LENDING    │        │   BUYER     │   │ COMMUNITY │
+                        │  (yield)    │        │   (90%)     │   │ TREASURY  │
                         └─────────────┘        └─────────────┘   │   (10%)   │
                                                                  └─────┬─────┘
                                                                        │
@@ -576,7 +577,7 @@ Price: price      = virtual_sol_reserves / virtual_token_reserves
                                                            │    (based on vote)    │
                                                            ├───────────────────────┤
                                                            │ BURN → destroy tokens │
-                                                           │ RETURN → add to LP    │
+                                                           │ RETURN → treasury lock│
                                                            └───────────────────────┘
 ```
 
@@ -585,7 +586,7 @@ Price: price      = virtual_sol_reserves / virtual_token_reserves
 **Access Control:**
 - **Authority-only:** `initialize`, `update_dev_wallet`
 - **Vault authority-only:** `withdraw_vault`, `link_wallet`, `unlink_wallet`, `transfer_authority`, `withdraw_tokens`
-- **Permissionless cranks:** `advance_protocol_epoch`, `harvest_fees`, `swap_fees_to_sol`, `fund_migration_wsol`, `migrate_to_dex`, `execute_auto_buyback`, `reclaim_failed_token`, `liquidate`
+- **Permissionless cranks:** `advance_protocol_epoch`, `harvest_fees`, `swap_fees_to_sol`, `fund_migration_wsol`, `migrate_to_dex`, `reclaim_failed_token`, `liquidate`
 - **Permissionless deposits:** Anyone can deposit into any vault
 
 **Vault Security (V3.1.0 — Full Custody):**
@@ -601,7 +602,7 @@ Pool accounts validated via PDA derivation constraints in Anchor contexts (`deri
 
 ### Formal Verification
 
-Core arithmetic is formally verified with [Kani](https://model-checking.github.io/kani/) — 36 proof harnesses, all passing, covering every possible input in constrained ranges. Proofs cover: fee calculations, bonding curve pricing, lending formulas (borrow/repay/liquidate lifecycle), reward distribution, auto-buyback, migration conservation, and V25/V27 token distribution. No SOL can be created from nothing, no tokens can be minted from thin air, and no fees can exceed their stated rates. See [VERIFICATION.md](https://torch.market/verification.md).
+Core arithmetic is formally verified with [Kani](https://model-checking.github.io/kani/) — 39 proof harnesses, all passing, covering every possible input in constrained ranges. Proofs cover: fee calculations, bonding curve pricing, lending formulas (borrow/repay/liquidate lifecycle), reward distribution, sell-cycle ratio math, migration conservation, and V25/V27 token distribution. No SOL can be created from nothing, no tokens can be minted from thin air, and no fees can exceed their stated rates. See [VERIFICATION.md](https://torch.market/verification.md).
 
 ### Security Audit History
 
@@ -619,10 +620,10 @@ Pool accounts were reported as unconstrained. Assessment: `validate_pool_account
 CREATE → BONDING → COMPLETE → VOTE → MIGRATE → DEX
    │                                              │
    │                                              ▼
-   │                                    [0.1% Transfer Fee]
+   │                                   [0.003% Transfer Fee]
    │                                              │
    │                                              ▼
-   │                                    HARVEST → SWAP TO SOL → BUYBACK → BURN
+   │                                    HARVEST → SWAP TO SOL → LENDING → YIELD
    │                                              │
    │                                     ┌────────┴────────┐
    │                                     │                  │
@@ -656,20 +657,20 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Community Treasury | 10% | Portion of bought tokens to vote vault |
 | Treasury SOL Share | 20%→5% | Dynamic: decays as bonding progresses |
 | Token Treasury Fee | 1% | Fee on all buys (lifetime) |
-| Protocol Fee | 1% | Fee during bonding (75% treasury, 25% dev) |
-| Transfer Fee | 0.1% | Post-migration fee on all transfers |
-| Supply Floor | 500,000,000 | Minimum supply (buyback burns stop here) |
+| Protocol Fee | 1% | Fee during bonding (90% treasury, 10% dev) |
+| Transfer Fee | 0.003% (3 bps) | Post-migration fee on all transfers (immutable per mint) |
 | Inactivity Period | 7 days | Time before failed token can be reclaimed |
 | Revival Threshold (V27) | 3BT/8 per tier (18.75 / 37.5 / 75 SOL) | SOL needed to revive a reclaimed token |
 | Voting Duration | ~24 hours | Time for community to vote on burn/return |
 | Epoch Duration | 7 days | Protocol reward distribution cycle |
-| Reward Eligibility | 10 SOL | Minimum epoch volume for protocol rewards |
-| Protocol Reserve | 1,500 SOL | Minimum protocol treasury balance |
+| Reward Eligibility | 2 SOL | Minimum epoch volume for protocol rewards |
+| Min Claim | 0.1 SOL | Minimum payout per claim (rejects dust) |
+| Protocol Reserve | 0 SOL | All fees distributed each epoch (no floor) |
 | Max LTV | 50% | Maximum loan-to-value for treasury lending |
 | Liquidation Threshold | 65% | Debt-to-collateral ratio triggering liquidation |
 | Interest Rate | 2% / epoch | Lending interest per ~7-day epoch |
 | Liquidation Bonus | 10% | Discount for liquidators on seized collateral |
-| Utilization Cap | 50% | Max fraction of treasury SOL available for loans |
+| Utilization Cap | 70% | Max fraction of treasury SOL available for loans |
 | Min Borrow | 0.1 SOL | Minimum borrow amount per loan |
 
 ---
@@ -679,14 +680,14 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | Version | Features |
 |---------|----------|
 | V1 | Basic bonding curve, buy/sell |
-| V2 | Treasury, buybacks, permanent burn split |
+| V2 | Treasury, fee accumulation, permanent burn split |
 | V3 | Token-2022 with transfer fees |
 | V4 | Failed token reclaim, platform rewards |
 | V5 | Raydium DEX migration |
-| V8 | Dev wallet split (25% of treasury fee) |
-| V9 | Auto-buyback on DEX price dips |
+| V8 | Dev wallet split (10% of protocol fee, updated V32 from 25%) |
+| V9 | Ratio-gated sell cycle (buyback removed in V33) |
 | V10 | Simplified star system with auto-payout |
-| V11 | Protocol treasury with 1500 SOL reserve floor |
+| V11 | Protocol treasury with epoch rewards (reserve floor removed in V32) |
 | V12 | Token revival |
 | V2.2 | 10% tokens to community treasury, 90% to buyer |
 | V2.3 | Dynamic treasury SOL rate: 20%→5% decay |
@@ -701,16 +702,17 @@ Every path in this graph feeds value back into the system. There is no terminal 
 | V3.6.0 | **V26 Permissionless Migration + Authority Revocation.** Mint and freeze authority revoked permanently at migration. |
 | V3.6.x | **V27 Treasury Lock + PDA Pool Validation.** 250M tokens locked at creation. IVS = 3BT/8, 13.44x multiplier. |
 | V3.7.0 | **V28 `update_authority` Removed.** Authority transfer via multisig tooling. 27 instructions. Minimal admin surface. |
-| V3.7.17 | **V29 On-Chain Metadata.** Metaplex `add_metadata` removed (temporary backfill complete). Transfer fee reduced from 1% to 0.1%. All tokens use Token-2022 metadata extensions exclusively. 28 instructions. |
-| V3.7.10 | **V20 Swap Fees to SOL.** New `swap_fees_to_sol` instruction sells harvested Token-2022 fees to SOL via Raydium. 28 instructions. Vault ordering bug fix in pool validation. |
+| V3.7.5 | **V31 Zero-Burn Migration.** CURVE_SUPPLY 750M→700M, TREASURY_LOCK 250M→300M. Transfer fee 0.1%→0.003%. Vote return → treasury lock. |
+| V3.7.6 | **V32 Protocol Treasury Rebalance.** Reserve floor removed. Volume eligibility 10→2 SOL. Min claim 0.1 SOL. Fee split 90/10. 39 Kani proofs. |
+| V3.7.7 | **V33 Buyback Removed, Lending Extended.** `execute_auto_buyback` removed (27 instructions). Lending utilization cap 50%→70%. Treasury simplified to: fee harvest → sell → SOL → lending yield + epoch rewards. |
 
 ---
 
 ## Conclusion
 
-`torch.market` is a programmable economic substrate. Every token launched on the protocol receives a complete, self-sustaining economy: a pricing engine, a central bank with automatic buybacks, a lending market, community governance, creator rewards, a failure-recovery system, and optional privacy — all composed from a small set of on-chain primitives that enforce correctness by topology.
+`torch.market` is a programmable economic substrate. Every token launched on the protocol receives a complete, self-sustaining economy: a pricing engine, a treasury with lending yield, community governance, creator rewards, a failure-recovery system, and optional privacy — all composed from a small set of on-chain primitives that enforce correctness by topology.
 
-The protocol is non-extractive by design. There is no configuration that makes it extractive because the graph doesn't have that edge. Fees become buybacks. Buybacks become deflation. Failed tokens become protocol rewards. Interest from lending fuels larger buybacks. Every outflow is an inflow somewhere else in the system.
+The protocol is non-extractive by design. There is no configuration that makes it extractive because the graph doesn't have that edge. Fees become lending yield. Lending yield becomes community liquidity. Failed tokens become protocol rewards. Interest from borrowers compounds the treasury. Every outflow is an inflow somewhere else in the system.
 
 The Torch Vault adds a custody-aware resolution layer that makes every economic flow in the protocol accessible through a single identity — without adding economic complexity. Agents and humans use the same on-chain program, the same API, the same graph.
 

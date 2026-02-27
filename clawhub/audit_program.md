@@ -1,6 +1,6 @@
 # Torch Market Security Audit Summary
 
-**Date:** February 22, 2026 | **Auditor:** Claude Opus 4.6 (Anthropic) | **Version:** V3.7.3 Production
+**Date:** February 26, 2026 | **Auditor:** Claude Opus 4.6 (Anthropic) | **Version:** V3.7.7 Production
 
 ---
 
@@ -10,7 +10,7 @@ Four audits covering the full stack:
 
 | Layer | Files | Lines | Report |
 |-------|-------|-------|--------|
-| On-chain program (V3.7.3) | 21 source files | ~7,000 | `audit.md` |
+| On-chain program (V3.7.7) | 21 source files | ~6,700 | `audit.md` |
 | Frontend & API | 37 files (17 API routes, 12 libs, 8 components) | -- | `SECURITY_AUDIT_FE_V2.4.1_PROD.md` |
 | Agent Kit plugin (V4.0) | 4 files | ~1,900 | `SECURITY_AUDIT_AGENTKIT_V4.0.md` |
 | Torch SDK (V2.0) | 9 files | ~2,800 | Included in Agent Kit V4.0 audit |
@@ -21,31 +21,37 @@ Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`
 
 ## Findings Summary
 
-### On-Chain Program (V3.7.3)
+### On-Chain Program (V3.7.7)
 
 | Severity | Count | Details |
 |----------|-------|---------|
 | Critical | 0 | -- |
 | High | 0 | -- |
-| Medium | 3 | Lending enabled by default (accepted); Token-2022 transfer fee on collateral (inherent, reduced to 0.1%); Epoch rewards race condition (accepted) |
-| Low | 8 | fund_vault_wsol decoupled accounting; Stranded WSOL lamports; Vault sol_balance drift; Sell no position check; Slot-based interest; Revival no virtual reserve update; Treasury lock ATA not Anchor-constrained (CPI validated); V20 raydium_authority unconstrained (Raydium validates internally) |
-| Informational | 19 | Various carried findings + 3 new V3.7.1 + 2 new V3.7.2 + 2 new V3.7.3 (I-18: metadata pointer authority permanently None; I-19: two-phase mint allocation pattern) |
+| Medium | 3 | Lending enabled by default (accepted); Token-2022 transfer fee on collateral (inherent, reduced to 0.003%); Epoch rewards race condition (accepted) |
+| Low | 7 | fund_vault_wsol decoupled accounting; Stranded WSOL lamports; Vault sol_balance drift; Sell no position check; Slot-based interest; Revival no virtual reserve update; Treasury lock ATA not Anchor-constrained (CPI validated, see V31 notes) |
+| Informational | 23 | Various carried findings + 3 new V3.7.1 + 2 new V3.7.2 + 2 new V3.7.3 + 2 new V3.7.5 (I-20: zero-burn migration design; I-21: AccountInfo stack pressure mitigation) + 1 new V3.7.6 (I-22: reserve floor zeroed, fee split rebalanced) + 1 new V3.7.7 (I-23: buyback removed, lending cap increased) |
 
 **Rating: EXCELLENT -- Ready for Mainnet**
 
 Key strengths:
-- 28 instructions, 12 account types, 36 Kani formal verification proofs passed
+- 27 instructions, 12 account types, 39 Kani formal verification proofs passed
+- **V33 buyback removal**: `execute_auto_buyback` instruction removed (~330 lines of handler + context). Eliminates a complex Raydium CPI instruction that spent treasury SOL providing exit liquidity during dumps, had a fee-inflation bug in vault balance reads, and competed with lending for treasury SOL. One fewer attack surface. Binary size reduced ~6% (850 KB → 804 KB). Treasury simplified to: fee harvest → sell high → SOL → lending yield + epoch rewards
+- **V33 lending cap increase**: Utilization cap raised from 50% to 70%. More SOL available for community lending while maintaining 30% visible reserve. Conservative LTV/liquidation thresholds unchanged
+- **V32 protocol treasury rebalance**: Reserve floor removed (1,500 SOL → 0) -- all fees distributed each epoch. Volume eligibility lowered (10 SOL → 2 SOL). New MIN_CLAIM_AMOUNT (0.1 SOL) prevents dust claims. Protocol fee split rebalanced from 75/25 to 90% treasury / 10% dev wallet. New `verify_min_claim_enforcement` Kani proof
+- **V31 zero-burn migration**: Curve supply reduced from 750M to 700M. At graduation, `vault_remaining == tokens_for_pool` exactly -- zero excess tokens to burn. Cleaner migration with no deflationary side effect
+- **V31 vote return → treasury lock**: Vote-return tokens now transfer to TreasuryLock PDA instead of Raydium LP injection. Preserves tokens for future governance release instead of diluting the pool
+- **V31 supply split**: 700M curve (70%) + 300M locked (30%) = 1B total. Treasury lock increased from 250M to 300M for stronger community reserve
+- **V31 transfer fee**: Reduced from 10 bps (0.1%) to 3 bps (0.003%). Round-trip cost ~0.006% instead of ~0.2%
 - **V29 on-chain metadata**: Token-2022 MetadataPointer + TokenMetadata extensions replace Metaplex dependency. Metadata immutably stored on the mint itself. Pointer authority is `None` (permanently immutable). SDK tests verify name/symbol/uri round-trip via `getTokenMetadata()`
-- **V29 simplified transfer fee**: Reduced from 1% to 0.1% (10 bps). Fee config authority (bonding curve PDA) revoked to `None` at migration -- fee rate permanently locked. Three authorities now revoked at migration: mint, freeze, and transfer fee config
 - **V29 Metaplex removal**: `add_metadata` (Metaplex backfill for legacy tokens) was temporary -- 13/24 succeeded, remaining 11 have old account layouts. All Metaplex code removed: `METAPLEX_PROGRAM_ID` constant, `build_create_metaplex_metadata_instruction`, `AddMetadata` context, `add_metadata` handler, `InvalidMetadataAccount` error. L-9 (untyped mint AccountInfo) is now moot
 - **V20 swap_fees_to_sol**: Closed economic loop verified -- treasury tokens sold on Raydium, WSOL unwrapped, SOL credited back to same treasury. No external routing possible
-- **V20 vault ordering fix**: `order_mints()` now correctly orders pool vaults by mint pubkey for `validate_pool_accounts` in both `swap_fees_to_sol` and `execute_auto_buyback`
+- **V20 vault ordering fix**: `order_mints()` now correctly orders pool vaults by mint pubkey for `validate_pool_accounts` in `swap_fees_to_sol`
 - **V27 PDA-based pool validation** eliminates oracle spoofing at the Anchor constraint level (cryptographically unforgeable)
-- **V27 treasury lock**: 250M tokens (25%) permanently locked in TreasuryLock PDA. No withdrawal instruction exists
-- **V27 supply conservation**: 750M curve + 250M locked = 1B total, verified via two separate `mint_to` CPIs
+- **V27 treasury lock**: 300M tokens (30%) permanently locked in TreasuryLock PDA. No withdrawal instruction exists
+- **V27 supply conservation**: 700M curve + 300M locked = 1B total, verified via two separate `mint_to` CPIs
 - **V26 permissionless migration**: SOL custody preserved via `bc_wsol` intermediary. CPI isolation via `fund_migration_wsol`
 - **V28 zero-cost migration**: Payer fronts ~1 SOL for Raydium costs, treasury reimburses exact amount via lamport snapshot (pre/post CPI). Net cost to payer: 0 SOL. `MIN_MIGRATION_SOL` (1.5 SOL) safety floor replaces fixed `RAYDIUM_POOL_CREATION_FEE`
-- **V3.7.1 MigrateToDex amm_config constrained**: Address constraint added to prevent pool creation with wrong Raydium fee tier (defense-in-depth, matches existing constraint on TreasuryBuybackDex and VaultSwap)
+- **V3.7.1 MigrateToDex amm_config constrained**: Address constraint added to prevent pool creation with wrong Raydium fee tier (defense-in-depth, matches existing constraint on VaultSwap and SwapFeesToSol)
 - **V26/V29 authority revocation**: Mint, freeze, and transfer fee config authorities all revoked to `None` at migration (permanent, irreversible). Supply capped, trading unrestricted, fee rate locked forever
 - **V28 minimal admin surface**: Only `initialize` and `update_dev_wallet` require authority. `update_authority` removed
 - Checked arithmetic everywhere with u128 intermediaries for overflow-prone multiplication
@@ -60,7 +66,7 @@ Key strengths:
 
 ### Overview
 
-New instruction that sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless -- anyone can call post-migration. Completes the fee lifecycle: transfer fees (0.1%) accumulate as tokens, `harvest_fees` collects them, `swap_fees_to_sol` converts to SOL for buybacks and lending.
+New instruction that sells harvested Token-2022 transfer fee tokens back to SOL via Raydium CPMM. Permissionless -- anyone can call post-migration. Completes the fee lifecycle: transfer fees (0.003%) accumulate as tokens, `harvest_fees` collects them, `swap_fees_to_sol` converts to SOL for lending yield and epoch rewards.
 
 **Files audited:**
 - `handlers/treasury.rs` (lines 82-207) -- handler logic
@@ -123,7 +129,7 @@ The swap CPI correctly maps accounts for the **sell direction** (Token-2022 → 
 | `output_token_program` | `token_program` | SPL Token | For WSOL output |
 | `payer` (signer) | `treasury` PDA | -- | Treasury signs swap |
 
-This is the **exact reverse** of `execute_auto_buyback` (which buys tokens with WSOL), with token programs correctly swapped for the reversed direction. Verified against `vault_swap` sell path (swap.rs:183-250) -- same pattern.
+Verified against `vault_swap` sell path (swap.rs:183-250) -- same Raydium CPI pattern with correctly mapped token programs for the sell direction.
 
 ### Fund Flow Analysis -- Can Funds Be Drained?
 
@@ -172,9 +178,9 @@ treasury.sol_balance += sol_received
 
 ### V20 New Findings
 
-**L-8 (Low): `raydium_authority` has no explicit address constraint**
+**~~L-8 (Low): `raydium_authority` has no explicit address constraint~~ -- RESOLVED (V33)**
 
-The `raydium_authority` account in `SwapFeesToSol` context has no `address = ...` constraint. If an attacker passes a fake authority, the Raydium CPI would fail (Raydium validates its own authority PDA internally). This is the same pattern used in `TreasuryBuybackDex` and `VaultSwap` -- all three contexts leave `raydium_authority` unconstrained and rely on Raydium's internal validation. Not exploitable but could be hardened for defense-in-depth.
+The `raydium_authority` account in `SwapFeesToSol` context had no `address = ...` constraint. Raydium validates its own authority PDA internally. `TreasuryBuybackDex` (which also had this pattern) was removed in V33. Only `SwapFeesToSol` and `VaultSwap` remain -- both rely on Raydium's internal validation. Not exploitable.
 
 **I-16 (Informational): `harvested_fees` field semantic change**
 
@@ -182,11 +188,11 @@ The `Treasury.harvested_fees` field (declared in V3, never previously written to
 
 **I-17 (Informational): WSOL ATA rent not tracked in `sol_balance`**
 
-When `treasury_wsol` is closed, the treasury PDA receives both swap proceeds (token balance) and rent-exempt lamports. Only the token balance (via before/after diff) is added to `treasury.sol_balance`. The rent lamports become untracked SOL in the treasury PDA. This is consistent with `vault_swap` and `execute_auto_buyback` which also don't track WSOL rent recovery. Dust-level amounts, not exploitable.
+When `treasury_wsol` is closed, the treasury PDA receives both swap proceeds (token balance) and rent-exempt lamports. Only the token balance (via before/after diff) is added to `treasury.sol_balance`. The rent lamports become untracked SOL in the treasury PDA. This is consistent with `vault_swap` (the only other WSOL-closing path since `execute_auto_buyback` was removed in V33). Dust-level amounts, not exploitable.
 
 ### V20 Vault Ordering Fix Verification
 
-The `order_mints()` fix in both `swap_fees_to_sol` and `execute_auto_buyback` was verified:
+The `order_mints()` fix in `swap_fees_to_sol` was verified:
 
 ```rust
 // swap_fees_to_sol (treasury.rs:104-111)
@@ -196,17 +202,9 @@ let (vault_0, vault_1) = if mint_0 == mint_key {
 } else {
     (&ctx.accounts.wsol_vault, &ctx.accounts.token_vault)
 };
-
-// execute_auto_buyback (migration.rs) -- same pattern
-let (mint_0, _) = order_mints(&mint_key);
-let (vault_0, vault_1) = if mint_0 == WSOL_MINT {
-    (&ctx.accounts.input_vault, &ctx.accounts.output_vault)
-} else {
-    (&ctx.accounts.output_vault, &ctx.accounts.input_vault)
-};
 ```
 
-Both correctly pass vaults in **pool order** (vault_0/vault_1 by mint pubkey comparison) to `validate_pool_accounts`, while the Raydium CPI receives vaults in **swap direction** order (input/output). These are independent concerns and both are handled correctly.
+Correctly passes vaults in **pool order** (vault_0/vault_1 by mint pubkey comparison) to `validate_pool_accounts`, while the Raydium CPI receives vaults in **swap direction** order (input/output). These are independent concerns and both are handled correctly. (Note: `execute_auto_buyback` which had the same pattern was removed in V33.)
 
 ---
 
@@ -214,7 +212,7 @@ Both correctly pass vaults in **pool order** (vault_0/vault_1 by mint pubkey com
 
 ### Overview
 
-V29 makes two changes: (1) new tokens store metadata on-chain via Token-2022 MetadataPointer + TokenMetadata extensions, replacing the Metaplex dependency; (2) transfer fee reduced from 1% (100 bps) to 0.1% (10 bps) with fee config authority revoked at migration. The `add_metadata` instruction (Metaplex backfill for legacy tokens) was temporary and has been removed -- all Metaplex code is deleted.
+V29 makes two changes: (1) new tokens store metadata on-chain via Token-2022 MetadataPointer + TokenMetadata extensions, replacing the Metaplex dependency; (2) transfer fee reduced from 1% (100 bps) to 0.003% (3 bps) with fee config authority revoked at migration. The `add_metadata` instruction (Metaplex backfill for legacy tokens) was temporary and has been removed -- all Metaplex code is deleted.
 
 **Files audited:**
 - `handlers/token.rs` -- create_token with Token-2022 metadata extensions
@@ -259,12 +257,12 @@ set_authority(
 )?;
 ```
 
-**Verified:** This follows the same pattern as the existing mint authority and freeze authority revocations (lines 354-375). `AuthorityType::TransferFeeConfig` with `new_authority = None` is irreversible -- Token-2022 rejects `SetAuthority` when the current authority is `None`. The 0.1% fee rate is locked forever post-migration.
+**Verified:** This follows the same pattern as the existing mint authority and freeze authority revocations (lines 354-375). `AuthorityType::TransferFeeConfig` with `new_authority = None` is irreversible -- Token-2022 rejects `SetAuthority` when the current authority is `None`. The 0.003% fee rate is locked forever post-migration.
 
 **Three authorities now revoked at migration:**
 1. Mint authority → `None` (supply capped)
 2. Freeze authority → `None` (free trading guaranteed)
-3. Transfer fee config authority → `None` (0.1% fee rate locked)
+3. Transfer fee config authority → `None` (0.003% fee rate locked)
 
 ### V29 New Findings
 
@@ -279,6 +277,247 @@ The MetadataPointer extension is initialized with `authority = None`, making the
 **I-19 (Informational): Two-phase mint allocation pattern**
 
 The mint account is created with 346 bytes (TransferFeeConfig + MetadataPointer), then Token-2022 reallocs internally during `InitializeTokenMetadata`. The creator pays additional rent via `system_program::transfer` before the metadata init. This is a standard Token-2022 pattern -- pre-allocating the full space causes `InitializeMint2` to fail due to uninitialized TLV entries in the trailing bytes.
+
+---
+
+## V31: Zero-Burn Migration + Treasury Lock Vote Return -- Deep Audit
+
+### Overview
+
+V31 makes three changes: (1) curve supply reduced from 750M to 700M, treasury lock increased from 250M to 300M -- at graduation, `vault_remaining == tokens_for_pool` exactly, eliminating the ~50M excess token burn; (2) vote-return tokens now transfer to TreasuryLock PDA instead of Raydium LP injection; (3) transfer fee reduced from 10 bps to 3 bps (0.003%).
+
+**Files audited:**
+- `contexts.rs` -- `MigrateToDex` account context (treasury_lock_token_account downgraded to AccountInfo)
+- `migration.rs` -- vote return transfer to treasury lock, manual ATA validation
+- `constants.rs` -- CURVE_SUPPLY, TREASURY_LOCK_TOKENS, TRANSFER_FEE_BPS
+- `handlers/token.rs` -- updated mint_to amounts (700M/300M)
+- `errors.rs` -- `InvalidTokenAccount` error variant
+
+### Zero-Burn Migration Verification
+
+**Before V31:** `CURVE_SUPPLY = 750M`, `TREASURY_LOCK = 250M`. At graduation with 200 SOL target, `tokens_for_pool ≈ 700M` (computed from price matching), leaving ~50M excess tokens burned.
+
+**After V31:** `CURVE_SUPPLY = 700M`, `TREASURY_LOCK = 300M`. At graduation, `tokens_for_pool == vault_remaining` exactly. The `excess_tokens` burn path (migration.rs:208-225) still exists as a safety net but fires with `excess_tokens = 0` for V31 tokens.
+
+**Supply conservation:** `700M + 300M = 1B` total supply. Verified via two separate `mint_to` CPIs in `create_token`. The 39 Kani formal verification proofs include `verify_price_matched_pool_flame` which validates the zero-excess property.
+
+### Vote Return → Treasury Lock Verification
+
+**Previous behavior (V27):** Vote-return tokens were added to Raydium LP, diluting the pool at migration.
+
+**V31 behavior:** Vote-return tokens transfer to `treasury_lock_token_account` via `transfer_checked` CPI with treasury as signer.
+
+```rust
+// migration.rs (V31 vote return path)
+if bonding_curve.vote_result_return {
+    let expected_lock_ata = get_associated_token_address_2022(
+        &ctx.accounts.treasury_lock.key(),
+        &mint_key,
+    );
+    require!(
+        ctx.accounts.treasury_lock_token_account.key() == expected_lock_ata,
+        TorchMarketError::InvalidTokenAccount
+    );
+    transfer_checked(/* treasury → treasury_lock_token_account */);
+}
+```
+
+**Validation chain:**
+1. `treasury_lock` is `Box<Account<'info, TreasuryLock>>` -- Anchor validates discriminator and PDA
+2. `treasury_lock_token_account` is `AccountInfo` with manual ATA address validation
+3. `get_associated_token_address_2022` derives the expected ATA deterministically
+4. `require!` rejects mismatched addresses with `InvalidTokenAccount`
+5. `transfer_checked` CPI validates the account is a valid Token-2022 token account
+
+### AccountInfo Stack Pressure Mitigation (I-21)
+
+The `treasury_lock_token_account` was downgraded from `Box<InterfaceAccount<TokenAccount>>` with `associated_token::` constraints to plain `AccountInfo` with `#[account(mut)]`. This was necessary because the Anchor-generated `try_accounts` validation code for `MigrateToDex` (which has ~25 accounts) exceeded the Solana BPF 4KB stack frame limit.
+
+**Security impact:** None. The manual ATA validation in the handler provides equivalent security:
+- ATA addresses are deterministic (derived from owner + mint + Token-2022 program)
+- An attacker cannot forge an ATA address -- it's a PDA with fixed seeds
+- `transfer_checked` CPI validates the destination is a valid token account
+- The `treasury_lock` account itself is still fully typed and PDA-validated by Anchor
+
+This pattern is analogous to how `raydium_authority` is left unconstrained (L-8) -- the CPI target validates internally.
+
+### Backward Compatibility
+
+Tokens created on v3.7.4 (750M curve / 250M lock) will use the new V31 migration handler when they graduate. They get the new vote-return → treasury lock path, but their creation-time economics are preserved:
+- Supply split remains 750M/250M (stored on-chain at creation)
+- Transfer fee rate remains whatever was set at mint creation (immutable)
+- The ~50M excess burn still occurs (vault_remaining > tokens_for_pool for old supply split)
+
+### V31 New Findings
+
+**I-20 (Informational): Zero-burn migration design**
+
+The V31 supply split (700M/300M) is calibrated so that `vault_remaining == tokens_for_pool` at the 200 SOL bonding target. This eliminates the ~50M deflationary burn at migration, making the supply more predictable. The excess burn code path is retained as a safety net. This property is verified by the `verify_price_matched_pool_flame` Kani proof.
+
+**I-21 (Informational): AccountInfo stack pressure mitigation**
+
+The `treasury_lock_token_account` in `MigrateToDex` uses `AccountInfo` instead of a typed Anchor account to reduce stack frame size. The `associated_token::` macro generates heavy validation code in `try_accounts` that, combined with ~25 other accounts in the context, exceeded the 4KB BPF stack limit. Manual ATA validation in the handler provides equivalent security guarantees. This is a standard Solana optimization pattern for large account contexts.
+
+---
+
+## V32: Protocol Treasury Rebalance -- Deep Audit
+
+### Overview
+
+V32 changes four protocol constants and adds a min claim guard. No new instructions, no new accounts, no state struct changes. Pure economics rebalance: more fees to traders, lower entry barrier, dust claim protection.
+
+**Files audited:**
+- `constants.rs` -- PROTOCOL_TREASURY_RESERVE_FLOOR (→0), MIN_EPOCH_VOLUME_ELIGIBILITY (→2 SOL), DEV_WALLET_SHARE_BPS (→1000), new MIN_CLAIM_AMOUNT
+- `handlers/protocol_treasury.rs` -- min claim check in `claim_protocol_rewards`
+- `errors.rs` -- `ClaimBelowMinimum` error variant
+
+### Constant Changes Verification
+
+| Constant | Before | After | Security Impact |
+|----------|--------|-------|-----------------|
+| `PROTOCOL_TREASURY_RESERVE_FLOOR` | 1,500 SOL | 0 SOL | Rent-exempt minimum still subtracted (line 61). Account stays alive. No drain risk. |
+| `MIN_EPOCH_VOLUME_ELIGIBILITY` | 10 SOL | 2 SOL | More claimants, smaller individual shares. Intentional -- broader distribution. |
+| `DEV_WALLET_SHARE_BPS` | 2500 (25%) | 1000 (10%) | Same arithmetic path in buy handler. `dev_share = total * 1000 / 10000`. No overflow risk. |
+| `MIN_CLAIM_AMOUNT` | (new) | 0.1 SOL | New `require!` guard. Prevents dust drain via many micro-claims. |
+
+### Min Claim Guard Verification
+
+```rust
+// handlers/protocol_treasury.rs (V32)
+let claim_amount = user_share.min(ctx.accounts.protocol_treasury.distributable_amount);
+
+// [V32] Reject dust claims below minimum
+require!(
+    claim_amount >= MIN_CLAIM_AMOUNT,
+    TorchMarketError::ClaimBelowMinimum
+);
+```
+
+**Analysis:**
+- Guard placed after share calculation, before SOL transfer -- correct position
+- Uses `>=` (not `>`) -- 0.1 SOL exactly is accepted
+- `MIN_CLAIM_AMOUNT = 100_000_000` lamports (0.1 SOL) -- verified matches constant
+- New `ClaimBelowMinimum` error variant added to `TorchMarketError` enum
+- Error message string updated: "need >= 2 SOL/epoch" (was 10 SOL)
+
+### Attack Vector Analysis
+
+| # | Vector | Mitigation | Verdict |
+|---|--------|-----------|---------|
+| 1 | **Dust drain** -- many accounts claim tiny amounts | MIN_CLAIM_AMOUNT (0.1 SOL) floor. Claims below threshold revert. | MITIGATED |
+| 2 | **Reserve floor = 0 drain** -- treasury emptied each epoch | Distributable = available - rent_exempt. Account survives. Each claim decrements distributable_amount. | SAFE |
+| 3 | **Volume manipulation** -- fake 2 SOL volume to claim | Volume tracked via buy/sell handlers with real SOL flow. Cannot inflate without actual trades. | NOT POSSIBLE |
+| 4 | **Fee split arbitrage** -- exploit 90/10 change | Constant-only change. Same `checked_mul/checked_div` path. No timing exploit. | NOT POSSIBLE |
+
+### V32 New Findings
+
+**I-22 (Informational): Reserve floor zeroed with min claim protection**
+
+The reserve floor removal (1,500 SOL → 0) means all accumulated fees are distributed each epoch. The new MIN_CLAIM_AMOUNT (0.1 SOL) prevents the theoretical dust drain vector where many low-volume accounts could claim tiny amounts. The combination is sound -- broader access with a sensible floor on individual claims. The `verify_min_claim_enforcement` Kani proof formally verifies that claims passing the check are genuinely >= 0.1 SOL.
+
+---
+
+## V33: Buyback Removal + Lending Cap Increase -- Deep Audit
+
+### Overview
+
+V33 removes the `execute_auto_buyback` instruction entirely (~330 lines of handler + context) and increases the lending utilization cap from 50% to 70%. No new instructions, no state struct layout changes. Pure simplification: fewer code paths, smaller binary, reduced attack surface.
+
+**Rationale for removal:**
+1. **Fee-inflation bug** -- buyback read Raydium vault balances including unclaimed protocol/fund fees, inflating apparent price ratio. V32 patched the read but added complexity.
+2. **Exit liquidity subsidy** -- spent treasury SOL buying during dumps, effectively subsidizing sellers when treasury should conserve.
+3. **SOL competition** -- buyback, lending, and epoch rewards all competed for the same treasury SOL.
+4. **Never triggered in testing** -- sell cycle (`swap_fees_to_sol`) always ran first due to higher threshold sensitivity.
+
+**Files audited:**
+- `lib.rs` -- instruction entry point removed
+- `handlers/migration.rs` -- handler delegation removed
+- `migration.rs` -- `execute_auto_buyback_handler` (230 lines) removed, migration init simplified
+- `contexts.rs` -- `TreasuryBuybackDex` struct (100 lines) removed
+- `constants.rs` -- 4 buyback constants removed, lending cap updated
+- `handlers/token.rs` -- buyback config fields zeroed instead of initialized
+- `kani_proofs.rs` -- proof #18 comment updated
+
+### Removed Code Verification
+
+**Instruction removed from `lib.rs`:**
+```rust
+// REMOVED (V33)
+pub fn execute_auto_buyback(ctx: Context<TreasuryBuybackDex>) -> Result<()> {
+    handlers::migration::execute_auto_buyback(ctx)
+}
+```
+
+Instruction count: 28 → 27. One fewer entry point in the dispatch table.
+
+**Handler removed from `migration.rs` (~230 lines):**
+The handler performed: cooldown check → Raydium vault balance read → ratio calculation → treasury SOL allocation → Raydium swap CPI → state update. All of this logic is now dead code -- the instruction that called it no longer exists.
+
+**Context removed from `contexts.rs` (~100 lines):**
+`TreasuryBuybackDex` had 16 accounts with PDA constraints for Raydium CPMM interaction. Removing this struct eliminates one entire CPI surface with Raydium.
+
+**Constants removed from `constants.rs`:**
+
+| Constant | Value | Was Used By |
+|----------|-------|-------------|
+| `DEFAULT_RATIO_THRESHOLD_BPS` | 8000 (80%) | Buyback trigger only |
+| `DEFAULT_RESERVE_RATIO_BPS` | 3000 (30%) | Buyback amount calc only |
+| `DEFAULT_BUYBACK_PERCENT_BPS` | 1500 (15%) | Buyback amount calc only |
+| `MIN_BUYBACK_AMOUNT` | 0.01 SOL | Buyback minimum check only |
+
+**Shared infrastructure kept** (used by sell cycle):
+- `RATIO_PRECISION` (1e9) -- ratio math in `swap_fees_to_sol`
+- `DEFAULT_MIN_BUYBACK_INTERVAL_SLOTS` (2700) -- sell cycle cooldown
+- `DEFAULT_SELL_THRESHOLD_BPS` (12000) -- sell cycle trigger
+- Baseline fields (`baseline_sol_reserves`, `baseline_token_reserves`, `baseline_initialized`)
+- `read_pool_accumulated_fees` -- sell cycle fee correction
+
+### Treasury Struct Layout Verification
+
+On-chain accounts cannot have fields removed without migration. Deprecated buyback fields remain in the `Treasury` struct as dead weight:
+
+| Field | Status | New Token Value |
+|-------|--------|-----------------|
+| `ratio_threshold_bps` | Deprecated (V33) | 0 |
+| `reserve_ratio_bps` | Deprecated (V33) | 0 |
+| `buyback_percent_bps` | Deprecated (V33) | 0 |
+| `total_bought_back` | Deprecated (V33) | 0 |
+| `total_burned_from_buyback` | Deprecated (V33) | 0 |
+| `buyback_count` | Deprecated (V33) | 0 |
+
+**Verified:** `handlers/token.rs` now explicitly zeros these fields at token creation. Existing migrated tokens retain their historical values but the instruction to act on them no longer exists. No deserialization issues -- layout is identical.
+
+### Lending Utilization Cap Increase
+
+`DEFAULT_LENDING_UTILIZATION_CAP_BPS`: 5000 (50%) → 7000 (70%)
+
+**Impact analysis:**
+- 30% visible reserve remains in per-token treasury -- sufficient for confidence
+- More SOL available for community lending → borrowers buy tokens → more volume → more fees
+- Conservative LTV (50%) and liquidation threshold (65%) unchanged
+- Worst case: 70% lent, all borrowers default, 50% of collateral value recovered via liquidation. Treasury retains 30% reserve + liquidation proceeds (~35% of lent amount). Net loss bounded at ~22.5% of total treasury SOL in catastrophic scenario.
+
+**Code change:** Single constant update. The utilization check in `borrow` handler (`treasury.total_lent + amount <= cap * treasury.sol_balance / 10000`) uses the same checked arithmetic path.
+
+### Attack Vector Analysis
+
+| # | Vector | Mitigation | Verdict |
+|---|--------|-----------|---------|
+| 1 | **Stale buyback instruction call** -- client sends old buyback tx | Instruction removed from program dispatch. Anchor returns `InvalidInstructionData` or `InstructionFallbackNotFound`. | NOT POSSIBLE |
+| 2 | **Layout mismatch** -- zeroed fields cause deserialization error | Layout unchanged. Zero is a valid `u64` value. Anchor deserializes normally. | NOT POSSIBLE |
+| 3 | **Sell cycle broken** -- removal affects shared code | Sell cycle (`swap_fees_to_sol`) uses its own handler, context, and shared constants. No code paths shared with removed buyback handler. Verified: `cargo build` succeeds, sell cycle handler unchanged. | NOT POSSIBLE |
+| 4 | **Lending over-extension** -- 70% cap too aggressive | 50% max LTV + 65% liquidation threshold unchanged. Liquidation keepers incentivized with 10% bonus. 30% reserve always available for withdrawals. | ACCEPTABLE |
+| 5 | **Historical data corruption** -- existing tokens with buyback history | Read-only. Fields retain historical values. No instruction exists to modify them. | NOT POSSIBLE |
+
+### Binary Size Reduction
+
+~850 KB → ~804 KB (~6% reduction). Removing the `TreasuryBuybackDex` context (100 lines of Anchor-generated validation code) and the handler (230 lines with Raydium CPI) accounts for the reduction.
+
+### V33 New Findings
+
+**I-23 (Informational): Buyback removed, lending cap increased**
+
+The `execute_auto_buyback` instruction was removed in its entirety -- handler, context, and 4 dedicated constants. Treasury SOL is no longer spent on market buys during price dips. The lending utilization cap was increased from 50% to 70%, making more SOL available for community lending. Both changes are pure simplification with no new attack surface. The 6 deprecated Treasury fields remain in the struct at zero values for layout compatibility. The sell cycle (`swap_fees_to_sol`) continues to operate with its own ratio gating, baseline tracking, and cooldown logic -- fully independent of the removed buyback.
 
 ---
 
@@ -361,8 +600,10 @@ The V2.0 rewrite eliminated the most significant security finding from V1.6. The
 - **Minimal admin surface.** Only `initialize` and `update_dev_wallet` require authority. `update_authority` was removed in V3.7.0. Everything else is permissionless.
 - **PDA-based pool validation.** Raydium pool accounts are validated via deterministic PDA derivation -- cryptographically unforgeable. No runtime data parsing required.
 - **Treasury fee swap is a closed loop.** `swap_fees_to_sol` sells treasury tokens on Raydium and returns SOL to the same treasury. All accounts (input, output, destination) are constrained to treasury-owned PDAs and ATAs. No external wallet is referenced at any point in the fund flow.
-- **Treasury lock is permanent.** 250M tokens (25% of supply) locked at creation with no withdrawal instruction. Release deferred to future governance.
-- **Authority revocation is irreversible.** Mint, freeze, and transfer fee config authorities all set to `None` at migration. Supply is capped, trading is unrestricted, and the 0.1% fee rate is locked forever.
+- **[V33] Buyback removed -- reduced attack surface.** The `execute_auto_buyback` instruction (~330 lines of handler + context) was removed. One fewer CPI-heavy instruction to audit, one fewer Raydium interaction path, one fewer way treasury SOL can be spent. Treasury now accumulates SOL unidirectionally via sell cycle.
+- **Treasury lock is permanent.** 300M tokens (30% of supply) locked at creation with no withdrawal instruction. Release deferred to future governance.
+- **Authority revocation is irreversible.** Mint, freeze, and transfer fee config authorities all set to `None` at migration. Supply is capped, trading is unrestricted, and the 0.003% fee rate is locked forever.
+- **Zero-burn migration.** V31 tokens have `vault_remaining == tokens_for_pool` at graduation -- no excess tokens to burn. Supply is fully predictable from creation through migration.
 - **On-chain metadata is immutable.** Token-2022 MetadataPointer authority is `None` -- metadata stored on the mint itself can never be redirected. No Metaplex dependency. All Metaplex code has been removed.
 - **No dangerouslySetInnerHTML.** Zero instances in the entire frontend. All user content is React-escaped.
 - **RPC proxy is read-only.** 37 allowlisted methods, all write operations blocked.
@@ -372,8 +613,8 @@ The V2.0 rewrite eliminated the most significant security finding from V1.6. The
 ### What's Accepted (Design Trade-offs)
 
 - **Lending enabled by default** with immutable parameters. No per-token disable. Conservative defaults mitigate risk.
-- **Token-2022 transfer fee** applies to collateral deposits/withdrawals (~0.2% round-trip cost at 0.1% per transfer).
-- **Token-2022 transfer fee on swap input** -- when `swap_fees_to_sol` sells tokens on Raydium, the 0.1% transfer fee is assessed on the input (reducing effective sell amount by ~0.1%). Inherent to Token-2022, not exploitable.
+- **Token-2022 transfer fee** applies to collateral deposits/withdrawals (~0.006% round-trip cost at 0.003% per transfer).
+- **Token-2022 transfer fee on swap input** -- when `swap_fees_to_sol` sells tokens on Raydium, the 0.003% transfer fee is assessed on the input (reducing effective sell amount by ~0.003%). Inherent to Token-2022, not exploitable.
 - **Spot price oracle** for lending collateral valuation. TWAP would be more resistant to manipulation but is not implemented.
 
 ### Immutable Protocol Parameters (V2.4.1)
@@ -382,15 +623,13 @@ All configuration instructions were removed. Parameters are compile-time constan
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| Buyback threshold | 80% of baseline | Triggers when price drops 20% |
-| Buyback reserve | 30% | Treasury SOL kept in reserve |
-| Buyback amount | 15% per call | Of available (non-reserved) SOL |
-| Buyback interval | ~18 minutes | Between consecutive buybacks |
+| Sell cycle threshold | 120% of baseline | Sells when price rises 20%+ above baseline |
+| Sell cycle interval | ~18 minutes | Between consecutive sell cycles |
 | Lending interest | 2%/epoch (~104% APR) | High rate, may limit adoption |
 | Lending max LTV | 50% | Conservative for volatile tokens |
 | Liquidation threshold | 65% LTV | 15% buffer from max borrow |
 | Liquidation bonus | 10% | Incentive for liquidation keepers |
-| Utilization cap | 50% | Max treasury SOL lendable |
+| Utilization cap | 70% | [V33] Max treasury SOL lendable (was 50%) |
 
 These cannot be changed without a program upgrade.
 
@@ -415,7 +654,9 @@ If you're an AI agent interacting with Torch Market:
 
 The complete audit reports (with line-by-line findings, attack vector analysis, and instruction-by-instruction verification) are maintained in the project repository under `/audits/`:
 
-- `SECURITY_AUDIT_SP_V3.7.3_PROD.md` -- On-chain program V3.7.3 (latest: V29 on-chain metadata, 0.1% transfer fee, fee config authority revocation)
+- `SECURITY_AUDIT_SP_V3.7.7_PROD.md` -- On-chain program V3.7.7 (latest: V33 buyback removal + lending cap increase -- 27 instructions, ~6,700 lines, binary 804 KB, 39 Kani proofs)
+- `SECURITY_AUDIT_SP_V3.7.6_PROD.md` -- On-chain program V3.7.6 (V32 treasury rebalance -- 0 reserve floor, 2 SOL eligibility, 0.1 SOL min claim, 90/10 fee split)
+- `SECURITY_AUDIT_SP_V3.7.3_PROD.md` -- On-chain program V3.7.3 (V29 on-chain metadata, fee config authority revocation)
 - `SECURITY_AUDIT_SP_V3.7.2_PROD.md` -- On-chain program V3.7.2 (V20 swap_fees_to_sol, vault ordering fix)
 - `SECURITY_AUDIT_SP_V3.7.1_PROD.md` -- On-chain program V3.7.1 (V28 payer reimbursement, amm_config constraint)
 - `SECURITY_AUDIT_SP_V3.7.0_PROD.md` -- On-chain program V3.7.0

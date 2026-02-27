@@ -98,7 +98,7 @@ const TREASURY_SOL_MAX_BPS = 2000; // 20% at start
 const TREASURY_SOL_MIN_BPS = 500; // 5% at completion
 // Calculate tokens out for a given SOL amount (V2.3: dynamic treasury rate, V24: tiered)
 const calculateTokensOut = (solAmount, virtualSolReserves, virtualTokenReserves, realSolReserves = BigInt(0), // V2.3: needed for dynamic rate calculation
-protocolFeeBps = 100, // 1% protocol fee (75% protocol treasury, 25% dev)
+protocolFeeBps = 100, // 1% protocol fee (90% protocol treasury, 10% dev)
 treasuryFeeBps = 100, // 1% treasury fee
 bondingTarget = BigInt('200000000000')) => {
     // Calculate protocol fee (1%)
