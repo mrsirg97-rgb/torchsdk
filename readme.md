@@ -16,6 +16,10 @@ for sdk audit, refer to [audit.md](./audit.md).
 
 SDK version tracks the on-chain program IDL version.
 
+### v3.7.23
+
+- **V34 Creator Fee Structure** creator rewards have been introduced, with pre and post migration rewards designed to reward good creators.
+
 ### v3.7.22
 
 - **V33 Buyback Removal + Lending Cap Increase** — `buildAutoBuybackTransaction` removed (~180 lines of SDK code). The on-chain `execute_auto_buyback` instruction was removed in V33 (program v3.7.7, 27 instructions). Treasury simplified to: fee harvest → sell high → SOL → lending yield + epoch rewards. Lending utilization cap increased from 50% to 70%. `AutoBuybackParams` type removed. IDL updated to v3.7.7. 39 Kani proofs all passing. Binary size reduced ~6% (850 KB → 804 KB).

@@ -221,6 +221,7 @@ const buildBuyTransactionInternal = async (
       globalConfig: globalConfigPda,
       devWallet: (globalConfigAccount as any).devWallet || globalConfigAccount.dev_wallet,
       protocolTreasury: protocolTreasuryPda,
+      creator: bondingCurve.creator,
       mint,
       bondingCurve: bondingCurvePda,
       tokenVault: bondingCurveTokenAccount,
@@ -1752,6 +1753,11 @@ export const buildSwapFeesToSolTransaction = async (
   const provider = makeDummyProvider(connection, payer)
   const program = new Program(idl as unknown, provider)
 
+  // [V34] Fetch bonding curve to get creator address for fee split
+  const tokenData = await fetchTokenRaw(connection, mint)
+  if (!tokenData) throw new Error(`Token not found: ${mintStr}`)
+  const creator = tokenData.bondingCurve.creator
+
   // Helper: build the harvest instruction with given sources
   const buildHarvestIx = async (sources: PublicKey[]) => {
     return program.methods
@@ -1783,6 +1789,7 @@ export const buildSwapFeesToSolTransaction = async (
         payer,
         mint,
         bondingCurve: bondingCurvePda,
+        creator,
         treasury: treasuryPda,
         treasuryTokenAccount,
         treasuryWsol,

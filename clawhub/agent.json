@@ -1,7 +1,7 @@
 {
   "name": "Torch Market",
   "description": "Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance. All operations (buy, sell, DEX swap, borrow, repay, star) route through the vault. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals.",
-  "version": "4.7.13",
+  "version": "4.7.14",
   "type": "protocol",
   "disable-model-invocation": true,
   "website": "https://torch.market",
@@ -39,7 +39,7 @@
       {
         "id": "npm-torchsdk",
         "kind": "npm",
-        "package": "torchsdk@^3.7.17",
+        "package": "torchsdk@^3.7.23",
         "flags": [],
         "label": "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
       }
@@ -65,7 +65,8 @@
     "protocol-rewards",
     "lending-market-scanner",
     "permissionless-migration",
-    "dynamic-network"
+    "dynamic-network",
+    "creator-revenue"
   ],
   "chain": "solana",
   "network": "mainnet",
@@ -146,7 +147,7 @@
     },
     {
       "name": "TORCH_STAR_TOKEN",
-      "description": "Star a token via vault (0.05 SOL from vault, sybil-resistant)"
+      "description": "Star a token via vault (0.02 SOL from vault, sybil-resistant)"
     },
     {
       "name": "TORCH_CREATE_TOKEN",
@@ -198,15 +199,15 @@
     },
     {
       "name": "TORCH_CLAIM_PROTOCOL_REWARDS",
-      "description": "Claim protocol trading rewards via vault (epoch-based, requires >= 10 SOL volume in previous epoch). SOL rewards go to vault."
+      "description": "Claim protocol trading rewards via vault (epoch-based, requires >= 2 SOL volume in previous epoch). SOL rewards go to vault."
     },
     {
       "name": "TORCH_HARVEST_FEES",
-      "description": "Harvest accumulated Token-2022 transfer fees (0.03%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
+      "description": "Harvest accumulated Token-2022 transfer fees (0.04%) from token accounts into the treasury. Permissionless -- anyone can trigger. Auto-discovers source accounts with withheld fees or accepts explicit list."
     },
     {
       "name": "TORCH_SWAP_FEES_TO_SOL",
-      "description": "Swap harvested transfer fee tokens to SOL via Raydium CPMM. Permissionless -- anyone can trigger after migration. Bundles harvest + swap in one atomic transaction. SOL proceeds added to treasury for lending yield and epoch rewards."
+      "description": "Swap harvested transfer fee tokens to SOL via Raydium CPMM. Permissionless -- anyone can trigger after migration. Bundles harvest + swap in one atomic transaction. SOL proceeds split 85% treasury / 15% creator."
     }
   ],
   "constants": {
@@ -220,11 +221,19 @@
     "treasury_rate": {
       "max_percent": 20,
       "min_percent": 5,
-      "note": "Flat 20%→5% decay across all tiers (V25)"
+      "creator_min_percent": 0.2,
+      "creator_max_percent": 1,
+      "note": "Flat 20%→5% decay across all tiers (V25). Creator receives 0.2%→1% carved from treasury rate (V34)."
     },
     "protocol_fee_percent": 1,
+    "protocol_fee_split": "90% treasury / 10% dev wallet",
     "max_wallet_percent": 2,
-    "star_cost_sol": 0.05,
+    "star_cost_sol": 0.02,
+    "creator_revenue": {
+      "bonding_sol_share": "0.2%→1% (carved from treasury rate, grows linearly with reserves)",
+      "post_migration_fee_split": "85% treasury / 15% creator (from swap_fees_to_sol)",
+      "star_payout": "~40 SOL at 2,000 stars on token"
+    },
     "initial_virtual_sol_legacy": 30,
     "initial_virtual_tokens_v27": 756250000,
     "initial_virtual_sol_v27": {

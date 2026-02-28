@@ -238,7 +238,7 @@ export interface CreateTokenParams {
 export interface StarParams {
   mint: string
   user: string
-  /** Vault creator pubkey. Vault pays the 0.05 SOL star cost. */
+  /** Vault creator pubkey. Vault pays the 0.02 SOL star cost. */
   vault?: string
 }
 

@@ -264,7 +264,11 @@ export const getProgram = (provider: AnchorProvider): Program => {
 const TREASURY_SOL_MAX_BPS = 2000 // 20% at start
 const TREASURY_SOL_MIN_BPS = 500  // 5% at completion
 
-// Calculate tokens out for a given SOL amount (V2.3: dynamic treasury rate, V24: tiered)
+// [V34] Creator SOL share: 0.2% → 1% during bonding (carved from treasury rate)
+const CREATOR_SOL_MIN_BPS = 20   // 0.2% at start
+const CREATOR_SOL_MAX_BPS = 100  // 1% at completion
+
+// Calculate tokens out for a given SOL amount (V2.3: dynamic treasury rate, V34: creator share)
 export const calculateTokensOut = (
   solAmount: bigint,
   virtualSolReserves: bigint,
@@ -281,7 +285,9 @@ export const calculateTokensOut = (
   treasuryFee: bigint
   solToCurve: bigint
   solToTreasury: bigint
-  treasuryRateBps: number // V2.3: the dynamic rate used
+  solToCreator: bigint // [V34] Creator SOL share
+  treasuryRateBps: number // V2.3: the dynamic total rate used
+  creatorRateBps: number // [V34] Creator rate used
 } => {
   // Calculate protocol fee (1%)
   const protocolFee = (solAmount * BigInt(protocolFeeBps)) / BigInt(10000)
@@ -297,11 +303,18 @@ export const calculateTokensOut = (
   const decay = (realSolReserves * rateRange) / resolvedTarget
   const treasuryRateBps = Math.max(TREASURY_SOL_MAX_BPS - Number(decay), TREASURY_SOL_MIN_BPS)
 
-  // Split remaining SOL using dynamic rate
-  const solToTreasurySplit = (solAfterFees * BigInt(treasuryRateBps)) / BigInt(10000)
-  const solToCurve = solAfterFees - solToTreasurySplit
+  // [V34] Creator rate - grows from 0.2% to 1% (inverse of treasury decay)
+  const creatorRange = BigInt(CREATOR_SOL_MAX_BPS - CREATOR_SOL_MIN_BPS)
+  const creatorGrowth = (realSolReserves * creatorRange) / resolvedTarget
+  const creatorRateBps = Math.min(CREATOR_SOL_MIN_BPS + Number(creatorGrowth), CREATOR_SOL_MAX_BPS)
 
-  // Total to treasury = flat fee + dynamic split
+  // Split remaining SOL: total rate → creator + treasury + curve
+  const totalSplit = (solAfterFees * BigInt(treasuryRateBps)) / BigInt(10000)
+  const solToCreator = (solAfterFees * BigInt(creatorRateBps)) / BigInt(10000)
+  const solToTreasurySplit = totalSplit - solToCreator
+  const solToCurve = solAfterFees - totalSplit
+
+  // Total to treasury = flat fee + dynamic split (minus creator)
   const solToTreasury = treasuryFee + solToTreasurySplit
 
   // Calculate tokens using constant product formula (based on SOL going to curve)
@@ -320,7 +333,9 @@ export const calculateTokensOut = (
     treasuryFee,
     solToCurve,
     solToTreasury,
+    solToCreator,
     treasuryRateBps,
+    creatorRateBps,
   }
 }
 

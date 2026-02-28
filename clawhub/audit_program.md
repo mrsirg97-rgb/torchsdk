@@ -1,6 +1,6 @@
 # Torch Market Security Audit Summary
 
-**Date:** February 26, 2026 | **Auditor:** Claude Opus 4.6 (Anthropic) | **Version:** V3.7.7 Production
+**Date:** February 27, 2026 | **Auditor:** Claude Opus 4.6 (Anthropic) | **Version:** V3.7.8 Production
 
 ---
 
@@ -10,7 +10,7 @@ Four audits covering the full stack:
 
 | Layer | Files | Lines | Report |
 |-------|-------|-------|--------|
-| On-chain program (V3.7.7) | 21 source files | ~6,700 | `audit.md` |
+| On-chain program (V3.7.8) | 21 source files | ~6,800 | `audit.md` |
 | Frontend & API | 37 files (17 API routes, 12 libs, 8 components) | -- | `SECURITY_AUDIT_FE_V2.4.1_PROD.md` |
 | Agent Kit plugin (V4.0) | 4 files | ~1,900 | `SECURITY_AUDIT_AGENTKIT_V4.0.md` |
 | Torch SDK (V2.0) | 9 files | ~2,800 | Included in Agent Kit V4.0 audit |
@@ -21,20 +21,21 @@ Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`
 
 ## Findings Summary
 
-### On-Chain Program (V3.7.7)
+### On-Chain Program (V3.7.8)
 
 | Severity | Count | Details |
 |----------|-------|---------|
 | Critical | 0 | -- |
 | High | 0 | -- |
-| Medium | 3 | Lending enabled by default (accepted); Token-2022 transfer fee on collateral (inherent, reduced to 0.03%); Epoch rewards race condition (accepted) |
+| Medium | 3 | Lending enabled by default (accepted); Token-2022 transfer fee on collateral (inherent, 0.04% new / 0.03% legacy); Epoch rewards race condition (accepted) |
 | Low | 7 | fund_vault_wsol decoupled accounting; Stranded WSOL lamports; Vault sol_balance drift; Sell no position check; Slot-based interest; Revival no virtual reserve update; Treasury lock ATA not Anchor-constrained (CPI validated, see V31 notes) |
-| Informational | 23 | Various carried findings + 3 new V3.7.1 + 2 new V3.7.2 + 2 new V3.7.3 + 2 new V3.7.5 (I-20: zero-burn migration design; I-21: AccountInfo stack pressure mitigation) + 1 new V3.7.6 (I-22: reserve floor zeroed, fee split rebalanced) + 1 new V3.7.7 (I-23: buyback removed, lending cap increased) |
+| Informational | 24 | Various carried findings + 3 new V3.7.1 + 2 new V3.7.2 + 2 new V3.7.3 + 2 new V3.7.5 (I-20: zero-burn migration design; I-21: AccountInfo stack pressure mitigation) + 1 new V3.7.6 (I-22: reserve floor zeroed, fee split rebalanced) + 1 new V3.7.7 (I-23: buyback removed, lending cap increased) + 1 new V3.7.8 (I-24: creator revenue streams, transfer fee bump) |
 
 **Rating: EXCELLENT -- Ready for Mainnet**
 
 Key strengths:
-- 27 instructions, 12 account types, 39 Kani formal verification proofs passed
+- 27 instructions, 12 account types, 43 Kani formal verification proofs passed
+- **V34 creator revenue**: Three new income streams for creators — bonding SOL share (0.2%→1% carved from treasury rate, linear growth), 15% of post-migration `swap_fees_to_sol` proceeds, and star payout (cost reduced 0.05→0.02 SOL). `creator` account added to `Buy` and `SwapFeesToSol` contexts, validated against `bonding_curve.creator`. Transfer fee bumped from 3 to 4 bps (new tokens only — old tokens immutable). 4 new Kani proofs verify creator rate bounds, monotonicity, subtraction safety, and fee share conservation
 - **V33 buyback removal**: `execute_auto_buyback` instruction removed (~330 lines of handler + context). Eliminates a complex Raydium CPI instruction that spent treasury SOL providing exit liquidity during dumps, had a fee-inflation bug in vault balance reads, and competed with lending for treasury SOL. One fewer attack surface. Binary size reduced ~6% (850 KB → 804 KB). Treasury simplified to: fee harvest → sell high → SOL → lending yield + epoch rewards
 - **V33 lending cap increase**: Utilization cap raised from 50% to 70%. More SOL available for community lending while maintaining 30% visible reserve. Conservative LTV/liquidation thresholds unchanged
 - **V32 protocol treasury rebalance**: Reserve floor removed (1,500 SOL → 0) -- all fees distributed each epoch. Volume eligibility lowered (10 SOL → 2 SOL). New MIN_CLAIM_AMOUNT (0.1 SOL) prevents dust claims. Protocol fee split rebalanced from 75/25 to 90% treasury / 10% dev wallet. New `verify_min_claim_enforcement` Kani proof
@@ -519,6 +520,22 @@ On-chain accounts cannot have fields removed without migration. Deprecated buyba
 
 The `execute_auto_buyback` instruction was removed in its entirety -- handler, context, and 4 dedicated constants. Treasury SOL is no longer spent on market buys during price dips. The lending utilization cap was increased from 50% to 70%, making more SOL available for community lending. Both changes are pure simplification with no new attack surface. The 6 deprecated Treasury fields remain in the struct at zero values for layout compatibility. The sell cycle (`swap_fees_to_sol`) continues to operate with its own ratio gating, baseline tracking, and cooldown logic -- fully independent of the removed buyback.
 
+### V34 New Findings (V3.7.8)
+
+**I-24 (Informational): Creator revenue streams, transfer fee bump**
+
+V34 introduces three creator income streams: (1) a 0.2%→1% SOL share during bonding carved from the existing 20%→5% treasury rate (linear growth formula: `creator = 0.2% + 0.8% × reserves/target`), (2) 15% of post-migration `swap_fees_to_sol` proceeds (85% to treasury, 15% to creator via direct lamport transfer), and (3) star payout at 2000 stars (cost reduced from 0.05 to 0.02 SOL, so ~40 SOL payout instead of ~100 SOL).
+
+**Security analysis:**
+- Creator account validated against `bonding_curve.creator` in both `Buy` and `SwapFeesToSol` contexts via Anchor `constraint` — no account substitution possible
+- Creator SOL share is carved FROM the existing treasury split, not added — total extraction from buyer unchanged. Kani proof `verify_creator_rate_less_than_treasury_rate` proves subtraction safety at all points
+- Direct lamport transfer to creator in `swap_fees_to_sol` follows the same treasury-owned PDA pattern as existing lamport manipulations. Works even if creator wallet is garbage-collected (Solana runtime adds lamports to any address)
+- Transfer fee bumped from 3→4 bps for new tokens. Old tokens retain 3 bps (immutable — fee config authority was revoked to `None` at migration)
+- Self-buy discount for creators during bonding (0.2%→1% of their own buy) is negligible and incentive-aligned
+- 4 new Kani proofs: `verify_creator_rate_bounds`, `verify_creator_rate_monotonic`, `verify_creator_rate_less_than_treasury_rate`, `verify_creator_fee_share_bounded`. All passing. Conservation property updated in `verify_sol_distribution_conservation` (now 5-way sum)
+
+No new accounts, no new instructions, no state struct changes. `creator` account added to two existing contexts.
+
 ---
 
 ### Frontend & API Routes
@@ -599,10 +616,10 @@ The V2.0 rewrite eliminated the most significant security finding from V1.6. The
 - **Checked arithmetic everywhere.** All ~7,000 lines of on-chain code use `checked_add/sub/mul/div`. No overflow possible.
 - **Minimal admin surface.** Only `initialize` and `update_dev_wallet` require authority. `update_authority` was removed in V3.7.0. Everything else is permissionless.
 - **PDA-based pool validation.** Raydium pool accounts are validated via deterministic PDA derivation -- cryptographically unforgeable. No runtime data parsing required.
-- **Treasury fee swap is a closed loop.** `swap_fees_to_sol` sells treasury tokens on Raydium and returns SOL to the same treasury. All accounts (input, output, destination) are constrained to treasury-owned PDAs and ATAs. No external wallet is referenced at any point in the fund flow.
+- **Treasury fee swap is a closed loop.** `swap_fees_to_sol` sells treasury tokens on Raydium and splits SOL 85% to treasury, 15% to creator. All accounts (input, output, destination) are constrained to treasury-owned PDAs and ATAs plus the validated creator wallet. Creator is constrained to `bonding_curve.creator` — no external wallet substitution possible.
 - **[V33] Buyback removed -- reduced attack surface.** The `execute_auto_buyback` instruction (~330 lines of handler + context) was removed. One fewer CPI-heavy instruction to audit, one fewer Raydium interaction path, one fewer way treasury SOL can be spent. Treasury now accumulates SOL unidirectionally via sell cycle.
 - **Treasury lock is permanent.** 300M tokens (30% of supply) locked at creation with no withdrawal instruction. Release deferred to future governance.
-- **Authority revocation is irreversible.** Mint, freeze, and transfer fee config authorities all set to `None` at migration. Supply is capped, trading is unrestricted, and the 0.03% fee rate is locked forever.
+- **Authority revocation is irreversible.** Mint, freeze, and transfer fee config authorities all set to `None` at migration. Supply is capped, trading is unrestricted, and the fee rate is locked forever (0.04% for V34+ tokens, 0.03% for earlier tokens).
 - **Zero-burn migration.** V31 tokens have `vault_remaining == tokens_for_pool` at graduation -- no excess tokens to burn. Supply is fully predictable from creation through migration.
 - **On-chain metadata is immutable.** Token-2022 MetadataPointer authority is `None` -- metadata stored on the mint itself can never be redirected. No Metaplex dependency. All Metaplex code has been removed.
 - **No dangerouslySetInnerHTML.** Zero instances in the entire frontend. All user content is React-escaped.
@@ -654,7 +671,8 @@ If you're an AI agent interacting with Torch Market:
 
 The complete audit reports (with line-by-line findings, attack vector analysis, and instruction-by-instruction verification) are maintained in the project repository under `/audits/`:
 
-- `SECURITY_AUDIT_SP_V3.7.7_PROD.md` -- On-chain program V3.7.7 (latest: V33 buyback removal + lending cap increase -- 27 instructions, ~6,700 lines, binary 804 KB, 39 Kani proofs)
+- `SECURITY_AUDIT_SP_V3.7.8_PROD.md` -- On-chain program V3.7.8 (latest: V34 creator revenue + transfer fee bump -- 27 instructions, ~6,800 lines, 43 Kani proofs)
+- `SECURITY_AUDIT_SP_V3.7.7_PROD.md` -- On-chain program V3.7.7 (V33 buyback removal + lending cap increase -- 27 instructions, ~6,700 lines, binary 804 KB, 39 Kani proofs)
 - `SECURITY_AUDIT_SP_V3.7.6_PROD.md` -- On-chain program V3.7.6 (V32 treasury rebalance -- 0 reserve floor, 2 SOL eligibility, 0.1 SOL min claim, 90/10 fee split)
 - `SECURITY_AUDIT_SP_V3.7.3_PROD.md` -- On-chain program V3.7.3 (V29 on-chain metadata, fee config authority revocation)
 - `SECURITY_AUDIT_SP_V3.7.2_PROD.md` -- On-chain program V3.7.2 (V20 swap_fees_to_sol, vault ordering fix)

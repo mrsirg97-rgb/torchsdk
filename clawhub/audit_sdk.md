@@ -2,8 +2,8 @@
 
 **Audit Date:** February 21, 2026
 **Auditor:** Claude Opus 4.6 (Anthropic)
-**SDK Version:** 3.7.17
-**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.7.17)
+**SDK Version:** 3.7.23
+**On-Chain Program:** `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT` (V3.7.8)
 **Language:** TypeScript
 **Test Result:** 32 passed, 0 failed (Surfpool mainnet fork + devnet E2E + tiers E2E)
 

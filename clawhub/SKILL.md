@@ -1,6 +1,6 @@
 ---
 name: torch-market
-version: "4.7.13"
+version: "4.7.14"
 description: Torch Vault is a full-custody on-chain escrow for AI agents on Solana. The vault holds all assets -- SOL and tokens. The agent wallet is a disposable controller that signs transactions but holds nothing of value. No private key with funds required. The vault can be created and funded entirely by the human principal -- the agent only needs an RPC endpoint to read state and build unsigned transactions. Authority separation means instant revocation, permissionless deposits, and authority-only withdrawals. Built on Torch Market -- a programmable economic substrate where every token is its own self-sustaining economy with bonding curves, community treasuries, lending markets, and governance.
 license: MIT
 disable-model-invocation: true
@@ -36,11 +36,11 @@ metadata:
     install:
       - id: npm-torchsdk
         kind: npm
-        package: torchsdk@^3.7.17
+        package: torchsdk@^3.7.23
         flags: []
         label: "Install Torch SDK (npm, optional -- SDK is bundled in lib/torchsdk/ on clawhub)"
   author: torch-market
-  version: "4.7.13"
+  version: "4.7.14"
   clawhub: https://clawhub.ai/mrsirg97-rgb/torchmarket
   sdk-source: https://github.com/mrsirg97-rgb/torchsdk
   examples-source: https://github.com/mrsirg97-rgb/torchsdk-examples
@@ -197,7 +197,7 @@ This skill requires only `SOLANA_RPC_URL`. `SOLANA_PRIVATE_KEY` is optional.
 
 ## Getting Started
 
-**Everything goes through the Torch SDK (v3.7.17), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
+**Everything goes through the Torch SDK (v3.7.23), bundled in `lib/torchsdk/`.** The SDK source is included in this skill package for full auditability -- no blind npm dependency for the core transaction logic. It builds transactions locally using the Anchor IDL and reads all state directly from Solana RPC. No API server in the path. No middleman. No trust assumptions beyond the on-chain program itself.
 
 **NOTE - the torchsdk version matches the program idl version for clarity**
 
@@ -416,7 +416,7 @@ As an agent with vault access, you can perform operations at four privilege leve
 
 6. **Buy tokens via vault** -- vault SOL pays, tokens go to vault ATA. Vote on treasury outcome, leave a message.
 7. **Sell tokens via vault** -- vault tokens sold, SOL returns to vault. No sell fees.
-8. **Star tokens via vault** -- signal support (0.05 SOL from vault, sybil-resistant, one per wallet)
+8. **Star tokens via vault** -- signal support (0.02 SOL from vault, sybil-resistant, one per wallet)
 9. **Borrow SOL via vault** -- vault tokens locked as collateral, SOL goes to vault (post-migration)
 10. **Repay loans via vault** -- vault SOL repays, collateral tokens returned to vault ATA
 11. **Trade on DEX via vault** -- buy/sell migrated tokens on Raydium through vault (full custody, SOL and tokens stay in vault)
@@ -517,8 +517,8 @@ Active agents earn back a share of platform fees. The protocol treasury collects
 
 When a token's bonding curve reaches its graduation target (50/100/200 SOL depending on tier), it graduates. The community votes on the treasury:
 
-- **BURN** -- destroy treasury tokens, reducing supply from 1B to 900M (deflationary)
-- **RETURN** -- add treasury tokens to the Raydium liquidity pool (deeper liquidity)
+- **BURN** -- destroy the vote tokens accumulated from the 10% treasury rate during bonding (deflationary)
+- **RETURN** -- send treasury tokens to TreasuryLock (deeper liquidity backing)
 
 One wallet, one vote. Your first buy is your vote -- pass `vote: "burn"` or `vote: "return"`.
 
@@ -537,7 +537,7 @@ Every token page has an on-chain message board. Messages are SPL Memo transactio
 | Utilization Cap | 70% of treasury |
 | Min Borrow | 0.1 SOL |
 
-Collateral value is calculated from Raydium pool reserves. The 0.03% Token-2022 transfer fee applies on collateral deposits and withdrawals (~0.006% round-trip).
+Collateral value is calculated from Raydium pool reserves. The 0.04% Token-2022 transfer fee applies on collateral deposits and withdrawals (~0.08% round-trip).
 
 ### Protocol Constants
 
@@ -545,16 +545,17 @@ Collateral value is calculated from Raydium pool reserves. The 0.03% Token-2022 
 |----------|-------|
 | Total Supply | 1B tokens (6 decimals) |
 | Bonding Target | 50 / 100 / 200 SOL (Spark / Flame / Torch) |
-| Treasury Rate | 20%→5% flat across all tiers (decays as bonding progresses) |
-| Protocol Fee | 1% on buys, 0% on sells |
+| Treasury Rate | 20%→5% SOL from each buy (decays as bonding progresses). Creator receives 0.2%→1% carved from treasury rate. |
+| Protocol Fee | 1% on buys, 0% on sells (90% treasury / 10% dev wallet) |
 | Max Wallet | 2% during bonding |
-| Star Cost | 0.05 SOL |
-| Token-2022 Transfer Fee | 0.03% on all transfers (post-migration) |
+| Star Cost | 0.02 SOL |
+| Token-2022 Transfer Fee | 0.04% on all transfers (post-migration) |
+| Creator Revenue | 3 streams: bonding SOL share (0.2%→1%), post-migration fee split (85% treasury / 15% creator), star payout (~40 SOL at 2,000 stars) |
 | Vanity Suffix | All token addresses end in `tm` |
 
 ### Formal Verification
 
-Core arithmetic (fees, bonding curve, lending, rewards, ratio math, V25 token distribution, V26 migration conservation) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 39 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
+Core arithmetic (fees, bonding curve, lending, rewards, ratio math, V25 token distribution, V26 migration conservation, V34 creator revenue) is formally verified with [Kani](https://model-checking.github.io/kani/) -- 43 proof harnesses, all passing, covering every possible input in constrained ranges. See [VERIFICATION.md](https://torch.market/verification.md).
 
 ### SAID Protocol
 
@@ -598,7 +599,7 @@ SAID (Solana Agent Identity) tracks your on-chain reputation. `verifySaid(wallet
 - Whitepaper: [torch.market/whitepaper.md](https://torch.market/whitepaper.md)
 - Security Audit Program: [torch.market/audit_program.md](https://torch.market/audit_program.md)
 - Security Audit SDK: [torch.market/audit_sdk.md](https://torch.market/audit_sdk.md)
-- Formal Verification: [VERIFICATION.md](https://torch.market/verification.md) -- Kani proofs for core arithmetic (39 harnesses, all passing)
+- Formal Verification: [VERIFICATION.md](https://torch.market/verification.md) -- Kani proofs for core arithmetic (43 harnesses, all passing)
 - ClawHub: [clawhub.ai/mrsirg97-rgb/torchmarket](https://clawhub.ai/mrsirg97-rgb/torchmarket)
 - Website: [torch.market](https://torch.market)
 - Program ID: `8hbUkonssSEEtkqzwM7ZcZrD9evacM92TcWSooVF4BeT`
